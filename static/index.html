@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EpicSync — Minimalist AI Lip Sync</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0d0f12;
+            --surface: #15181d;
+            --surface-hover: #1e2229;
+            --border: #282d37;
+            --text-main: #f0f2f5;
+            --text-muted: #8b94a0;
+            --accent: #ffffff;
+            --accent-bg: #242932;
+            --success: #3dd68c;
+            --danger: #f85149;
+            --warning: #e3b341;
+            --font-main: 'Outfit', -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Navbar */
+        header {
+            border-bottom: 1px solid var(--border);
+            padding: 1.25rem 2.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--bg);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            text-transform: uppercase;
+        }
+
+        .status-badge {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 0.3rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-muted);
+        }
+
+        /* Layout */
+        main {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 0;
+            flex: 1;
+        }
+
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Left Panel - Control Form */
+        .panel-left {
+            border-right: 1px solid var(--border);
+            padding: 2.5rem;
+            background-color: var(--surface);
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-main);
+        }
+
+        input[type="text"],
+        input[type="password"],
+        textarea,
+        select {
+            width: 100%;
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 0.75rem 1rem;
+            font-family: inherit;
+            font-size: 0.95rem;
+            border-radius: 4px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            border-color: var(--accent);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .file-upload {
+            border: 1px dashed var(--border);
+            padding: 1.5rem;
+            text-align: center;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: var(--bg);
+            transition: border-color 0.2s;
+        }
+
+        .file-upload:hover {
+            border-color: var(--text-muted);
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .btn-submit {
+            width: 100%;
+            background-color: var(--accent);
+            color: #000;
+            border: none;
+            padding: 1rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-top: 1rem;
+        }
+
+        .btn-submit:hover {
+            opacity: 0.85;
+        }
+
+        .btn-submit:disabled {
+            background-color: var(--border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        /* Right Panel - Logs & Gallery */
+        .panel-right {
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2.5rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 75px);
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            font-family: var(--font-mono);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            color: var(--text-main);
+            border-color: var(--text-muted);
+        }
+
+        /* Jobs Container */
+        .job-card {
+            border: 1px solid var(--border);
+            background-color: var(--surface);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .job-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--bg);
+        }
+
+        .job-id {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--text-main);
+        }
+
+        .job-status {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .status-RUNNING, .status-STAGING { background-color: rgba(227, 179, 65, 0.15); color: var(--warning); }
+        .status-SUCCESS { background-color: rgba(61, 214, 140, 0.15); color: var(--success); }
+        .status-FAILED, .status-CANCELLED { background-color: rgba(248, 81, 73, 0.15); color: var(--danger); }
+
+        .job-body {
+            padding: 1.5rem;
+        }
+
+        .job-meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .progress-box {
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 1.2rem;
+            margin-bottom: 1.2rem;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 0.6rem;
+            font-family: var(--font-mono);
+        }
+        .step-text {
+            color: var(--text-main);
+        }
+        .progress-pct {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .progress-track {
+            width: 100%;
+            height: 6px;
+            background-color: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: var(--accent);
+            transition: width 0.5s ease;
+        }
+        .progress-fill.FAILED, .progress-fill.CANCELLED { background-color: var(--danger); }
+        .progress-fill.SUCCESS { background-color: var(--success); }
+        
+        details.tech-logs {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        details.tech-logs summary {
+            outline: none;
+            user-select: none;
+            padding: 0.4rem 0;
+            font-family: var(--font-mono);
+        }
+
+        /* Terminal Log Stream */
+        .terminal {
+            background-color: #000;
+            border: 1px solid var(--border);
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: #d1d5db;
+            max-height: 220px;
+            overflow-y: auto;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+
+        /* Video Output Preview */
+        .video-container {
+            margin-top: 1rem;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            background-color: var(--bg);
+            border-radius: 4px;
+        }
+
+        video {
+            width: 100%;
+            max-height: 360px;
+            border-radius: 4px;
+            outline: none;
+            background-color: #000;
+        }
+
+        .job-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        .btn-cancel {
+            background-color: var(--danger);
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-download {
+            background-color: var(--success);
+            color: #000;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .btn-cancel {
+            background: transparent;
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+        .btn-cancel:hover {
+            background: rgba(248, 81, 73, 0.1);
+        }
+
+        /* Gold Accent Premium Theme */
+        body.premium-theme {
+            --bg: #0b0a08;
+            --surface: #14120e;
+            --surface-hover: #1f1b13;
+            --border: #382e1b;
+            --accent: #f9a825;
+            --accent-bg: #2b220d;
+        }
+        body.premium-theme .btn-submit {
+            background: linear-gradient(135deg, #f9a825 0%, #d4af37 50%, #aa771c 100%);
+            color: #000;
+            font-weight: 700;
+            box-shadow: 0 0 20px rgba(249, 168, 37, 0.3);
+        }
+        .tab-switcher {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text-muted);
+            font-family: var(--font-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: var(--surface-hover);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        body.premium-theme .tab-btn.active {
+            background: linear-gradient(135deg, #2b220d 0%, #1f1b13 100%);
+            color: #f9a825;
+            border-color: #f9a825;
+            box-shadow: 0 0 12px rgba(249, 168, 37, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">Epic<span style="color: var(--accent);">Sync</span></div>
+    <div class="status-badge" id="modeBadge">STANDARD STUDIO (OPENTALKER 2D)</div>
+</header>
+
+<main>
+    <!-- Left Control Panel -->
+    <div class="panel-left">
+        <div class="tab-switcher">
+            <button type="button" class="tab-btn active" id="tabStandard" onclick="switchTab('standard')">Standard Studio</button>
+            <button type="button" class="tab-btn" id="tabPremium" onclick="switchTab('premium')">✨ Premium Studio (LTX 3D)</button>
+        </div>
+
+        <div class="section-title" id="formTitle">New Sync Task</div>
+        <form id="syncForm">
+            <div class="form-group">
+                <label id="fileLabel">Source Video or Photo File</label>
+                <div class="file-upload" onclick="document.getElementById('mediaFile').click()">
+                    <span id="fileName">Select or Drop MP4/JPG File</span>
+                    <input type="file" id="mediaFile" name="video" accept="video/mp4,image/*" required onchange="updateFileName(this)">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Speech Script (Text to Synthesize)</label>
+                <textarea name="script_text" placeholder="Enter the exact script you want the character to articulate..." required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Neural Voice Model</label>
+                <select name="voice">
+                    <option value="en-US-AnaNeural">Ana (en-US, Cute Child / Baby Girl Voice)</option>
+                    <option value="en-US-ChristopherNeural">Christopher (en-US, Deep Male)</option>
+                    <option value="en-GB-SoniaNeural">Sonia (en-GB, British Female)</option>
+                    <option value="en-GB-RyanNeural">Ryan (en-GB, British Male)</option>
+                    <option value="fr-FR-DeniseNeural">Denise (French Female)</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="aspectRatioGroup" style="display: none;">
+                <label>Target Video Aspect Ratio (Premium LTX 3D)</label>
+                <select name="aspect_ratio">
+                    <option value="9:16">9:16 Portrait (Vertical Mobile / TikTok / Reels — 480x864)</option>
+                    <option value="16:9">16:9 Landscape (Widescreen / YouTube — 864x480)</option>
+                    <option value="1:1">1:1 Square (Instagram / Social Post — 640x640)</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="margin-top: 1.2rem; background: rgba(255,255,255,0.03); padding: 1rem; border: 1px solid var(--border); border-radius: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <label style="margin: 0; cursor: pointer; color: var(--text-main); font-weight: 600;" for="addCaptions">
+                        💬 Add Word-Level Subtitles / Captions
+                    </label>
+                    <input type="checkbox" id="addCaptions" name="add_captions" value="true" style="width: 18px; height: 18px; cursor: pointer;">
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">
+                    Automatically generates word-anchored subtitles (4 words/screen, font size 20, white text with black stroke).
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 0.8rem; background: rgba(255,255,255,0.03); padding: 1rem; border: 1px solid var(--border); border-radius: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <label style="margin: 0; cursor: pointer; color: var(--text-main); font-weight: 600;" for="videoSpeed">
+                        ⏩ Final Video Speed
+                    </label>
+                    <input type="number" id="videoSpeed" name="video_speed" value="1.0" min="0.5" max="2.0" step="0.1" style="width: 80px; padding: 0.4rem; background: #0a0e17; border: 1px solid var(--border); border-radius: 4px; color: #fff; text-align: center;">
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">
+                    Adjusts the final video and audio speed (e.g., 1.1 = 10% faster). Default is 1.0.
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 0.8rem; background: rgba(255,255,255,0.03); padding: 1rem; border: 1px solid var(--border); border-radius: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <label style="margin: 0; cursor: pointer; color: var(--text-main); font-weight: 600;" for="addBgmToggle">
+                        🎵 Add Background Music
+                    </label>
+                    <input type="checkbox" id="addBgmToggle" onchange="toggleBgmUpload(this.checked)" style="width: 18px; height: 18px; cursor: pointer;">
+                </div>
+                <div id="bgmUploadGroup" style="display: none; margin-top: 0.8rem;">
+                    <label style="display:block; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--text-main); font-weight: 600;">
+                        1. Select Pre-Uploaded Music from Dataset (⚡ Instant Launch):
+                    </label>
+                    <select id="bgmSelect" name="bgm_select" style="width: 100%; padding: 0.6rem; background: #0a0e17; border: 1px solid var(--border); border-radius: 4px; color: #fff; font-size: 0.85rem; margin-bottom: 0.8rem;" onchange="handleBgmSelect(this)">
+                        <option value="">-- Select a track or upload below --</option>
+                    </select>
+
+                    <div style="border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.8rem; margin-bottom: 0.8rem;">
+                        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.85rem; color: #a8b3cf; font-weight: 600;">
+                            ➕ Or Upload New Music to Dataset (Save once, use forever):
+                        </label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                            <input type="text" id="bgmCustomName" placeholder="Song Name (e.g. Lofi Beat)" style="flex: 1; min-width: 150px; padding: 0.5rem; background: #0a0e17; border: 1px solid var(--border); border-radius: 4px; color: #fff; font-size: 0.8rem;">
+                            <input type="file" id="bgmDatasetFile" accept="audio/*" style="display: none;" onchange="document.getElementById('bgmDatasetBtnText').innerText = this.files[0]?.name || 'Pick Audio File'">
+                            <button type="button" onclick="document.getElementById('bgmDatasetFile').click()" style="padding: 0.5rem 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 4px; color: #fff; cursor: pointer; font-size: 0.8rem;">
+                                📁 <span id="bgmDatasetBtnText">Pick Audio File</span>
+                            </button>
+                            <button type="button" id="uploadBgmBtn" onclick="uploadBgmToDataset()" style="padding: 0.5rem 1rem; background: var(--accent); border: none; border-radius: 4px; color: #000; font-weight: bold; cursor: pointer; font-size: 0.8rem;">
+                                📤 Upload to Dataset
+                            </button>
+                        </div>
+                        <div id="bgmUploadStatus" style="font-size: 0.75rem; color: #34d399; margin-top: 0.4rem;"></div>
+                    </div>
+
+                    <div style="border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.8rem;">
+                        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.8rem; color: var(--text-muted);">
+                            Or one-off upload for this run only (delays launch during upload):
+                        </label>
+                        <div class="file-upload" onclick="document.getElementById('bgmFile').click()" style="padding: 0.8rem;">
+                            <span id="bgmFileName">Select One-Off Audio File (.mp3/.wav/.m4a)</span>
+                            <input type="file" id="bgmFile" name="bg_music" accept="audio/*" onchange="updateBgmFileName(this)">
+                        </div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+                        Music will auto-loop if shorter than video and automatically duck under speech.
+                    </div>
+                </div>
+            </div>
+
+            <input type="hidden" name="hf_repo" value="Airpyk98/EpicSync-Dataset">
+            <input type="hidden" name="hf_token" value="">
+
+            <input type="hidden" name="kaggle_user" value="ikechukwuebiringa1">
+            <input type="hidden" name="kaggle_key" value="KGAT_fc473ab2c166567756eac24217d1fbd2">
+
+            <button type="submit" class="btn-submit" id="submitBtn">Launch EpicSync</button>
+        </form>
+    </div>
+
+    <!-- Right Live Logs & Output Panel -->
+    <div class="panel-right">
+        <div>
+            <div class="header-actions">
+                <div class="section-title" style="margin-bottom:0;">Live Logs & Persistent Tasks</div>
+                <button class="btn-secondary" onclick="clearLogs()">Clear Inactive Runs</button>
+            </div>
+            <div id="jobsList">
+                <div style="color: var(--text-muted); font-size: 0.9rem; padding: 2rem 0;">No active synchronization tasks found. Submit a task on the left to begin real-time generation.</div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    let currentMode = 'standard';
+
+    function switchTab(mode) {
+        currentMode = mode;
+        document.getElementById('tabStandard').classList.toggle('active', mode === 'standard');
+        document.getElementById('tabPremium').classList.toggle('active', mode === 'premium');
+        const mediaInput = document.getElementById('mediaFile');
+        const aspectGroup = document.getElementById('aspectRatioGroup');
+        if (aspectGroup) aspectGroup.style.display = (mode === 'premium') ? 'block' : 'none';
+        if (mode === 'premium') {
+            document.body.classList.add('premium-theme');
+            document.getElementById('modeBadge').innerText = 'PREMIUM STUDIO (LTX 3D ACCELERATED)';
+            document.getElementById('fileLabel').innerText = 'Source Portrait Photo File (.png/.jpg)';
+            document.getElementById('fileName').innerText = 'Select or Drop Portrait Image File';
+            mediaInput.name = 'image';
+            mediaInput.accept = 'image/*';
+        } else {
+            document.body.classList.remove('premium-theme');
+            document.getElementById('modeBadge').innerText = 'STANDARD STUDIO (OPENTALKER 2D)';
+            document.getElementById('fileLabel').innerText = 'Source Video or Photo File';
+            document.getElementById('fileName').innerText = 'Select or Drop MP4/JPG File';
+            mediaInput.name = 'video';
+            mediaInput.accept = 'video/mp4,image/*';
+        }
+    }
+
+    function updateFileName(input) {
+        const display = document.getElementById('fileName');
+        if (input.files && input.files[0]) {
+            display.innerText = input.files[0].name;
+            display.style.color = '#fff';
+        }
+    }
+
+    async function fetchBgmList() {
+        const select = document.getElementById('bgmSelect');
+        if (!select) return;
+        try {
+            const res = await fetch('/api/bgm_list');
+            const data = await res.json();
+            if (data.status === 'success' && data.files) {
+                const currentVal = select.value;
+                select.innerHTML = '<option value="">-- Select a track from dataset or upload below --</option>';
+                data.files.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f;
+                    const clean = f.replace(/^bgm\//, '').replace(/^inputs\//, '');
+                    opt.innerText = `🎵 ${clean} (${f.startsWith('bgm/') ? 'Dataset Library' : 'Past Run'})`;
+                    select.appendChild(opt);
+                });
+                if (currentVal) select.value = currentVal;
+            }
+        } catch (e) {
+            console.error('Error fetching BGM list:', e);
+        }
+    }
+
+    function handleBgmSelect(select) {
+        const fileInput = document.getElementById('bgmFile');
+        const display = document.getElementById('bgmFileName');
+        if (select.value) {
+            if (fileInput) fileInput.value = '';
+            if (display) display.innerText = 'Using selected track from dataset ⚡';
+        } else {
+            if (display && (!fileInput || !fileInput.files[0])) display.innerText = 'Select One-Off Audio File (.mp3/.wav/.m4a)';
+        }
+    }
+
+    async function uploadBgmToDataset() {
+        const fileInput = document.getElementById('bgmDatasetFile');
+        const nameInput = document.getElementById('bgmCustomName');
+        const statusDiv = document.getElementById('bgmUploadStatus');
+        const btn = document.getElementById('uploadBgmBtn');
+        
+        if (!fileInput || !fileInput.files[0]) {
+            alert('Please select an audio file first!');
+            return;
+        }
+        if (!nameInput || !nameInput.value.trim()) {
+            alert('Please enter a name for the song (e.g., Upbeat Corporate)!');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('custom_name', nameInput.value.trim());
+
+        btn.disabled = true;
+        btn.innerText = '⏳ Uploading...';
+        statusDiv.style.color = '#fbbf24';
+        statusDiv.innerText = 'Uploading audio to Hugging Face Dataset... Please wait ~10 seconds.';
+
+        try {
+            const res = await fetch('/api/bgm_upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                statusDiv.style.color = '#34d399';
+                statusDiv.innerText = `✅ ${data.message}`;
+                fileInput.value = '';
+                document.getElementById('bgmDatasetBtnText').innerText = 'Pick Audio File';
+                nameInput.value = '';
+                await fetchBgmList();
+                const select = document.getElementById('bgmSelect');
+                if (select && data.repo_path) select.value = data.repo_path;
+                handleBgmSelect(select);
+            } else {
+                statusDiv.style.color = '#f87171';
+                statusDiv.innerText = `❌ Error: ${data.detail || data.message || 'Upload failed'}`;
+            }
+        } catch (e) {
+            statusDiv.style.color = '#f87171';
+            statusDiv.innerText = '❌ Network error during upload.';
+        } finally {
+            btn.disabled = false;
+            btn.innerText = '📤 Upload to Dataset';
+        }
+    }
+
+    function toggleBgmUpload(checked) {
+        const group = document.getElementById('bgmUploadGroup');
+        if (group) group.style.display = checked ? 'block' : 'none';
+        if (checked) {
+            fetchBgmList();
+        } else {
+            const select = document.getElementById('bgmSelect');
+            if (select) select.value = '';
+            const fileInput = document.getElementById('bgmFile');
+            if (fileInput) fileInput.value = '';
+            const display = document.getElementById('bgmFileName');
+            if (display) display.innerText = 'Select One-Off Audio File (.mp3/.wav/.m4a)';
+        }
+    }
+
+    function updateBgmFileName(input) {
+        const display = document.getElementById('bgmFileName');
+        if (input.files && input.files[0]) {
+            display.innerText = input.files[0].name;
+            display.style.color = '#fff';
+            const select = document.getElementById('bgmSelect');
+            if (select) select.value = '';
+        }
+    }
+
+    document.getElementById('syncForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.innerText = 'Submitting Task...';
+
+        const formData = new FormData(e.target);
+        const endpoint = currentMode === 'premium' ? '/api/run_premium' : '/api/run';
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            });
+            if (res.ok) {
+                e.target.reset();
+                document.getElementById('fileName').innerText = currentMode === 'premium' ? 'Select or Drop Portrait Image File' : 'Select or Drop MP4/JPG File';
+                toggleBgmUpload(false);
+                fetchJobs();
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                alert('Submission failed: ' + (errData.detail || 'Unknown error'));
+            }
+        } catch (err) {
+            alert('Network error connecting to EpicSync server.');
+        } finally {
+            btn.disabled = false;
+            btn.innerText = 'Launch EpicSync';
+        }
+    });
+
+    async function cancelJob(jobId) {
+        await fetch(`/api/cancel/${jobId}`, { method: 'POST' });
+        fetchJobs();
+    }
+
+    async function clearLogs() {
+        await fetch('/api/clear_logs', { method: 'POST' });
+        fetchJobs();
+    }
+
+    async function fetchJobs() {
+        try {
+            const res = await fetch('/api/jobs');
+            const jobs = await res.json();
+            const container = document.getElementById('jobsList');
+            const keys = Object.keys(jobs).sort((a,b) => jobs[b].created_at - jobs[a].created_at);
+
+            if (keys.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; padding: 2rem 0;">No active synchronization tasks found. Submit a task on the left to begin real-time generation.</div>';
+                return;
+            }
+
+            container.innerHTML = keys.map(k => {
+                const job = jobs[k];
+                const logText = (job.logs || []).join('\n');
+                const isRunning = job.status === 'RUNNING' || job.status === 'STAGING';
+                const isSuccess = job.status === 'SUCCESS';
+                const prog = job.progress !== undefined ? job.progress : (isRunning ? 40 : (isSuccess ? 100 : 0));
+                const stepText = job.step_text || (isRunning ? 'Processing video lip-sync on compute acceleration...' : job.status);
+
+                return `
+                    <div class="job-card">
+                        <div class="job-header">
+                            <span class="job-id">${job.title}</span>
+                            <span class="job-status status-${job.status}">${job.status}</span>
+                        </div>
+                        <div class="job-body">
+                            <div class="job-meta">
+                                Voice: <strong>${job.voice}</strong> | Script: "${job.script.substring(0, 60)}..."
+                            </div>
+                            <div class="progress-box">
+                                <div class="progress-header">
+                                    <span class="step-text">${stepText}</span>
+                                    <span class="progress-pct">${prog}%</span>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-fill ${job.status}" style="width: ${prog}%;"></div>
+                                </div>
+                            </div>
+                            ${isSuccess && job.output_file ? `
+                                <div class="video-container">
+                                    <video controls autoplay loop>
+                                        <source src="/api/video/${k}" type="video/mp4">
+                                        Your browser does not support HTML5 video.
+                                    </video>
+                                    <div class="job-actions">
+                                        <a href="/api/download/${k}" download="EpicSync_${k}.mp4" class="btn-download">Download Video</a>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${isRunning ? `
+                                <div class="job-actions">
+                                    <button onclick="cancelJob('${k}')" class="btn-cancel">Cancel Task</button>
+                                </div>
+                            ` : ''}
+                            <details class="tech-logs">
+                                <summary>▸ View Diagnostics / System Logs</summary>
+                                <div class="terminal" id="term_${k}" style="max-height: 180px; margin-top: 0.8rem;">${logText}</div>
+                            </details>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Scroll terminals to bottom
+            keys.forEach(k => {
+                const term = document.getElementById(`term_${k}`);
+                if (term) term.scrollTop = term.scrollHeight;
+            });
+        } catch (err) {
+            console.error('Failed to poll jobs:', err);
+        }
+    }
+
+    // Real-time polling every 4 seconds
+    setInterval(fetchJobs, 4000);
+    fetchJobs();
+</script>
+</body>
+</html>
