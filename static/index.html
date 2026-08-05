@@ -173,9 +173,11 @@
                             <label>System Prompt (Writing Style)</label>
                             <textarea id="aiSystemPrompt" rows="4" placeholder="You are a creative YouTube script writer. Write scripts that are exactly 60 seconds long..."></textarea>
                         </div>
-                        <div class="form-group toggle-group mt-4">
+                        <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
                             <label for="autoPostToggle">Automatically Post to YouTube upon Completion</label>
-                        <button type="submit" class="btn-accent mt-4" id="saveSettingsBtn">Save Settings</button>
+                            <input type="checkbox" id="autoPostToggle" style="width: 20px; height: 20px; accent-color: #e5b300;" />
+                        </div>
+                        <button type="submit" class="btn-accent mt-4" id="saveSettingsBtn" style="width: 100%;">Save Settings</button>
                     </form>
                 </div>
             </section>
