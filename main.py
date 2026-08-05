@@ -1612,6 +1612,16 @@ async def upload_bgm_file(
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/proxy/models")
+async def proxy_models(url: str, key: str):
+    import requests
+    try:
+        response = requests.get(f"{url}/models", headers={"Authorization": f"Bearer {key}"})
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 class ScriptGenRequest(BaseModel):

@@ -165,9 +165,7 @@ async function fetchModels(selectedModel = null) {
     fetchModelsStatus.classList.remove('text-danger');
     
     try {
-        const response = await fetch(`${url}/models`, {
-            headers: { 'Authorization': `Bearer ${key}` }
-        });
+        const response = await fetch(`${BACKEND_URL}/api/proxy/models?url=${encodeURIComponent(url)}&key=${encodeURIComponent(key)}`);
         const data = await response.json();
         
         aiModelSelect.innerHTML = '';
