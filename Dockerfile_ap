@@ -1,0 +1,13 @@
+FROM activepieces/activepieces:latest
+
+# Configure for Hugging Face Spaces
+ENV AP_PORT=7860
+ENV AP_EXECUTION_MODE=UNSANDBOXED
+ENV AP_FRONTEND_URL="https://${SPACE_HOST}"
+ENV AP_TELEMETRY_ENABLED=false
+
+# Use SQLite for single-container deployment
+ENV AP_DB_TYPE=SQLITE
+ENV AP_SQLITE_DATABASE_FILE=/data/activepieces.sqlite
+
+EXPOSE 7860

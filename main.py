@@ -24,6 +24,21 @@ OUTPUTS_DIR = os.path.join(DATA_DIR, "outputs")
 for d in [DATA_DIR, STAGING_DIR, OUTPUTS_DIR]:
     os.makedirs(d, exist_ok=True)
 
+import firebase_admin
+from firebase_admin import credentials, auth, firestore
+import requests
+from fastapi import Request
+
+try:
+    cred = credentials.Certificate(os.path.join(DATA_DIR, "firebase_admin.json"))
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
+    print("Firebase Admin initialized successfully.")
+except Exception as e:
+    print(f"Warning: Firebase Admin failed to initialize: {e}")
+    db = None
+
+
 jobs_lock = threading.Lock()
 
 def load_jobs():
@@ -71,7 +86,7 @@ def setup_kaggle_auth(username, key):
             pass
     return env
 
-def upload_to_YOUR_HF_TOKEN(file_path, repo_id, path_in_repo, YOUR_HF_TOKEN):
+def upload_to_YOUR_HF_TOKEN(file_path, repo_id, path_in_repo, YOUR_HF_TOKEN2):
     if not repo_id or not YOUR_HF_TOKEN:
         return
     try:
@@ -509,7 +524,7 @@ print("=== STARTING PREMIUM STUDIO LTX-2.3 PIPELINE ===", flush=True)
 
 # 0. SETUP AUTHENTICATION FOR FAST DOWNLOADS
 YOUR_HF_TOKEN = ___HF_TOKEN___
-if YOUR_HF_TOKEN and len(YOUR_HF_TOKEN) > 5:
+if YOUR_HF_TOKEN and len(YOUR_HF_TOKEN2) > 5:
     os.environ["HF_TOKEN"] = YOUR_HF_TOKEN
     print("Set HF_TOKEN globally for high-speed unthrottled downloads.", flush=True)
 
@@ -526,7 +541,7 @@ elif YOUR_HF_TOKEN:
     print(f"Fetching source image from HF dataset {YOUR_HF_TOKEN}...", flush=True)
     run_cmd("pip install -q huggingface_hub")
     from huggingface_hub import YOUR_HF_TOKEN_download
-    img_file = YOUR_HF_TOKEN_download(repo_id=YOUR_HF_TOKEN, filename=f"inputs/{job_id}.png", repo_type="dataset", local_dir="/kaggle/working", token=YOUR_HF_TOKEN or None)
+    img_file = YOUR_HF_TOKEN_download(repo_id=YOUR_HF_TOKEN2, filename=f"inputs/{job_id}.png", repo_type="dataset", local_dir="/kaggle/working", token=YOUR_HF_TOKEN or None)
     if img_file != "/kaggle/working/input.png":
         shutil.copy(img_file, "/kaggle/working/input.png")
 else:
@@ -540,7 +555,7 @@ if bgm_repo_path and YOUR_HF_TOKEN:
     print(f"Fetching background music from HF dataset {YOUR_HF_TOKEN}...", flush=True)
     try:
         from huggingface_hub import YOUR_HF_TOKEN_download
-        bgm_file = YOUR_HF_TOKEN_download(repo_id=YOUR_HF_TOKEN, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=YOUR_HF_TOKEN or None)
+        bgm_file = YOUR_HF_TOKEN_download(repo_id=YOUR_HF_TOKEN2, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=YOUR_HF_TOKEN or None)
         if bgm_file != "/kaggle/working/bg_music.mp3":
             shutil.copy(bgm_file, "/kaggle/working/bg_music.mp3")
         if os.path.exists("/kaggle/working/bg_music.mp3"):
@@ -604,7 +619,7 @@ for f in base_files:
     dst = os.path.join("Wan2GP/models", f)
     if not os.path.exists(dst):
         print(f"  [HF Download] Missing base file: {f}. Downloading...", flush=True)
-        YOUR_HF_TOKEN_download(repo_id=REPO, filename=f, local_dir="Wan2GP/models", token=YOUR_HF_TOKEN or None)
+        YOUR_HF_TOKEN_download(repo_id=REPO, filename=f, local_dir="Wan2GP/models", token=YOUR_HF_TOKEN2 or None)
 
 gemma_folder = "gemma-3-12b-it-qat-q4_0-unquantized"
 gemma_files = [
@@ -630,14 +645,14 @@ for gf in gemma_files:
     if not os.path.exists(dst):
         print(f"  [HF Download] Missing Gemma file: {gf}. Downloading...", flush=True)
         try:
-            YOUR_HF_TOKEN_download(repo_id=REPO, filename=f"{gemma_folder}/{gf}", local_dir="Wan2GP/models", token=YOUR_HF_TOKEN or None)
+            YOUR_HF_TOKEN_download(repo_id=REPO, filename=f"{gemma_folder}/{gf}", local_dir="Wan2GP/models", token=YOUR_HF_TOKEN2 or None)
         except Exception as e:
             if "quanto" in gf:
                 alt_gf = 'gemma-3-12b-it-qat-q4_0-unquantized.safetensors'
                 alt_dst = os.path.join("Wan2GP/models", gemma_folder, alt_gf)
                 if not os.path.exists(alt_dst):
                     print(f"  [HF Download] Trying alternative weight: {alt_gf}...", flush=True)
-                    YOUR_HF_TOKEN_download(repo_id=REPO, filename=f"{gemma_folder}/{alt_gf}", local_dir="Wan2GP/models", token=YOUR_HF_TOKEN or None)
+                    YOUR_HF_TOKEN_download(repo_id=REPO, filename=f"{gemma_folder}/{alt_gf}", local_dir="Wan2GP/models", token=YOUR_HF_TOKEN2 or None)
             else:
                 raise e
 
@@ -984,7 +999,80 @@ if os.path.exists(current_video_path):
 run_cmd("rm -rf Wan2GP /kaggle/working/chunk_*.mp4 /kaggle/working/result_retalking_silent.mp4 /kaggle/working/concat_list.txt /kaggle/working/input.wav /kaggle/working/input.png /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/result_speed_adjusted.mp4")
 """
 
-def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN):
+def upload_video_to_youtube(job_id, video_path, uid, project_id):
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+    except ImportError:
+        append_log(job_id, "YouTube libraries not installed.")
+        return
+
+    user_doc = db.collection('users').document(uid).get()
+    if not user_doc.exists:
+        return
+    user_data = user_doc.to_dict()
+    if not user_data.get("autoPost"):
+        append_log(job_id, "Auto-Post to YouTube is disabled in settings.")
+        return
+        
+    auth_data = user_data.get("youtube_auth")
+    if not auth_data:
+        append_log(job_id, "Auto-Post failed: YouTube account not linked.")
+        return
+        
+    client_id = os.environ.get("YOUTUBE_CLIENT_ID")
+    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
+    
+    try:
+        append_log(job_id, "Authenticating with YouTube API for auto-post...")
+        credentials = Credentials(
+            token=auth_data.get("token"),
+            refresh_token=auth_data.get("refresh_token"),
+            token_uri=auth_data.get("token_uri"),
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=auth_data.get("scopes")
+        )
+        
+        youtube = build("youtube", "v3", credentials=credentials)
+        
+        # Get execution details for Title
+        exec_doc = db.collection('users').document(uid).collection('projects').document(project_id).collection('executions').document(job_id).get()
+        title = "EpicSync Generated Video"
+        description = "Generated automatically by EpicSync Studio."
+        if exec_doc.exists:
+            title = exec_doc.to_dict().get("title", title)
+            
+        body = {
+            "snippet": {
+                "title": title,
+                "description": description,
+                "tags": ["EpicSync", "AI Video", "Shorts"],
+                "categoryId": "22"
+            },
+            "status": {
+                "privacyStatus": "private", # Let user publish it later or change if needed
+                "selfDeclaredMadeForKids": False
+            }
+        }
+        
+        append_log(job_id, "Uploading video payload to YouTube...")
+        media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
+        
+        request = youtube.videos().insert(
+            part="snippet,status",
+            body=body,
+            media_body=media
+        )
+        
+        response = request.execute()
+        append_log(job_id, f"Successfully uploaded to YouTube! Video ID: {response.get('id')}")
+        
+    except Exception as e:
+        append_log(job_id, f"YouTube Upload Error: {str(e)}")
+
+def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
     append_log(job_id, f"Kernel pushed to Kaggle ({slug}). Starting monitoring loop...")
     jobs = load_jobs()
     jobs[job_id]["status"] = "RUNNING"
@@ -1054,15 +1142,22 @@ def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN):
                 
                 if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
                     append_log(job_id, f"Video successfully downloaded ({os.path.getsize(out_path)} bytes).")
-                    if YOUR_HF_TOKEN and YOUR_HF_TOKEN:
+                    if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
                         append_log(job_id, f"Syncing output video to HF Dataset {YOUR_HF_TOKEN}...")
-                        upload_to_YOUR_HF_TOKEN(out_path, YOUR_HF_TOKEN, f"outputs/{job_id}.mp4", YOUR_HF_TOKEN)
+                        upload_to_YOUR_HF_TOKEN(out_path, YOUR_HF_TOKEN2, f"outputs/{job_id}.mp4", YOUR_HF_TOKEN)
                     jobs = load_jobs()
                     jobs[job_id]["status"] = "SUCCESS"
                     jobs[job_id]["progress"] = 100
                     jobs[job_id]["step_text"] = "Video lip-sync generated successfully!"
                     jobs[job_id]["output_file"] = f"/api/video/{job_id}"
                     save_jobs(jobs)
+                    
+                    # Check and Trigger YouTube Auto-Upload
+                    uid = jobs[job_id].get("uid")
+                    project_id = jobs[job_id].get("projectId")
+                    if uid and project_id:
+                        upload_video_to_youtube(job_id, out_path, uid, project_id)
+                        
                 else:
                     append_log(job_id, "ERROR: Execution finished but output video was not found or 0 bytes.")
                     jobs = load_jobs()
@@ -1116,16 +1211,16 @@ def prepare_and_launch_standard_job(
     kaggle_user: str,
     kaggle_key: str,
     YOUR_HF_TOKEN: str,
-    YOUR_HF_TOKEN: str,
+    YOUR_HF_TOKEN2: str,
     kernel_id: str
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
         if not bgm_repo_path and bgm_path and os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 0:
-            if YOUR_HF_TOKEN and YOUR_HF_TOKEN:
+            if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
                 bgm_repo_path = f"inputs/{job_id}_bgm.mp3"
                 append_log(job_id, f"Uploading background music to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-                upload_to_YOUR_HF_TOKEN(bgm_path, YOUR_HF_TOKEN, bgm_repo_path, YOUR_HF_TOKEN)
+                upload_to_YOUR_HF_TOKEN(bgm_path, YOUR_HF_TOKEN2, bgm_repo_path, YOUR_HF_TOKEN)
         elif bgm_repo_path:
             append_log(job_id, f"Using pre-uploaded background music from dataset: {bgm_repo_path}")
 
@@ -1138,11 +1233,11 @@ def prepare_and_launch_standard_job(
         else:
             append_log(job_id, f"Input video ({vsize//1024} KB) will be fetched via dataset URL.")
 
-        if YOUR_HF_TOKEN and YOUR_HF_TOKEN:
+        if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
             append_log(job_id, f"Uploading source video to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-            upload_to_YOUR_HF_TOKEN(video_path, YOUR_HF_TOKEN, f"inputs/{job_id}.mp4", YOUR_HF_TOKEN)
+            upload_to_YOUR_HF_TOKEN(video_path, YOUR_HF_TOKEN2, f"inputs/{job_id}.mp4", YOUR_HF_TOKEN)
 
-        script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(YOUR_HF_TOKEN)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(YOUR_HF_TOKEN)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+        script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(YOUR_HF_TOKEN)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(YOUR_HF_TOKEN2)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
@@ -1177,7 +1272,7 @@ def prepare_and_launch_standard_job(
                 jobs[job_id]["status"] = "FAILED"
                 save_jobs(jobs)
         else:
-            monitor_job(job_id, kernel_id, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN)
+            monitor_job(job_id, kernel_id, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2)
     except Exception as e:
         append_log(job_id, f"ERROR in background launch: {str(e)}")
         jobs = load_jobs()
@@ -1199,16 +1294,16 @@ def prepare_and_launch_premium_job(
     kaggle_user: str,
     kaggle_key: str,
     YOUR_HF_TOKEN: str,
-    YOUR_HF_TOKEN: str,
+    YOUR_HF_TOKEN2: str,
     kernel_id: str
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
         if not bgm_repo_path and bgm_path and os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 0:
-            if YOUR_HF_TOKEN and YOUR_HF_TOKEN:
+            if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
                 bgm_repo_path = f"inputs/{job_id}_bgm.mp3"
                 append_log(job_id, f"Uploading background music to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-                upload_to_YOUR_HF_TOKEN(bgm_path, YOUR_HF_TOKEN, bgm_repo_path, YOUR_HF_TOKEN)
+                upload_to_YOUR_HF_TOKEN(bgm_path, YOUR_HF_TOKEN2, bgm_repo_path, YOUR_HF_TOKEN)
         elif bgm_repo_path:
             append_log(job_id, f"Using pre-uploaded background music from dataset: {bgm_repo_path}")
 
@@ -1221,11 +1316,11 @@ def prepare_and_launch_premium_job(
         else:
             append_log(job_id, f"Input image ({isize//1024} KB) will be fetched via dataset URL.")
 
-        if YOUR_HF_TOKEN and YOUR_HF_TOKEN:
+        if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
             append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-            upload_to_YOUR_HF_TOKEN(image_path, YOUR_HF_TOKEN, f"inputs/{job_id}.png", YOUR_HF_TOKEN)
+            upload_to_YOUR_HF_TOKEN(image_path, YOUR_HF_TOKEN2, f"inputs/{job_id}.png", YOUR_HF_TOKEN)
 
-        script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(YOUR_HF_TOKEN)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(YOUR_HF_TOKEN)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+        script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(YOUR_HF_TOKEN)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(YOUR_HF_TOKEN2)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
@@ -1263,7 +1358,7 @@ def prepare_and_launch_premium_job(
                 jobs[job_id]["status"] = "FAILED"
                 save_jobs(jobs)
         else:
-            monitor_job(job_id, kernel_id, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN)
+            monitor_job(job_id, kernel_id, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2)
     except Exception as e:
         append_log(job_id, f"ERROR in background launch: {str(e)}")
         jobs = load_jobs()
@@ -1273,24 +1368,35 @@ def prepare_and_launch_premium_job(
 
 @app.post("/api/run")
 async def create_job(
+    request: Request,
     background_tasks: BackgroundTasks,
     script_text: str = Form(...),
     voice: str = Form("en-US-AnaNeural"),
     add_captions: Optional[str] = Form("false"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
+    projectId: str = Form(""),
     kaggle_user: str = Form("ikechukwuebiringa1"),
     kaggle_key: str = Form("KGAT_fc473ab2c166567756eac24217d1fbd2"),
     YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
-    YOUR_HF_TOKEN: str = Form(""),
+    YOUR_HF_TOKEN2: str = Form(""),
     video: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
 ):
+    uid = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            token = auth_header.split(" ")[1]
+            decoded_token = auth.verify_id_token(token)
+            uid = decoded_token['uid']
+        except:
+            pass
     if not kaggle_key or "0f12d3a4" in kaggle_key:
         kaggle_key = "KGAT_fc473ab2c166567756eac24217d1fbd2"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-standard-runner"
@@ -1321,6 +1427,8 @@ async def create_job(
         "script": script_text,
         "voice": voice,
         "slug": kernel_id,
+        "uid": uid,
+        "projectId": projectId,
         "created_at": time.time(),
         "logs": [f"[{time.strftime('%H:%M:%S')}] Job initialized."]
     }
@@ -1329,13 +1437,14 @@ async def create_job(
     background_tasks.add_task(
         prepare_and_launch_standard_job,
         job_id, staging, video_path, bgm_path, bgm_repo_path, script_text, voice, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, YOUR_HF_TOKEN, YOUR_HF_TOKEN, kernel_id
+        kaggle_user, kaggle_key, YOUR_HF_TOKEN, YOUR_HF_TOKEN2, kernel_id
     )
         
     return {"job_id": job_id, "status": "STAGING"}
 
 @app.post("/api/run_premium")
 async def create_premium_job(
+    request: Request,
     background_tasks: BackgroundTasks,
     script_text: str = Form(...),
     voice: str = Form("en-US-AnaNeural"),
@@ -1343,18 +1452,28 @@ async def create_premium_job(
     add_captions: Optional[str] = Form("false"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
+    projectId: str = Form(""),
     kaggle_user: str = Form("ikechukwuebiringa1"),
     kaggle_key: str = Form("KGAT_fc473ab2c166567756eac24217d1fbd2"),
     YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
-    YOUR_HF_TOKEN: str = Form(""),
+    YOUR_HF_TOKEN2: str = Form(""),
     image: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
 ):
+    uid = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            token = auth_header.split(" ")[1]
+            decoded_token = auth.verify_id_token(token)
+            uid = decoded_token['uid']
+        except:
+            pass
     if not kaggle_key or "0f12d3a4" in kaggle_key:
         kaggle_key = "KGAT_fc473ab2c166567756eac24217d1fbd2"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_premium_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-premium-runner"
@@ -1387,6 +1506,8 @@ async def create_premium_job(
         "aspect_ratio": aspect_ratio,
         "slug": kernel_id,
         "mode": "premium",
+        "uid": uid,
+        "projectId": projectId,
         "created_at": time.time(),
         "logs": [f"[{time.strftime('%H:%M:%S')}] Premium LTX-2.3 Job initialized with {aspect_ratio} aspect ratio."]
     }
@@ -1395,7 +1516,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, YOUR_HF_TOKEN, YOUR_HF_TOKEN, kernel_id
+        kaggle_user, kaggle_key, YOUR_HF_TOKEN, YOUR_HF_TOKEN2, kernel_id
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -1436,10 +1557,10 @@ def get_video(job_id: str):
     raise HTTPException(status_code=404, detail="Video file not found")
 
 @app.get("/api/bgm_list")
-def list_bgm_files(YOUR_HF_TOKEN: str = "Airpyk98/EpicSync-Dataset", YOUR_HF_TOKEN: str = ""):
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+def list_bgm_files(YOUR_HF_TOKEN: str = "Airpyk98/EpicSync-Dataset", YOUR_HF_TOKEN2: str = ""):
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     try:
         from huggingface_hub import HfApi
@@ -1455,11 +1576,11 @@ async def upload_bgm_file(
     file: UploadFile = File(...),
     custom_name: str = Form(...),
     YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
-    YOUR_HF_TOKEN: str = Form("")
+    YOUR_HF_TOKEN2: str = Form("")
 ):
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN.strip() == "":
+    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     
     clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', custom_name.strip())
@@ -1473,7 +1594,7 @@ async def upload_bgm_file(
         f.write(await file.read())
         
     try:
-        upload_to_YOUR_HF_TOKEN(temp_path, YOUR_HF_TOKEN, repo_path, YOUR_HF_TOKEN)
+        upload_to_YOUR_HF_TOKEN(temp_path, YOUR_HF_TOKEN2, repo_path, YOUR_HF_TOKEN)
         if os.path.exists(temp_path):
             os.remove(temp_path)
         return {"status": "success", "repo_path": repo_path, "message": f"Successfully saved {clean_name} to dataset!"}
@@ -1483,3 +1604,150 @@ async def upload_bgm_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+class ScriptGenRequest(BaseModel):
+    titles: str
+
+@app.post("/api/generate-script")
+def generate_script(req: ScriptGenRequest, request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth_header.split(" ")[1]
+    
+    try:
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token['uid']
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+        
+    user_doc = db.collection('users').document(uid).get()
+    if not user_doc.exists:
+        raise HTTPException(status_code=400, detail="User settings not found")
+        
+    user_data = user_doc.to_dict()
+    base_url = user_data.get("aiBaseUrl")
+    api_key = user_data.get("aiApiKey")
+    model = user_data.get("aiModel")
+    sys_prompt = user_data.get("aiSystemPrompt", "You are a creative YouTube script writer. Write scripts that are exactly 60 seconds long.")
+    
+    if not all([base_url, api_key, model]):
+        raise HTTPException(status_code=400, detail="Incomplete AI settings. Please configure settings first.")
+        
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"Write a script for the following titles: {req.titles}"}
+        ]
+    }
+    
+    try:
+        resp = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        script = data['choices'][0]['message']['content']
+        return {"script": script}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI Provider error: {str(e)}")
+
+import google_auth_oauthlib.flow
+from fastapi.responses import RedirectResponse
+
+@app.get("/api/auth/youtube")
+def auth_youtube(uid: str, request: Request):
+    user_doc = db.collection('users').document(uid).get()
+    if not user_doc.exists:
+        raise HTTPException(status_code=400, detail="User not found")
+        
+    client_id = os.environ.get("YOUTUBE_CLIENT_ID")
+    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
+    
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=500, detail="Platform YouTube Client ID/Secret not configured on backend.")
+
+    client_config = {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [str(request.base_url) + "api/auth/youtube/callback"]
+        }
+    }
+
+    flow = google_auth_oauthlib.flow.Flow.from_client_config(
+        client_config,
+        scopes=["https://www.googleapis.com/auth/youtube.upload"]
+    )
+    flow.redirect_uri = str(request.base_url) + "api/auth/youtube/callback"
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true',
+        prompt='consent'
+    )
+    
+    # Save the state to firestore to verify in callback
+    db.collection('users').document(uid).collection('oauth_states').document(state).set({
+        "created_at": time.time()
+    })
+    
+    return RedirectResponse(authorization_url)
+
+@app.get("/api/auth/youtube/callback")
+def auth_youtube_callback(state: str, code: str, request: Request):
+    # Find which user initiated this state
+    users_ref = db.collection('users')
+    found_uid = None
+    client_config = None
+    client_id = os.environ.get("YOUTUBE_CLIENT_ID")
+    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
+    
+    for user_doc in users_ref.stream():
+        state_doc = users_ref.document(user_doc.id).collection('oauth_states').document(state).get()
+        if state_doc.exists:
+            found_uid = user_doc.id
+            client_config = {
+                "web": {
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [str(request.base_url) + "api/auth/youtube/callback"]
+                }
+            }
+            # Clean up state
+            users_ref.document(user_doc.id).collection('oauth_states').document(state).delete()
+            break
+            
+    if not found_uid or not client_config:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state. Please try connecting again.")
+
+    flow = google_auth_oauthlib.flow.Flow.from_client_config(
+        client_config,
+        scopes=["https://www.googleapis.com/auth/youtube.upload"],
+        state=state
+    )
+    flow.redirect_uri = str(request.base_url) + "api/auth/youtube/callback"
+    
+    try:
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        
+        # Save to Firestore
+        db.collection('users').document(found_uid).set({
+            "youtube_auth": {
+                "token": credentials.token,
+                "refresh_token": credentials.refresh_token,
+                "token_uri": credentials.token_uri,
+                "scopes": credentials.scopes
+            }
+        }, merge=True)
+        
+        return RedirectResponse("/?yt_success=true")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch token: {str(e)}")

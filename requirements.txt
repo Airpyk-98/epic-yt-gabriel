@@ -5,3 +5,8 @@ huggingface_hub==0.22.2
 kaggle>=2.2.2
 pydantic==2.6.4
 requests==2.31.0
+firebase-admin==7.5.0
+google-api-python-client==2.160.0
+google-auth-oauthlib==1.2.1
+gradio>=4.0.0
+spaces
