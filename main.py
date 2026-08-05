@@ -14,8 +14,17 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from huggingface_hub import HfApi
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="EpicSync Studio")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://epic-yt-gab.web.app", "http://localhost:7860"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 DATA_DIR = os.path.abspath("data")
 JOBS_FILE = os.path.join(DATA_DIR, "jobs.json")
 STAGING_DIR = os.path.join(DATA_DIR, "staging")

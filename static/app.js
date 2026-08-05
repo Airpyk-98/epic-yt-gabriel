@@ -18,6 +18,7 @@ const db = getFirestore(app);
 
 let currentUser = null;
 let currentProject = null;
+const BACKEND_URL = "https://epic-yt-gabriel.onrender.com";
 
 // UI Elements
 const authOverlay = document.getElementById('authOverlay');
@@ -260,7 +261,7 @@ window.connectYouTube = () => {
     }
     
     // Redirect to FastAPI OAuth endpoint
-    window.location.href = `/api/auth/youtube?uid=${currentUser.uid}`;
+    window.location.href = `${BACKEND_URL}/api/auth/youtube?uid=${currentUser.uid}`;
 };
 
 // Dashboard - Script Generation
@@ -282,7 +283,7 @@ scriptGenForm.addEventListener('submit', async (e) => {
     const token = await currentUser.getIdToken();
     
     try {
-        const res = await fetch('/api/generate-script', {
+        const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -357,7 +358,7 @@ videoGenForm.addEventListener('submit', async (e) => {
     // You can also append other settings like add_captions etc if added to UI
     
     try {
-        const res = await fetch('/api/run_premium', {
+        const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
