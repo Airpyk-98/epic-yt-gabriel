@@ -39,7 +39,18 @@ import requests
 from fastapi import Request
 
 try:
-    cred = credentials.Certificate(os.path.join(DATA_DIR, "firebase_admin.json"))
+    firebase_b64 = os.environ.get("FIREBASE_SERVICE_ACCOUNT_BASE64")
+    firebase_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+    
+    if firebase_b64:
+        cred_dict = json.loads(base64.b64decode(firebase_b64).decode('utf-8'))
+        cred = credentials.Certificate(cred_dict)
+    elif firebase_json:
+        cred_dict = json.loads(firebase_json)
+        cred = credentials.Certificate(cred_dict)
+    else:
+        cred = credentials.Certificate(os.path.join(DATA_DIR, "firebase_admin.json"))
+        
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     print("Firebase Admin initialized successfully.")
