@@ -1578,6 +1578,7 @@ def list_bgm_files(YOUR_HF_TOKEN: str = "Airpyk98/EpicSync-Dataset", YOUR_HF_TOK
         bgm_files = [f for f in files if (f.startswith("bgm/") or f.startswith("inputs/")) and f.lower().endswith((".mp3", ".wav", ".m4a", ".aac", ".ogg"))]
         return {"status": "success", "files": sorted(bgm_files)}
     except Exception as e:
+        print(f"Error handling webhook: {e}")
         return {"status": "error", "message": str(e), "files": []}
 
 @app.post("/api/bgm_upload")
@@ -1622,10 +1623,11 @@ async def proxy_models(url: str, key: str):
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
 
 class ScriptGenRequest(BaseModel):
     titles: str
+    niche: str = "general"
 
 @app.post("/api/generate-script")
 def generate_script(req: ScriptGenRequest, request: Request):
@@ -1678,7 +1680,7 @@ import google_auth_oauthlib.flow
 from fastapi.responses import RedirectResponse
 
 @app.get("/api/auth/youtube")
-def auth_youtube(uid: str, request: Request):
+def auth_youtube(uid: str, request: Request, project: str = None):
     user_doc = db.collection('users').document(uid).get()
     if not user_doc.exists:
         raise HTTPException(status_code=400, detail="User not found")
@@ -1712,7 +1714,8 @@ def auth_youtube(uid: str, request: Request):
     
     # Save the state to firestore to verify in callback
     db.collection('users').document(uid).collection('oauth_states').document(state).set({
-        "created_at": time.time()
+        "created_at": time.time(),
+        "project_id": project
     })
     
     return RedirectResponse(authorization_url)
@@ -1722,6 +1725,7 @@ def auth_youtube_callback(state: str, code: str, request: Request):
     # Find which user initiated this state
     users_ref = db.collection('users')
     found_uid = None
+    found_project = None
     client_config = None
     client_id = os.environ.get("YOUTUBE_CLIENT_ID")
     client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
@@ -1729,7 +1733,9 @@ def auth_youtube_callback(state: str, code: str, request: Request):
     for user_doc in users_ref.stream():
         state_doc = users_ref.document(user_doc.id).collection('oauth_states').document(state).get()
         if state_doc.exists:
+            state_data = state_doc.to_dict()
             found_uid = user_doc.id
+            found_project = state_data.get("project_id")
             client_config = {
                 "web": {
                     "client_id": client_id,
@@ -1767,6 +1773,13 @@ def auth_youtube_callback(state: str, code: str, request: Request):
             }
         }, merge=True)
         
+        if found_project:
+            db.collection('users').document(found_uid).collection('projects').document(found_project).update({
+                "youtubeConnectionId": "connected"
+            })
+            
         return RedirectResponse("/?yt_success=true")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch token: {str(e)}")
+
+app.mount("/", StaticFiles(directory="static", html=True), name="static")

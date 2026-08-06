@@ -65,9 +65,10 @@
                 <button class="close-drawer-btn" id="closeDrawerBtn">&times;</button>
             </div>
             <ul class="drawer-links">
-                <li><a href="#" class="nav-link active" data-target="view-dashboard">🏠 Dashboard</a></li>
+                <li><a href="#" class="nav-link active" data-target="view-dashboard">🏠 Studio</a></li>
                 <li><a href="#" class="nav-link" data-target="view-projects">📁 Projects</a></li>
                 <li><a href="#" class="nav-link" data-target="view-logs">📋 Execution Logs</a></li>
+                <li><a href="#" class="nav-link" data-target="view-analytics">📊 Analytics</a></li>
                 <li><a href="#" class="nav-link" data-target="view-settings">⚙️ Settings</a></li>
                 <li class="divider"></li>
                 <li><a href="#" class="nav-link text-danger" id="logoutBtn">🚪 Sign Out</a></li>
@@ -88,6 +89,15 @@
                 <div class="card">
                     <h3>1. Generate Script</h3>
                     <form id="scriptGenForm">
+                        <div class="form-group mt-2">
+                            <label>Content Niche / Template</label>
+                            <select id="nicheSelect">
+                                <option value="general">General / Standard</option>
+                                <option value="true_crime">True Crime / Mystery</option>
+                                <option value="finance">Finance / Crypto</option>
+                                <option value="motivational">Motivational / Self-Help</option>
+                            </select>
+                        </div>
                         <div class="form-group">
                             <label>Video Title(s)</label>
                             <textarea id="videoTitles" placeholder="Enter a video title, or paste multiple titles separated by newlines..." rows="3" required></textarea>
@@ -95,10 +105,10 @@
                         </div>
                         <button type="submit" class="btn-primary" id="genScriptBtn">✨ Generate Script</button>
                     </form>
-                    <div id="scriptResultArea" class="result-area mt-4" style="display:none;">
-                        <label>Generated Script (Editable)</label>
-                        <textarea id="generatedScriptText" rows="6" class="mt-2"></textarea>
-                    </div>
+                    <div class="input-group" id="scriptResultArea" style="display:none; margin-top:20px;">
+                    <label>Generated Script (Edit as needed)</label>
+                    <textarea id="generatedScriptText" rows="6"></textarea>
+                </div>
                 </div>
 
                 <div class="card mt-4">
@@ -117,6 +127,25 @@
                                 <option value="en-US-ChristopherNeural">Christopher (en-US, Deep Male)</option>
                                 <option value="en-GB-SoniaNeural">Sonia (en-GB, British Female)</option>
                             </select>
+                        </div>
+                        
+                        <div class="form-group mt-3">
+                            <label>Thumbnail Idea (Optional)</label>
+                            <input type="text" id="thumbnailPrompt" placeholder="e.g. dramatic dark background with neon red text">
+                        </div>
+                        
+                        <div class="form-group mt-3">
+                            <label>YouTube Privacy Status</label>
+                            <select id="ytPrivacy">
+                                <option value="private">Private</option>
+                                <option value="unlisted">Unlisted</option>
+                                <option value="public">Public</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mt-3">
+                            <label>Publish Schedule (Optional)</label>
+                            <input type="datetime-local" id="ytSchedule" style="width: 100%; padding: 0.8rem; background: var(--bg-card); border: 1px solid var(--border-color); color: #fff; border-radius: 8px;">
                         </div>
                         <button type="submit" class="btn-accent" id="submitVideoBtn" disabled>🚀 Launch EpicSync GPU</button>
                     </form>
@@ -170,6 +199,10 @@
                             </select>
                         </div>
                         <div class="form-group">
+                            <label>ElevenLabs API Key (For Custom Voices)</label>
+                            <input type="password" id="elevenLabsKey" placeholder="eleven-...">
+                        </div>
+                        <div class="form-group">
                             <label>System Prompt (Writing Style)</label>
                             <textarea id="aiSystemPrompt" rows="4" placeholder="You are a creative YouTube script writer. Write scripts that are exactly 60 seconds long..."></textarea>
                         </div>
@@ -192,6 +225,33 @@
                 <div id="executionLogsList" class="logs-container">
                     <!-- Dynamic Logs go here -->
                     <div class="empty-state">No videos generated yet in this project.</div>
+                </div>
+            </section>
+
+            <!-- VIEW: ANALYTICS -->
+            <section id="view-analytics" class="view-section">
+                <div class="section-header">
+                    <h2>Channel Analytics</h2>
+                    <p>Performance metrics for the active YouTube connection</p>
+                </div>
+                <div class="card">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+                        <div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+                            <h4 style="color: var(--text-muted);">Subscribers</h4>
+                            <h2 style="font-size: 2rem; margin-top: 0.5rem; color: #fff;">--</h2>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+                            <h4 style="color: var(--text-muted);">Views (Last 28 Days)</h4>
+                            <h2 style="font-size: 2rem; margin-top: 0.5rem; color: #fff;">--</h2>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+                            <h4 style="color: var(--text-muted);">Watch Hours</h4>
+                            <h2 style="font-size: 2rem; margin-top: 0.5rem; color: #fff;">--</h2>
+                        </div>
+                    </div>
+                    <div style="text-align: center; padding: 2rem; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px;">
+                        <em>Please connect a YouTube channel to load live API metrics.</em>
+                    </div>
                 </div>
             </section>
 

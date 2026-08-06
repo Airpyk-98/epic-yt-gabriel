@@ -18,6 +18,8 @@ const db = getFirestore(app);
 
 let currentUser = null;
 let currentProject = null;
+let unsubscribeProjects = null;
+let unsubscribeLogs = null;
 const BACKEND_URL = "https://epic-yt-gabriel.onrender.com";
 
 // UI Elements
@@ -48,6 +50,8 @@ onAuthStateChanged(auth, (user) => {
         loadProjects();
     } else {
         currentUser = null;
+        if (unsubscribeProjects) { unsubscribeProjects(); unsubscribeProjects = null; }
+        if (unsubscribeLogs) { unsubscribeLogs(); unsubscribeLogs = null; }
         currentProject = null;
         activeProjectBadge.innerText = "No Project Selected";
         authOverlay.classList.add('active');
@@ -70,7 +74,11 @@ authForm.addEventListener('submit', async (e) => {
             try {
                 await createUserWithEmailAndPassword(auth, email, password);
             } catch (err2) {
-                authError.innerText = err2.message;
+                if (err2.code === 'auth/email-already-in-use') {
+                    authError.innerText = "Invalid email or password.";
+                } else {
+                    authError.innerText = err2.message;
+                }
             }
         } else {
             authError.innerText = err.message;
@@ -134,18 +142,25 @@ settingsForm.addEventListener('submit', async (e) => {
     saveBtn.innerText = 'Saving...';
     saveBtn.disabled = true;
     
-    await setDoc(doc(db, 'users', currentUser.uid), {
-        aiBaseUrl: aiBaseUrl.value.trim(),
-        aiApiKey: aiApiKey.value.trim(),
-        aiModel: aiModelSelect.value,
-        aiSystemPrompt: aiSystemPrompt.value,
-        autoPost: autoPostToggle.checked,
-        updatedAt: serverTimestamp()
-    }, { merge: true });
-    
-    saveBtn.innerText = 'Save Settings';
-    saveBtn.disabled = false;
-    alert('Settings saved successfully.');
+    try {
+        await setDoc(doc(db, 'users', currentUser.uid), {
+            aiBaseUrl: aiBaseUrl.value.trim(),
+            aiApiKey: aiApiKey.value.trim(),
+            aiModel: aiModelSelect.value,
+            aiSystemPrompt: aiSystemPrompt.value,
+            autoPost: autoPostToggle.checked,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+        
+        saveBtn.innerText = 'Save Settings';
+        saveBtn.disabled = false;
+        alert('Settings saved successfully.');
+    } catch (error) {
+        console.error("Error saving settings:", error);
+        saveBtn.innerText = 'Save Settings';
+        saveBtn.disabled = false;
+        alert('Error saving settings: ' + error.message + '\n\nPlease ensure you have created a Cloud Firestore database in your Firebase project and that the security rules allow this write.');
+    }
 });
 
 fetchModelsBtn.addEventListener('click', async () => {
@@ -208,8 +223,9 @@ createProjectForm.addEventListener('submit', async (e) => {
 });
 
 function loadProjects() {
+    if (unsubscribeProjects) { unsubscribeProjects(); }
     const q = query(collection(db, 'users', currentUser.uid, 'projects'), orderBy('createdAt', 'desc'));
-    onSnapshot(q, (snapshot) => {
+    unsubscribeProjects = onSnapshot(q, (snapshot) => {
         projectsList.innerHTML = '';
         snapshot.forEach(docSnap => {
             const data = docSnap.data();
@@ -221,21 +237,33 @@ function loadProjects() {
                 <h3>${data.name}</h3>
                 <p class="text-sm text-muted mt-2">ID: ${docSnap.id}</p>
                 <div class="mt-4 flex-row" style="gap: 10px;">
-                    <button class="btn-primary" onclick="selectProject('${docSnap.id}', '${data.name}')" ${isSelected ? 'disabled' : ''}>
-                        ${isSelected ? 'Active' : 'Select Project'}
+                    <button class="btn-primary select-project-btn" data-id="${docSnap.id}" data-name="${data.name}" ${isSelected ? 'disabled' : ''}>
+                        ${isSelected ? 'Selected' : 'Select Project'}
                     </button>
-                    <button class="btn-yt" onclick="connectYouTube('${docSnap.id}')">
+                    <button class="btn-yt connect-yt-btn" data-id="${docSnap.id}">
                         ${data.youtubeConnectionId ? '✅ YT Connected' : '▶️ Connect YouTube'}
                     </button>
                 </div>
             `;
+            
+            // Attach event listeners explicitly to avoid inline onclick CSP issues
+            div.querySelector('.select-project-btn').addEventListener('click', (e) => {
+                if (!isSelected) {
+                    window.selectProject(e.target.getAttribute('data-id'), e.target.getAttribute('data-name'));
+                }
+            });
+            
+            div.querySelector('.connect-yt-btn').addEventListener('click', (e) => {
+                window.connectYouTube(e.target.getAttribute('data-id') || e.currentTarget.getAttribute('data-id'));
+            });
+            
             projectsList.appendChild(div);
         });
         
         // Auto-select first if none selected
         if (!currentProject && snapshot.docs.length > 0) {
             const first = snapshot.docs[0];
-            selectProject(first.id, first.data().name);
+            window.selectProject(first.id, first.data().name);
         }
     });
 }
@@ -247,19 +275,9 @@ window.selectProject = (id, name) => {
     loadLogs();
 };
 
-window.connectYouTube = () => {
+window.connectYouTube = (projectId) => {
     if (!currentUser) return alert("Please sign in first.");
-    const ytId = document.getElementById('ytClientId').value.trim();
-    const ytSec = document.getElementById('ytClientSecret').value.trim();
-    
-    if (!ytId || !ytSec) {
-        alert("Please save your YouTube Client ID and Client Secret in Settings before connecting.");
-        document.querySelector('[data-target="view-settings"]').click();
-        return;
-    }
-    
-    // Redirect to FastAPI OAuth endpoint
-    window.location.href = `${BACKEND_URL}/api/auth/youtube?uid=${currentUser.uid}`;
+    window.location.href = `${BACKEND_URL}/api/auth/youtube?uid=${currentUser.uid}&project=${projectId}`;
 };
 
 // Dashboard - Script Generation
@@ -294,7 +312,7 @@ scriptGenForm.addEventListener('submit', async (e) => {
         if (res.ok) {
             generatedScriptText.value = data.script;
             scriptResultArea.style.display = 'block';
-            submitVideoBtn.disabled = false;
+            checkVideoSubmitState();
         } else {
             alert('Error generating script: ' + data.detail);
         }
@@ -307,13 +325,24 @@ scriptGenForm.addEventListener('submit', async (e) => {
     }
 });
 
+function checkVideoSubmitState() {
+    const hasScript = generatedScriptText.value.trim().length > 0;
+    const imageInput = document.getElementById('imageInput');
+    const hasImage = imageInput && imageInput.files.length > 0;
+    submitVideoBtn.disabled = !(hasScript && hasImage);
+}
+
+generatedScriptText.addEventListener('input', checkVideoSubmitState);
+document.getElementById('imageInput').addEventListener('change', checkVideoSubmitState);
+
 function loadLogs() {
     if (!currentProject) return;
     const logsContainer = document.getElementById('executionLogsList');
     logsContainer.innerHTML = '<div class="empty-state">Loading logs...</div>';
     
+    if (unsubscribeLogs) { unsubscribeLogs(); }
     const q = query(collection(db, 'users', currentUser.uid, 'projects', currentProject, 'executions'), orderBy('createdAt', 'desc'));
-    onSnapshot(q, (snapshot) => {
+    unsubscribeLogs = onSnapshot(q, (snapshot) => {
         logsContainer.innerHTML = '';
         if (snapshot.empty) {
             logsContainer.innerHTML = '<div class="empty-state">No videos generated yet in this project.</div>';
@@ -326,8 +355,15 @@ function loadLogs() {
             div.innerHTML = `
                 <h4>${data.title || 'Untitled Video'}</h4>
                 <p class="text-sm mt-2 text-muted">Status: ${data.status}</p>
-                ${data.videoUrl ? `<a href="${data.videoUrl}" target="_blank" class="btn-primary" style="display:inline-block; margin-top:10px;">Download / View</a>` : ''}
+                ${data.videoUrl ? `
+                <div style="margin-top: 10px; display: flex; gap: 8px;">
+                    <a href="${data.videoUrl}" target="_blank" class="btn-primary">Download / View</a>
+                    <button class="btn-secondary" onclick="alert('Export to Google Drive coming soon!')">☁️ GDrive</button>
+                    <button class="btn-secondary" onclick="alert('Export to Dropbox coming soon!')">☁️ Dropbox</button>
+                </div>
+                ` : ''}
             `;
+            logsContainer.appendChild(div);
         });
     });
 }
