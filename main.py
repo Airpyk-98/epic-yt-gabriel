@@ -1681,44 +1681,49 @@ from fastapi.responses import RedirectResponse
 
 @app.get("/api/auth/youtube")
 def auth_youtube(uid: str, request: Request, project: str = None):
-    user_doc = db.collection('users').document(uid).get()
-    if not user_doc.exists:
-        raise HTTPException(status_code=400, detail="User not found")
+    try:
+        user_doc = db.collection('users').document(uid).get()
+        if not user_doc.exists:
+            raise HTTPException(status_code=400, detail="User not found")
+            
+        client_id = os.environ.get("YOUTUBE_CLIENT_ID")
+        client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
         
-    client_id = os.environ.get("YOUTUBE_CLIENT_ID")
-    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
-    
-    if not client_id or not client_secret:
-        raise HTTPException(status_code=500, detail="Platform YouTube Client ID/Secret not configured on backend.")
+        if not client_id or not client_secret:
+            raise HTTPException(status_code=500, detail="Platform YouTube Client ID/Secret not configured on backend.")
 
-    client_config = {
-        "web": {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [str(request.base_url) + "api/auth/youtube/callback"]
+        client_config = {
+            "web": {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [str(request.base_url) + "api/auth/youtube/callback"]
+            }
         }
-    }
 
-    flow = google_auth_oauthlib.flow.Flow.from_client_config(
-        client_config,
-        scopes=["https://www.googleapis.com/auth/youtube.upload"]
-    )
-    flow.redirect_uri = str(request.base_url) + "api/auth/youtube/callback"
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true',
-        prompt='consent'
-    )
-    
-    # Save the state to firestore to verify in callback
-    db.collection('users').document(uid).collection('oauth_states').document(state).set({
-        "created_at": time.time(),
-        "project_id": project
-    })
-    
-    return RedirectResponse(authorization_url)
+        flow = google_auth_oauthlib.flow.Flow.from_client_config(
+            client_config,
+            scopes=["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
+        )
+        flow.redirect_uri = str(request.base_url) + "api/auth/youtube/callback"
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+        
+        # Save the state to firestore to verify in callback
+        db.collection('users').document(uid).collection('oauth_states').document(state).set({
+            "created_at": time.time(),
+            "project_id": project
+        })
+        
+        return RedirectResponse(authorization_url)
+    except Exception as e:
+        import traceback
+        error_msg = f"{str(e)}\n{traceback.format_exc()}"
+        return {"detail": error_msg}
 
 @app.get("/api/auth/youtube/callback")
 def auth_youtube_callback(state: str, code: str, request: Request):
