@@ -1297,7 +1297,7 @@ def prepare_and_launch_standard_job(
             "enable_tpu": False,
             "enable_internet": True,
             "keywords": ["gpu"],
-            "dataset_sources": ["ikechukwuebiringa1/lipsyncbaby-video"],
+            "dataset_sources": [],
             "competition_sources": [],
             "kernel_sources": [],
             "model_sources": [],
@@ -1380,10 +1380,7 @@ def prepare_and_launch_premium_job(
             "enable_tpu": False,
             "enable_internet": True,
             "keywords": ["gpu", "diffusion", "ltx"],
-            "dataset_sources": [
-                "guitammelbader/wan2gp-models",
-                "canodian/pl-ltx-2-3-spatial-upscaler-x2-1-0-safetensors"
-            ],
+            "dataset_sources": [],
             "competition_sources": [],
             "kernel_sources": [],
             "model_sources": [],
