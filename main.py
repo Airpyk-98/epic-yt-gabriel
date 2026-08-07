@@ -1425,7 +1425,7 @@ async def create_job(
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
-    hf_repo: str = Form("Airpyk98/EpicSync-Dataset"),
+    hf_repo: str = Form("epic-gab/EpicSync-Dataset"),
     hf_token: str = Form(""),
     video: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
@@ -1442,7 +1442,7 @@ async def create_job(
     if not kaggle_key or "0f12d3a4" in kaggle_key:
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not hf_repo or hf_token.strip() == "":
-        hf_repo = "Airpyk98/EpicSync-Dataset"
+        hf_repo = "epic-gab/EpicSync-Dataset"
     job_id = f"epicsync_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-standard-runner"
     
@@ -1500,7 +1500,7 @@ async def create_premium_job(
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
-    hf_repo: str = Form("Airpyk98/EpicSync-Dataset"),
+    hf_repo: str = Form("epic-gab/EpicSync-Dataset"),
     hf_token: str = Form(""),
     image: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
@@ -1517,7 +1517,7 @@ async def create_premium_job(
     if not kaggle_key or "0f12d3a4" in kaggle_key:
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not hf_repo or hf_token.strip() == "":
-        hf_repo = "Airpyk98/EpicSync-Dataset"
+        hf_repo = "epic-gab/EpicSync-Dataset"
     job_id = f"epicsync_premium_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-premium-runner"
     
@@ -1600,9 +1600,9 @@ def get_video(job_id: str):
     raise HTTPException(status_code=404, detail="Video file not found")
 
 @app.get("/api/bgm_list")
-def list_bgm_files(hf_repo: str = "Airpyk98/EpicSync-Dataset", hf_token: str = ""):
+def list_bgm_files(hf_repo: str = "epic-gab/EpicSync-Dataset", hf_token: str = ""):
     if not hf_repo or hf_token.strip() == "":
-        hf_repo = "Airpyk98/EpicSync-Dataset"
+        hf_repo = "epic-gab/EpicSync-Dataset"
     try:
         from huggingface_hub import HfApi
         api = HfApi(token=hf_token)
@@ -1617,11 +1617,11 @@ def list_bgm_files(hf_repo: str = "Airpyk98/EpicSync-Dataset", hf_token: str = "
 async def upload_bgm_file(
     file: UploadFile = File(...),
     custom_name: str = Form(...),
-    hf_repo: str = Form("Airpyk98/EpicSync-Dataset"),
+    hf_repo: str = Form("epic-gab/EpicSync-Dataset"),
     hf_token: str = Form("")
 ):
     if not hf_repo or hf_token.strip() == "":
-        hf_repo = "Airpyk98/EpicSync-Dataset"
+        hf_repo = "epic-gab/EpicSync-Dataset"
     
     clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', custom_name.strip())
     if not clean_name:
