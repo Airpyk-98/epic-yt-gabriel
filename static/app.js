@@ -431,6 +431,7 @@ createContentForm.addEventListener('submit', async (e) => {
             formData.append('image', mediaFile);
             formData.append('video', mediaFile);
             formData.append('projectId', currentProject);
+            formData.append('resolution', document.getElementById('resolutionSelect').value);
             
             const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
                 method: 'POST',

@@ -1030,6 +1030,23 @@ if os.path.exists("/kaggle/working/result_retalking_silent.mp4"):
     print("Muxing studio voiceover audio onto final video...", flush=True)
     os.system("ffmpeg -y -i /kaggle/working/result_retalking_silent.mp4 -i /kaggle/working/input.wav -c:v copy -c:a aac -b:a 192k -shortest /kaggle/working/result_retalking.mp4")
 
+# Resolution scaling
+output_resolution = "___RESOLUTION___"
+RESOLUTION_MAP = {
+    "480p": {"9:16": "480:864", "16:9": "864:480", "1:1": "640:640"},
+    "540p": {"9:16": "540:960", "16:9": "960:540", "1:1": "720:720"},
+    "720p": {"9:16": "720:1280", "16:9": "1280:720", "1:1": "960:960"},
+    "960p": {"9:16": "960:1728", "16:9": "1728:960", "1:1": "1280:1280"},
+}
+if output_resolution != "960p" and os.path.exists("/kaggle/working/result_retalking.mp4"):
+    scale_val = RESOLUTION_MAP.get(output_resolution, {}).get(aspect_ratio_mode, None)
+    if scale_val:
+        print(f"Scaling final video to {output_resolution} ({scale_val})...", flush=True)
+        os.system(f"ffmpeg -y -i /kaggle/working/result_retalking.mp4 -vf scale={scale_val} -c:v libx264 -preset fast -crf 18 -c:a copy /kaggle/working/result_scaled.mp4")
+        if os.path.exists("/kaggle/working/result_scaled.mp4") and os.path.getsize("/kaggle/working/result_scaled.mp4") > 0:
+            os.replace("/kaggle/working/result_scaled.mp4", "/kaggle/working/result_retalking.mp4")
+            print(f"Scaled to {output_resolution} successfully.", flush=True)
+
 print("SUCCESS: Saved final Premium LTX video to /kaggle/working/result_retalking.mp4", flush=True)
 '''
 
@@ -1472,7 +1489,7 @@ def prepare_and_launch_premium_job(
             append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {hf_repo}...")
             upload_to_hf_hub(image_path, hf_repo, f"inputs/{job_id}.png", hf_token)
 
-        script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+        script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
@@ -1604,6 +1621,7 @@ async def create_premium_job(
     script_text: str = Form(...),
     voice: str = Form("en-US-AnaNeural"),
     aspect_ratio: str = Form("9:16"),
+    resolution: str = Form("720p"),
     add_captions: Optional[str] = Form("false"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
