@@ -1751,6 +1751,12 @@ def auth_youtube_callback(state: str, code: str, request: Request):
     client_id = os.environ.get("YOUTUBE_CLIENT_ID")
     client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
     
+    base_url = str(request.base_url)
+    if "onrender.com" in base_url and base_url.startswith("http://"):
+        base_url = base_url.replace("http://", "https://")
+        
+    redirect_uri = base_url + "api/auth/youtube/callback"
+    
     for user_doc in users_ref.stream():
         state_doc = users_ref.document(user_doc.id).collection('oauth_states').document(state).get()
         if state_doc.exists:
@@ -1763,7 +1769,7 @@ def auth_youtube_callback(state: str, code: str, request: Request):
                     "client_secret": client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [str(request.base_url) + "api/auth/youtube/callback"]
+                    "redirect_uris": [redirect_uri]
                 }
             }
             # Clean up state
@@ -1775,10 +1781,10 @@ def auth_youtube_callback(state: str, code: str, request: Request):
 
     flow = google_auth_oauthlib.flow.Flow.from_client_config(
         client_config,
-        scopes=["https://www.googleapis.com/auth/youtube.upload"],
+        scopes=["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"],
         state=state
     )
-    flow.redirect_uri = str(request.base_url) + "api/auth/youtube/callback"
+    flow.redirect_uri = redirect_uri
     
     try:
         flow.fetch_token(code=code)
