@@ -281,59 +281,140 @@ window.connectYouTube = (projectId) => {
 };
 
 // Dashboard - Script Generation
-const scriptGenForm = document.getElementById('scriptGenForm');
-const genScriptBtn = document.getElementById('genScriptBtn');
+const createContentForm = document.getElementById('createContentForm');
+const videoTitlesInput = document.getElementById('videoTitles');
+const previewScriptToggle = document.getElementById('previewScriptToggle');
 const scriptResultArea = document.getElementById('scriptResultArea');
 const generatedScriptText = document.getElementById('generatedScriptText');
-const submitVideoBtn = document.getElementById('submitVideoBtn');
+const continueVideoBtn = document.getElementById('continueVideoBtn');
+const submitContentBtn = document.getElementById('submitContentBtn');
+const mediaFileInput = document.getElementById('mediaFile');
 
-scriptGenForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!currentProject) return alert('Select a project first!');
-    
-    const titles = document.getElementById('videoTitles').value.trim();
-    genScriptBtn.innerText = 'Generating...';
-    genScriptBtn.disabled = true;
-    
-    // Get current user token for auth
-    const token = await currentUser.getIdToken();
-    
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ titles: titles })
-        });
-        
-        const data = await res.json();
-        if (res.ok) {
-            generatedScriptText.value = data.script;
-            scriptResultArea.style.display = 'block';
-            checkVideoSubmitState();
-        } else {
-            alert('Error generating script: ' + data.detail);
-        }
-    } catch (err) {
-        console.error(err);
-        alert('Failed to connect to backend for script generation.');
-    } finally {
-        genScriptBtn.innerText = '✨ Generate Script';
-        genScriptBtn.disabled = false;
+// Dynamic toggle logic based on titles
+videoTitlesInput.addEventListener('input', () => {
+    const lines = videoTitlesInput.value.split('\n').filter(line => line.trim().length > 0);
+    if (lines.length > 1) {
+        previewScriptToggle.checked = false;
+        previewScriptToggle.disabled = true;
+    } else {
+        previewScriptToggle.disabled = false;
     }
 });
 
+// Helper to check if inputs are valid for video generation
 function checkVideoSubmitState() {
     const hasScript = generatedScriptText.value.trim().length > 0;
-    const imageInput = document.getElementById('imageInput');
-    const hasImage = imageInput && imageInput.files.length > 0;
-    submitVideoBtn.disabled = !(hasScript && hasImage);
+    const hasImage = mediaFileInput.files.length > 0;
+    continueVideoBtn.disabled = !(hasScript && hasImage);
 }
-
 generatedScriptText.addEventListener('input', checkVideoSubmitState);
-document.getElementById('imageInput').addEventListener('change', checkVideoSubmitState);
+mediaFileInput.addEventListener('change', checkVideoSubmitState);
+
+// Main submission loop
+createContentForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentProject) return alert('Select a project first!');
+    
+    const titles = videoTitlesInput.value.split('\n').filter(line => line.trim().length > 0);
+    if (titles.length === 0) return alert('Please enter at least one title.');
+    
+    const isPreviewOn = previewScriptToggle.checked && titles.length === 1;
+    const mediaFile = mediaFileInput.files[0];
+    const voiceModel = document.getElementById('voiceModelSelect').value;
+    
+    if (!mediaFile) return alert('Missing source image.');
+    
+    submitContentBtn.innerText = 'Processing...';
+    submitContentBtn.disabled = true;
+    const token = await currentUser.getIdToken();
+    
+    for (let i = 0; i < titles.length; i++) {
+        const title = titles[i];
+        
+        // 1. Generate Script
+        let scriptText = '';
+        try {
+            submitContentBtn.innerText = `Generating script for title ${i+1}/${titles.length}...`;
+            const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ titles: title })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                scriptText = data.script;
+            } else {
+                alert(`Error generating script for "${title}": ` + data.detail);
+                continue;
+            }
+        } catch (err) {
+            console.error(err);
+            alert(`Failed to connect to backend for script generation on "${title}".`);
+            continue;
+        }
+
+        // 2. Handle Preview Mode vs Automatic Mode
+        if (isPreviewOn) {
+            generatedScriptText.value = scriptText;
+            scriptResultArea.style.display = 'block';
+            checkVideoSubmitState();
+            submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+            submitContentBtn.disabled = false;
+            
+            // Wait for user to click "Continue to Video"
+            await new Promise(resolve => {
+                const handler = () => {
+                    continueVideoBtn.removeEventListener('click', handler);
+                    resolve();
+                };
+                continueVideoBtn.addEventListener('click', handler);
+            });
+            scriptText = generatedScriptText.value.trim();
+            scriptResultArea.style.display = 'none';
+        }
+        
+        // 3. Launch Video Generation
+        try {
+            submitContentBtn.innerText = `Launching GPU for title ${i+1}/${titles.length}...`;
+            const formData = new FormData();
+            formData.append('script_text', scriptText);
+            formData.append('voice', voiceModel);
+            formData.append('image', mediaFile);
+            formData.append('video', mediaFile);
+            formData.append('projectId', currentProject);
+            
+            const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            
+            const data = await res.json();
+            if (res.ok) {
+                await setDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', data.job_id), {
+                    title: title.substring(0, 30) + '...',
+                    status: 'STAGING',
+                    job_id: data.job_id,
+                    createdAt: serverTimestamp()
+                });
+            } else {
+                alert(`Error starting job for "${title}": ` + (data.detail || 'Unknown error'));
+            }
+        } catch (err) {
+            console.error(err);
+            alert(`Failed to launch video generation for "${title}".`);
+        }
+    }
+    
+    alert('All jobs dispatched! Check Execution Logs.');
+    document.querySelector('[data-target="view-logs"]').click();
+    
+    submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+    submitContentBtn.disabled = false;
+});
 
 function loadLogs() {
     if (!currentProject) return;
@@ -367,58 +448,3 @@ function loadLogs() {
         });
     });
 }
-
-const videoGenForm = document.getElementById('videoGenForm');
-videoGenForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!currentProject) return alert('Select a project first!');
-    
-    const mediaFile = document.getElementById('mediaFile').files[0];
-    const voiceModel = document.getElementById('voiceModelSelect').value;
-    const scriptText = document.getElementById('generatedScriptText').value;
-    
-    if (!mediaFile || !scriptText) return alert("Missing image or script");
-
-    submitVideoBtn.innerText = 'Uploading & Launching...';
-    submitVideoBtn.disabled = true;
-    
-    const token = await currentUser.getIdToken();
-    const formData = new FormData();
-    formData.append('script_text', scriptText);
-    formData.append('voice', voiceModel);
-    formData.append('image', mediaFile); // For premium
-    formData.append('video', mediaFile); // For standard
-    formData.append('projectId', currentProject);
-    // You can also append other settings like add_captions etc if added to UI
-    
-    try {
-        const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-        
-        const data = await res.json();
-        if (res.ok) {
-            alert('Job started! Check Execution Logs.');
-            // Save execution stub to Firestore
-            await setDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', data.job_id), {
-                title: scriptText.substring(0, 30) + '...',
-                status: 'STAGING',
-                job_id: data.job_id,
-                createdAt: serverTimestamp()
-            });
-            document.querySelector('[data-target="view-logs"]').click();
-        } else {
-            alert('Error starting job: ' + (data.detail || 'Unknown error'));
-        }
-    } catch (err) {
-        console.error(err);
-        alert('Failed to connect to backend for video generation.');
-    } finally {
-        submitVideoBtn.innerText = '🚀 Launch EpicSync GPU';
-        submitVideoBtn.disabled = false;
-    }
-});

@@ -1666,6 +1666,8 @@ def generate_script(req: ScriptGenRequest, request: Request):
     if not all([base_url, api_key, model]):
         raise HTTPException(status_code=400, detail="Incomplete AI settings. Please configure settings first.")
         
+    tts_enforcement = "\n\nCRITICAL: Return ONLY the raw spoken text that the voiceover artist will read. Do NOT include any scene descriptions, stage directions, speaker labels (like 'Narrator:'), bracketed text (like '[HOOK]'), or introductory/closing notes. Your entire output will be passed directly to a Text-To-Speech engine, so any extra words will be spoken out loud."
+    
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -1673,7 +1675,7 @@ def generate_script(req: ScriptGenRequest, request: Request):
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": sys_prompt},
+            {"role": "system", "content": sys_prompt + tts_enforcement},
             {"role": "user", "content": f"Write a script for the following titles: {req.titles}"}
         ]
     }

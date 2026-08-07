@@ -87,8 +87,8 @@
                 </div>
 
                 <div class="card">
-                    <h3>1. Generate Script</h3>
-                    <form id="scriptGenForm">
+                    <h3>Create Content</h3>
+                    <form id="createContentForm">
                         <div class="form-group mt-2">
                             <label>Content Niche / Template</label>
                             <select id="nicheSelect">
@@ -100,20 +100,10 @@
                         </div>
                         <div class="form-group">
                             <label>Video Title(s)</label>
-                            <textarea id="videoTitles" placeholder="Enter a video title, or paste multiple titles separated by newlines..." rows="3" required></textarea>
-                            <small class="text-muted">For bulk generation, paste multiple titles (one per line).</small>
+                            <textarea id="videoTitles" placeholder="Enter a video title, or paste multiple titles separated by newlines for bulk..." rows="3" required></textarea>
+                            <small class="text-muted">For bulk generation, paste multiple titles (one per line). Preview feature is disabled for bulk.</small>
                         </div>
-                        <button type="submit" class="btn-primary" id="genScriptBtn">✨ Generate Script</button>
-                    </form>
-                    <div class="input-group" id="scriptResultArea" style="display:none; margin-top:20px;">
-                    <label>Generated Script (Edit as needed)</label>
-                    <textarea id="generatedScriptText" rows="6"></textarea>
-                </div>
-                </div>
-
-                <div class="card mt-4">
-                    <h3>2. Generate Video</h3>
-                    <form id="videoGenForm">
+                        
                         <div class="form-group">
                             <label>Source Image</label>
                             <div class="file-upload" onclick="document.getElementById('mediaFile').click()">
@@ -147,7 +137,22 @@
                             <label>Publish Schedule (Optional)</label>
                             <input type="datetime-local" id="ytSchedule" style="width: 100%; padding: 0.8rem; background: var(--bg-card); border: 1px solid var(--border-color); color: #fff; border-radius: 8px;">
                         </div>
-                        <button type="submit" class="btn-accent" id="submitVideoBtn" disabled>🚀 Launch EpicSync GPU</button>
+
+                        <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label for="previewScriptToggle" style="margin-bottom: 0;">Preview script before generation</label>
+                                <small class="text-muted" style="display: block; font-size: 0.75rem;">Only available for a single title</small>
+                            </div>
+                            <input type="checkbox" id="previewScriptToggle" style="width: 20px; height: 20px; accent-color: #e5b300;" />
+                        </div>
+
+                        <div class="input-group" id="scriptResultArea" style="display:none; margin-top:20px;">
+                            <label>Generated Script (Edit as needed)</label>
+                            <textarea id="generatedScriptText" rows="6"></textarea>
+                            <button type="button" class="btn-accent mt-2" id="continueVideoBtn">Continue to Video Generation</button>
+                        </div>
+
+                        <button type="submit" class="btn-primary mt-4" id="submitContentBtn" style="width: 100%;">🚀 Launch EpicSync GPU</button>
                     </form>
                 </div>
             </section>
