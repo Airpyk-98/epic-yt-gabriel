@@ -138,6 +138,17 @@ def upload_to_hf_hub(file_path, repo_id, path_in_repo, hf_token):
 KERNEL_TEMPLATE = """import os
 import subprocess
 import glob
+import sys`nimport builtins
+import requests
+
+def custom_print(*args, **kwargs):
+    msg = " ".join(str(a) for a in args)
+    builtins.print(*args, **kwargs)
+    try:
+        requests.post("https://epic-yt-gabriel.onrender.com/api/kaggle_log", json={"job_id": "___JOB_ID___", "message": msg, "token": "epic_kaggle_secret_99"}, timeout=3)
+    except:
+        pass
+print = custom_print
 import sys
 import base64
 import shutil
@@ -549,8 +560,19 @@ run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/wor
 PREMIUM_KERNEL_TEMPLATE = """import os
 import subprocess
 import glob
-import sys
+import sys`nimport builtins
+import requests
+import json
 import base64
+
+def custom_print(*args, **kwargs):
+    msg = " ".join(str(a) for a in args)
+    builtins.print(*args, **kwargs)
+    try:
+        requests.post("https://epic-yt-gabriel.onrender.com/api/kaggle_log", json={"job_id": "___JOB_ID___", "message": msg, "token": "epic_kaggle_secret_99"}, timeout=3)
+    except:
+        pass
+print = custom_print
 import time
 import shutil
 
@@ -1583,6 +1605,27 @@ def cancel_job(job_id: str, kaggle_user: str = Form("gabrielnjoku"), kaggle_key:
     append_log(job_id, "Job explicitly cancelled by user.")
     save_jobs(jobs)
     return {"status": "CANCELLED"}
+
+class KaggleLogRequest(BaseModel):
+    job_id: str
+    message: str
+    token: str
+
+@app.post("/api/kaggle_log")
+def kaggle_log(req: KaggleLogRequest):
+    if req.token != "epic_kaggle_secret_99":
+        raise HTTPException(status_code=403, detail="Invalid token")
+    
+    jobs = load_jobs()
+    if req.job_id in jobs:
+        timestamp = time.strftime("%H:%M:%S")
+        log_line = f"[{timestamp}] {req.message}"
+        jobs[req.job_id]["logs"].append(log_line)
+        save_jobs(jobs)
+        update_firebase_job(req.job_id, jobs[req.job_id])
+        print(f"[Kaggle -> EpicSync - {req.job_id}] {req.message}", flush=True)
+        return {"status": "success"}
+    raise HTTPException(status_code=404, detail="Job not found")
 
 @app.post("/api/clear_logs")
 def clear_logs():

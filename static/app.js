@@ -490,9 +490,15 @@ function loadLogs() {
             const data = docSnap.data();
             const div = document.createElement('div');
             div.className = 'log-card';
+            const escapedTitle = (data.title || 'Untitled Video').replace(/'/g, "\\'");
             div.innerHTML = `
-                <h4>${data.title || 'Untitled Video'}</h4>
-                <p class="text-sm mt-2 text-muted">Status: ${data.status}</p>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h4>${data.title || 'Untitled Video'}</h4>
+                        <p class="text-sm mt-2 text-muted">Status: ${data.status}</p>
+                    </div>
+                    <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" onclick="openLogModal('${docSnap.id}', '${escapedTitle}')">👁️ View Console</button>
+                </div>
                 ${data.videoUrl ? `
                 <div style="margin-top: 10px; display: flex; gap: 8px;">
                     <a href="${data.videoUrl}" target="_blank" class="btn-primary">Download / View</a>
@@ -504,4 +510,42 @@ function loadLogs() {
             logsContainer.appendChild(div);
         });
     });
+}
+
+let logModalUnsubscribe = null;
+
+window.openLogModal = function(jobId, title) {
+    document.getElementById('logModalTitle').innerText = title || 'Job ' + jobId;
+    document.getElementById('logModal').style.display = 'flex';
+    
+    const content = document.getElementById('logModalContent');
+    content.innerHTML = '<div style="color: #666;">Loading logs...</div>';
+    
+    if (logModalUnsubscribe) logModalUnsubscribe();
+    
+    const docRef = doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', jobId);
+    logModalUnsubscribe = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.logs && data.logs.length > 0) {
+                const reversedLogs = [...data.logs].reverse();
+                content.innerHTML = reversedLogs.map(log => `<div>${log}</div>`).join('');
+            } else {
+                content.innerHTML = '<div style="color: #666;">Waiting for logs from Kaggle...</div>';
+            }
+        }
+    });
+};
+
+document.getElementById('closeLogModal').addEventListener('click', () => {
+    document.getElementById('logModal').style.display = 'none';
+    if (logModalUnsubscribe) logModalUnsubscribe();
+});
+
+window.onclick = function(event) {
+    const modal = document.getElementById('logModal');
+    if (event.target === modal) {
+        modal.style.display = "none";
+        if (logModalUnsubscribe) logModalUnsubscribe();
+    }
 }
