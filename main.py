@@ -120,11 +120,11 @@ def setup_kaggle_auth(username, key):
             pass
     return env
 
-def upload_to_YOUR_HF_TOKEN(file_path, repo_id, path_in_repo, YOUR_HF_TOKEN2):
-    if not repo_id or not YOUR_HF_TOKEN:
+def upload_to_hf_hub(file_path, repo_id, path_in_repo, hf_token):
+    if not repo_id or not hf_token:
         return
     try:
-        api = HfApi(token=YOUR_HF_TOKEN)
+        api = HfApi(token=hf_token)
         api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
         api.upload_file(
             path_or_fileobj=file_path,
@@ -179,8 +179,8 @@ has_bgm = False
 if bgm_repo_path and HF_REPO:
     print(f"Fetching background music from HF dataset {HF_REPO}...", flush=True)
     try:
-        from huggingface_hub import YOUR_HF_TOKEN_download
-        bgm_file = YOUR_HF_TOKEN_download(repo_id=HF_REPO, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=___HF_TOKEN___ or None)
+        from huggingface_hub import hf_hub_download
+        bgm_file = hf_hub_download(repo_id=HF_REPO, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=___HF_TOKEN___ or None)
         if bgm_file != "/kaggle/working/bg_music.mp3":
             shutil.copy(bgm_file, "/kaggle/working/bg_music.mp3")
         if os.path.exists("/kaggle/working/bg_music.mp3"):
@@ -557,25 +557,25 @@ def run_cmd(cmd):
 print("=== STARTING PREMIUM STUDIO LTX-2.3 PIPELINE ===", flush=True)
 
 # 0. SETUP AUTHENTICATION FOR FAST DOWNLOADS
-YOUR_HF_TOKEN = ___HF_TOKEN___
-if YOUR_HF_TOKEN and len(YOUR_HF_TOKEN2) > 5:
-    os.environ["HF_TOKEN"] = YOUR_HF_TOKEN
+hf_token = ___HF_TOKEN___
+if hf_token and len(hf_token) > 5:
+    os.environ["HF_TOKEN"] = hf_token
     print("Set HF_TOKEN globally for high-speed unthrottled downloads.", flush=True)
 
 # 1. SETUP IMAGE INPUT
 img_b64 = ___IMAGE_B64___
-YOUR_HF_TOKEN = ___HF_REPO___
+hf_repo = ___HF_REPO___
 job_id = ___JOB_ID___
 
 if img_b64 and len(img_b64) > 10:
     print("Decoding embedded base64 image...", flush=True)
     with open("/kaggle/working/input.png", "wb") as f:
         f.write(base64.b64decode(img_b64))
-elif YOUR_HF_TOKEN:
-    print(f"Fetching source image from HF dataset {YOUR_HF_TOKEN}...", flush=True)
+elif hf_repo:
+    print(f"Fetching source image from HF dataset {hf_repo}...", flush=True)
     run_cmd("pip install -q huggingface_hub")
-    from huggingface_hub import YOUR_HF_TOKEN_download
-    img_file = YOUR_HF_TOKEN_download(repo_id=YOUR_HF_TOKEN2, filename=f"inputs/{job_id}.png", repo_type="dataset", local_dir="/kaggle/working", token=YOUR_HF_TOKEN or None)
+    from huggingface_hub import hf_hub_download
+    img_file = hf_hub_download(repo_id=hf_repo, filename=f"inputs/{job_id}.png", repo_type="dataset", local_dir="/kaggle/working", token=hf_token or None)
     if img_file != "/kaggle/working/input.png":
         shutil.copy(img_file, "/kaggle/working/input.png")
 else:
@@ -585,11 +585,11 @@ else:
 # 1.5 SETUP BACKGROUND MUSIC (IF PROVIDED)
 bgm_repo_path = ___BGM_REPO_PATH___
 has_bgm = False
-if bgm_repo_path and YOUR_HF_TOKEN:
-    print(f"Fetching background music from HF dataset {YOUR_HF_TOKEN}...", flush=True)
+if bgm_repo_path and hf_repo:
+    print(f"Fetching background music from HF dataset {hf_repo}...", flush=True)
     try:
-        from huggingface_hub import YOUR_HF_TOKEN_download
-        bgm_file = YOUR_HF_TOKEN_download(repo_id=YOUR_HF_TOKEN2, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=YOUR_HF_TOKEN or None)
+        from huggingface_hub import hf_hub_download
+        bgm_file = hf_hub_download(repo_id=hf_repo, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=hf_token or None)
         if bgm_file != "/kaggle/working/bg_music.mp3":
             shutil.copy(bgm_file, "/kaggle/working/bg_music.mp3")
         if os.path.exists("/kaggle/working/bg_music.mp3"):
@@ -637,7 +637,7 @@ for src_f in all_input_files:
                 print(f"  Linked upscaler alias: {item} -> {upscaler_11}", flush=True)
 
 print("Verifying all required model weights and Gemma text encoder files exist...", flush=True)
-from huggingface_hub import YOUR_HF_TOKEN_download
+from huggingface_hub import hf_hub_download
 REPO = 'DeepBeepMeep/LTX-2'
 
 base_files = [
@@ -653,7 +653,7 @@ for f in base_files:
     dst = os.path.join("Wan2GP/models", f)
     if not os.path.exists(dst):
         print(f"  [HF Download] Missing base file: {f}. Downloading...", flush=True)
-        YOUR_HF_TOKEN_download(repo_id=REPO, filename=f, local_dir="Wan2GP/models", token=YOUR_HF_TOKEN2 or None)
+        hf_hub_download(repo_id=REPO, filename=f, local_dir="Wan2GP/models", token=hf_token or None)
 
 gemma_folder = "gemma-3-12b-it-qat-q4_0-unquantized"
 gemma_files = [
@@ -679,14 +679,14 @@ for gf in gemma_files:
     if not os.path.exists(dst):
         print(f"  [HF Download] Missing Gemma file: {gf}. Downloading...", flush=True)
         try:
-            YOUR_HF_TOKEN_download(repo_id=REPO, filename=f"{gemma_folder}/{gf}", local_dir="Wan2GP/models", token=YOUR_HF_TOKEN2 or None)
+            hf_hub_download(repo_id=REPO, filename=f"{gemma_folder}/{gf}", local_dir="Wan2GP/models", token=hf_token or None)
         except Exception as e:
             if "quanto" in gf:
                 alt_gf = 'gemma-3-12b-it-qat-q4_0-unquantized.safetensors'
                 alt_dst = os.path.join("Wan2GP/models", gemma_folder, alt_gf)
                 if not os.path.exists(alt_dst):
                     print(f"  [HF Download] Trying alternative weight: {alt_gf}...", flush=True)
-                    YOUR_HF_TOKEN_download(repo_id=REPO, filename=f"{gemma_folder}/{alt_gf}", local_dir="Wan2GP/models", token=YOUR_HF_TOKEN2 or None)
+                    hf_hub_download(repo_id=REPO, filename=f"{gemma_folder}/{alt_gf}", local_dir="Wan2GP/models", token=hf_token or None)
             else:
                 raise e
 
@@ -1111,7 +1111,7 @@ def upload_video_to_youtube(job_id, video_path, uid, project_id):
     except Exception as e:
         append_log(job_id, f"YouTube Upload Error: {str(e)}")
 
-def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
+def monitor_job(job_id, slug, env, hf_repo, hf_token):
     append_log(job_id, f"Kernel pushed to Kaggle ({slug}). Starting monitoring loop...")
     jobs = load_jobs()
     jobs[job_id]["status"] = "RUNNING"
@@ -1183,9 +1183,9 @@ def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
                 
                 if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
                     append_log(job_id, f"Video successfully downloaded ({os.path.getsize(out_path)} bytes).")
-                    if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
-                        append_log(job_id, f"Syncing output video to HF Dataset {YOUR_HF_TOKEN}...")
-                        upload_to_YOUR_HF_TOKEN(out_path, YOUR_HF_TOKEN2, f"outputs/{job_id}.mp4", YOUR_HF_TOKEN)
+                    if hf_repo and hf_token:
+                        append_log(job_id, f"Syncing output video to HF Dataset {hf_repo}...")
+                        upload_to_hf_hub(out_path, hf_token, f"outputs/{job_id}.mp4", hf_repo)
                     jobs = load_jobs()
                     jobs[job_id]["status"] = "SUCCESS"
                     jobs[job_id]["progress"] = 100
@@ -1254,34 +1254,34 @@ def prepare_and_launch_standard_job(
     video_speed: str,
     kaggle_user: str,
     kaggle_key: str,
-    YOUR_HF_TOKEN: str,
-    YOUR_HF_TOKEN2: str,
+    hf_repo: str,
+    hf_token: str,
     kernel_id: str
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
         if not bgm_repo_path and bgm_path and os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 0:
-            if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
+            if hf_repo and hf_token:
                 bgm_repo_path = f"inputs/{job_id}_bgm.mp3"
-                append_log(job_id, f"Uploading background music to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-                upload_to_YOUR_HF_TOKEN(bgm_path, YOUR_HF_TOKEN2, bgm_repo_path, YOUR_HF_TOKEN)
+                append_log(job_id, f"Uploading background music to Hugging Face Dataset {hf_repo}...")
+                upload_to_hf_hub(bgm_path, hf_token, bgm_repo_path, hf_repo)
         elif bgm_repo_path:
             append_log(job_id, f"Using pre-uploaded background music from dataset: {bgm_repo_path}")
 
         vb64 = ""
         vsize = os.path.getsize(video_path)
-        if vsize <= 500 * 1024 and not YOUR_HF_TOKEN:
+        if vsize <= 500 * 1024 and not hf_repo:
             append_log(job_id, f"Input video ({vsize//1024} KB) embedded into execution script.")
             with open(video_path, "rb") as vf:
                 vb64 = base64.b64encode(vf.read()).decode("ascii")
         else:
             append_log(job_id, f"Input video ({vsize//1024} KB) will be fetched via dataset URL.")
 
-        if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
-            append_log(job_id, f"Uploading source video to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-            upload_to_YOUR_HF_TOKEN(video_path, YOUR_HF_TOKEN2, f"inputs/{job_id}.mp4", YOUR_HF_TOKEN)
+        if hf_repo and hf_token:
+            append_log(job_id, f"Uploading source video to Hugging Face Dataset {hf_repo}...")
+            upload_to_hf_hub(video_path, hf_token, f"inputs/{job_id}.mp4", hf_repo)
 
-        script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(YOUR_HF_TOKEN)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(YOUR_HF_TOKEN2)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+        script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
@@ -1316,7 +1316,7 @@ def prepare_and_launch_standard_job(
                 jobs[job_id]["status"] = "FAILED"
                 save_jobs(jobs)
         else:
-            monitor_job(job_id, kernel_id, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2)
+            monitor_job(job_id, kernel_id, env, hf_repo, hf_token)
     except Exception as e:
         append_log(job_id, f"ERROR in background launch: {str(e)}")
         jobs = load_jobs()
@@ -1337,34 +1337,34 @@ def prepare_and_launch_premium_job(
     video_speed: str,
     kaggle_user: str,
     kaggle_key: str,
-    YOUR_HF_TOKEN: str,
-    YOUR_HF_TOKEN2: str,
+    hf_repo: str,
+    hf_token: str,
     kernel_id: str
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
         if not bgm_repo_path and bgm_path and os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 0:
-            if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
+            if hf_repo and hf_token:
                 bgm_repo_path = f"inputs/{job_id}_bgm.mp3"
-                append_log(job_id, f"Uploading background music to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-                upload_to_YOUR_HF_TOKEN(bgm_path, YOUR_HF_TOKEN2, bgm_repo_path, YOUR_HF_TOKEN)
+                append_log(job_id, f"Uploading background music to Hugging Face Dataset {hf_repo}...")
+                upload_to_hf_hub(bgm_path, hf_token, bgm_repo_path, hf_repo)
         elif bgm_repo_path:
             append_log(job_id, f"Using pre-uploaded background music from dataset: {bgm_repo_path}")
 
         ib64 = ""
         isize = os.path.getsize(image_path)
-        if isize <= 500 * 1024 and not YOUR_HF_TOKEN:
+        if isize <= 500 * 1024 and not hf_repo:
             append_log(job_id, f"Input image ({isize//1024} KB) embedded into script.")
             with open(image_path, "rb") as vf:
                 ib64 = base64.b64encode(vf.read()).decode("ascii")
         else:
             append_log(job_id, f"Input image ({isize//1024} KB) will be fetched via dataset URL.")
 
-        if YOUR_HF_TOKEN and YOUR_HF_TOKEN2:
-            append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {YOUR_HF_TOKEN}...")
-            upload_to_YOUR_HF_TOKEN(image_path, YOUR_HF_TOKEN2, f"inputs/{job_id}.png", YOUR_HF_TOKEN)
+        if hf_repo and hf_token:
+            append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {hf_repo}...")
+            upload_to_hf_hub(image_path, hf_token, f"inputs/{job_id}.png", hf_repo)
 
-        script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(YOUR_HF_TOKEN)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(YOUR_HF_TOKEN2)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+        script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
@@ -1402,7 +1402,7 @@ def prepare_and_launch_premium_job(
                 jobs[job_id]["status"] = "FAILED"
                 save_jobs(jobs)
         else:
-            monitor_job(job_id, kernel_id, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2)
+            monitor_job(job_id, kernel_id, env, hf_repo, hf_token)
     except Exception as e:
         append_log(job_id, f"ERROR in background launch: {str(e)}")
         jobs = load_jobs()
@@ -1422,8 +1422,8 @@ async def create_job(
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
-    YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
-    YOUR_HF_TOKEN2: str = Form(""),
+    hf_repo: str = Form("Airpyk98/EpicSync-Dataset"),
+    hf_token: str = Form(""),
     video: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
 ):
@@ -1438,10 +1438,10 @@ async def create_job(
             pass
     if not kaggle_key or "0f12d3a4" in kaggle_key:
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = "Airpyk98/EpicSync-Dataset"
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-standard-runner"
     
@@ -1481,7 +1481,7 @@ async def create_job(
     background_tasks.add_task(
         prepare_and_launch_standard_job,
         job_id, staging, video_path, bgm_path, bgm_repo_path, script_text, voice, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, YOUR_HF_TOKEN, YOUR_HF_TOKEN2, kernel_id
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -1499,8 +1499,8 @@ async def create_premium_job(
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
-    YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
-    YOUR_HF_TOKEN2: str = Form(""),
+    hf_repo: str = Form("Airpyk98/EpicSync-Dataset"),
+    hf_token: str = Form(""),
     image: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
 ):
@@ -1515,10 +1515,10 @@ async def create_premium_job(
             pass
     if not kaggle_key or "0f12d3a4" in kaggle_key:
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = "Airpyk98/EpicSync-Dataset"
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_premium_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-premium-runner"
     
@@ -1560,7 +1560,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, YOUR_HF_TOKEN, YOUR_HF_TOKEN2, kernel_id
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -1601,15 +1601,15 @@ def get_video(job_id: str):
     raise HTTPException(status_code=404, detail="Video file not found")
 
 @app.get("/api/bgm_list")
-def list_bgm_files(YOUR_HF_TOKEN: str = "Airpyk98/EpicSync-Dataset", YOUR_HF_TOKEN2: str = ""):
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
+def list_bgm_files(hf_repo: str = "Airpyk98/EpicSync-Dataset", hf_token: str = ""):
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = "Airpyk98/EpicSync-Dataset"
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     try:
         from huggingface_hub import HfApi
-        api = HfApi(token=YOUR_HF_TOKEN)
-        files = api.list_repo_files(repo_id=YOUR_HF_TOKEN, repo_type="dataset")
+        api = HfApi(token=hf_token)
+        files = api.list_repo_files(repo_id=hf_repo, repo_type="dataset")
         bgm_files = [f for f in files if (f.startswith("bgm/") or f.startswith("inputs/")) and f.lower().endswith((".mp3", ".wav", ".m4a", ".aac", ".ogg"))]
         return {"status": "success", "files": sorted(bgm_files)}
     except Exception as e:
@@ -1620,13 +1620,13 @@ def list_bgm_files(YOUR_HF_TOKEN: str = "Airpyk98/EpicSync-Dataset", YOUR_HF_TOK
 async def upload_bgm_file(
     file: UploadFile = File(...),
     custom_name: str = Form(...),
-    YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
-    YOUR_HF_TOKEN2: str = Form("")
+    hf_repo: str = Form("Airpyk98/EpicSync-Dataset"),
+    hf_token: str = Form("")
 ):
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
-    if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
-        YOUR_HF_TOKEN = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = "Airpyk98/EpicSync-Dataset"
+    if not hf_repo or hf_token.strip() == "":
+        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     
     clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', custom_name.strip())
     if not clean_name:
@@ -1639,7 +1639,7 @@ async def upload_bgm_file(
         f.write(await file.read())
         
     try:
-        upload_to_YOUR_HF_TOKEN(temp_path, YOUR_HF_TOKEN2, repo_path, YOUR_HF_TOKEN)
+        upload_to_hf_hub(temp_path, hf_token, repo_path, hf_repo)
         if os.path.exists(temp_path):
             os.remove(temp_path)
         return {"status": "success", "repo_path": repo_path, "message": f"Successfully saved {clean_name} to dataset!"}
