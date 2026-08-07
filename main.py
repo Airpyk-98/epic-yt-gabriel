@@ -586,6 +586,21 @@ def run_cmd(cmd):
 
 print("=== STARTING PREMIUM STUDIO LTX-2.3 PIPELINE ===", flush=True)
 
+# --- Memory Management Setup ---
+try:
+    if not os.path.exists("/swapfile"):
+        print("Attempting to allocate 8GB swapfile to prevent OOM...", flush=True)
+        os.system("fallocate -l 8G /swapfile")
+        os.system("chmod 600 /swapfile")
+        os.system("mkswap /swapfile")
+        os.system("swapon /swapfile")
+        print("Swapfile successfully enabled!", flush=True)
+    else:
+        print("Swapfile already exists.", flush=True)
+except Exception as e:
+    print(f"Swapfile creation failed (likely permission denied in container): {e}", flush=True)
+
+
 # 0. SETUP AUTHENTICATION FOR FAST DOWNLOADS
 hf_token = ___HF_TOKEN___
 if hf_token and len(hf_token) > 5:
@@ -930,13 +945,15 @@ for idx in range(num_chunks):
             video_tensor = video_out
             
         if video_tensor is not None and torch.is_tensor(video_tensor):
+            # Keep as float16/bfloat16 to save memory; do not convert to float32.
+            # mmgp already handles VRAM, but we offload to CPU explicitly just in case.
             video_tensor = video_tensor.cpu()
-            video_for_save = video_tensor.unsqueeze(0).float() / 127.5 - 1.0
             from shared.utils.audio_video import save_video
             out_path = f"/kaggle/working/chunk_{idx}.mp4"
-            save_video(tensor=video_for_save, save_file=out_path, fps=24.0, normalize=True, value_range=(-1, 1))
+            # Pass directly to save_video with nrow=1 to avoid full-tensor make_grid copies
+            save_video(tensor=video_tensor.unsqueeze(0), save_file=out_path, fps=24.0, nrow=1, normalize=True, value_range=(-1, 1))
             chunk_video_files.append(out_path)
-            del video_tensor, video_for_save
+            del video_tensor
         
         # Extract last frame of this chunk to maintain seamless facial continuity for next chunk
         if os.path.exists(f"/kaggle/working/chunk_{idx}.mp4"):
