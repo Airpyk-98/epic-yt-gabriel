@@ -1315,7 +1315,9 @@ def prepare_and_launch_standard_job(
             jobs = load_jobs()
             if job_id in jobs:
                 jobs[job_id]["status"] = "FAILED"
+                jobs[job_id]["step_text"] = "Error pushing Kaggle kernel."
                 save_jobs(jobs)
+                update_firebase_job(job_id, jobs[job_id])
         else:
             monitor_job(job_id, kernel_id, env, hf_repo, hf_token)
     except Exception as e:
@@ -1323,7 +1325,9 @@ def prepare_and_launch_standard_job(
         jobs = load_jobs()
         if job_id in jobs:
             jobs[job_id]["status"] = "FAILED"
+            jobs[job_id]["step_text"] = "Error in background launch."
             save_jobs(jobs)
+            update_firebase_job(job_id, jobs[job_id])
 
 def prepare_and_launch_premium_job(
     job_id: str,
@@ -1398,7 +1402,9 @@ def prepare_and_launch_premium_job(
             jobs = load_jobs()
             if job_id in jobs:
                 jobs[job_id]["status"] = "FAILED"
+                jobs[job_id]["step_text"] = "Error pushing Kaggle kernel."
                 save_jobs(jobs)
+                update_firebase_job(job_id, jobs[job_id])
         else:
             monitor_job(job_id, kernel_id, env, hf_repo, hf_token)
     except Exception as e:
@@ -1406,7 +1412,9 @@ def prepare_and_launch_premium_job(
         jobs = load_jobs()
         if job_id in jobs:
             jobs[job_id]["status"] = "FAILED"
+            jobs[job_id]["step_text"] = "Error in background launch."
             save_jobs(jobs)
+            update_firebase_job(job_id, jobs[job_id])
 
 @app.post("/api/run")
 async def create_job(
@@ -1441,7 +1449,7 @@ async def create_job(
     if not hf_repo or hf_token.strip() == "":
         hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_{int(time.time())}"
-    kernel_id = f"{kaggle_user}/epicsync-standard-runner"
+    kernel_id = f"{kaggle_user}/epicsync-standard-{job_id.replace('_', '-')}"
     
     staging = os.path.join(STAGING_DIR, job_id)
     os.makedirs(staging, exist_ok=True)
@@ -1518,7 +1526,7 @@ async def create_premium_job(
     if not hf_repo or hf_token.strip() == "":
         hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_premium_{int(time.time())}"
-    kernel_id = f"{kaggle_user}/epicsync-premium-runner"
+    kernel_id = f"{kaggle_user}/epicsync-premium-{job_id.replace('_', '-')}"
     
     staging = os.path.join(STAGING_DIR, job_id)
     os.makedirs(staging, exist_ok=True)
@@ -1688,7 +1696,7 @@ def generate_script(req: ScriptGenRequest, request: Request):
     if not all([base_url, api_key, model]):
         raise HTTPException(status_code=400, detail="Incomplete AI settings. Please configure settings first.")
         
-    tts_enforcement = "\n\nCRITICAL FORMAT INSTRUCTION: You must enclose the EXACT spoken text inside <SCRIPT> and </SCRIPT> XML tags. Output absolutely NO bracketed stage directions (like [HOOK]), no speaker labels (like 'Narrator:'), and no markdown formatting (like **bold**). Just the plain spoken words wrapped in the <SCRIPT> tags."
+    tts_enforcement = "\n\nCRITICAL FORMAT INSTRUCTION: You are generating a script for a TTS (Text-to-Speech) engine. Your ENTIRE OUTPUT must be the EXACT spoken text only. Do NOT include markdown formatting, bold text (**), italics, headers, or lists. Do NOT include stage directions, visual cues, or brackets like [HOOK] or [BODY]. Output ONLY the raw plaintext words that the voice actor should read. Do not include 'Script:' or 'Narrator:' prefixes."
     
     headers = {
         "Authorization": f"Bearer {api_key}",
