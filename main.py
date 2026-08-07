@@ -1638,19 +1638,28 @@ def get_jobs():
 
 @app.post("/api/cancel/{job_id}")
 def cancel_job(job_id: str, kaggle_user: str = Form("gabrielnjoku"), kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e")):
-    jobs = load_jobs()
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    slug = jobs[job_id].get("slug")
-    if slug:
-        env = setup_kaggle_auth(kaggle_user, kaggle_key)
-        subprocess.run(f"kaggle kernels cancel {slug}", shell=True, env=env)
-    jobs[job_id]["status"] = "CANCELLED"
-    jobs[job_id]["progress"] = 0
-    jobs[job_id]["step_text"] = "Task cancelled by user."
-    append_log(job_id, "Job explicitly cancelled by user.")
-    save_jobs(jobs)
-    return {"status": "CANCELLED"}
+    try:
+        jobs = load_jobs()
+        if job_id not in jobs:
+            raise HTTPException(status_code=404, detail="Job not found")
+        slug = jobs[job_id].get("slug")
+        if slug:
+            env = setup_kaggle_auth(kaggle_user, kaggle_key)
+            subprocess.run(f"kaggle kernels cancel {slug}", shell=True, env=env)
+        jobs[job_id]["status"] = "CANCELLED"
+        jobs[job_id]["progress"] = 0
+        jobs[job_id]["step_text"] = "Task cancelled by user."
+        append_log(job_id, "Job explicitly cancelled by user.")
+        save_jobs(jobs)
+        try:
+            update_firebase_job(job_id, jobs[job_id])
+        except Exception as e:
+            print(f"Error syncing cancel status to Firebase: {e}", flush=True)
+        return {"status": "CANCELLED"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 class KaggleLogRequest(BaseModel):
     job_id: str

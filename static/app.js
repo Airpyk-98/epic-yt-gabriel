@@ -503,11 +503,15 @@ function loadLogs() {
                         <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" onclick="openLogModal('${docSnap.id}', '${escapedTitle}')">👁️ View Console</button>
                     </div>
                 </div>
-                ${data.videoUrl ? `
-                <div style="margin-top: 10px; display: flex; gap: 8px;">
-                    <a href="${data.videoUrl}" target="_blank" class="btn-primary">Download / View</a>
-                    <button class="btn-secondary" onclick="alert('Export to Google Drive coming soon!')">☁️ GDrive</button>
-                    <button class="btn-secondary" onclick="alert('Export to Dropbox coming soon!')">☁️ Dropbox</button>
+                ${data.output_file ? `
+                <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                    <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #4CAF50;">✅ Generation Complete</p>
+                    <video src="${BACKEND_URL}${data.output_file}" controls style="width: 100%; max-width: 300px; border-radius: 8px; margin-bottom: 10px;"></video>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="${BACKEND_URL}${data.output_file}" download class="btn-primary" style="text-decoration: none; text-align: center;">⬇️ Download</a>
+                        <button class="btn-secondary" onclick="alert('Export to Google Drive coming soon!')">☁️ GDrive</button>
+                        <button class="btn-secondary" onclick="alert('Export to Dropbox coming soon!')">☁️ Dropbox</button>
+                    </div>
                 </div>
                 ` : ''}
             `;
@@ -532,7 +536,8 @@ window.cancelJob = async function(jobId) {
         if (res.ok) {
             alert('Job cancelled successfully.');
         } else {
-            alert('Failed to cancel job. Backend returned an error.');
+            const errorData = await res.json().catch(() => ({}));
+            alert('Failed to cancel job. Backend returned an error: ' + (errorData.detail || res.statusText));
         }
     } catch (err) {
         console.error(err);
