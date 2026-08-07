@@ -1446,8 +1446,6 @@ async def create_job(
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "Airpyk98/EpicSync-Dataset"
-    if not hf_repo or hf_token.strip() == "":
-        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-standard-{job_id.replace('_', '-')}"
     
@@ -1523,8 +1521,6 @@ async def create_premium_job(
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "Airpyk98/EpicSync-Dataset"
-    if not hf_repo or hf_token.strip() == "":
-        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     job_id = f"epicsync_premium_{int(time.time())}"
     kernel_id = f"{kaggle_user}/epicsync-premium-{job_id.replace('_', '-')}"
     
@@ -1610,8 +1606,6 @@ def get_video(job_id: str):
 def list_bgm_files(hf_repo: str = "Airpyk98/EpicSync-Dataset", hf_token: str = ""):
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "Airpyk98/EpicSync-Dataset"
-    if not hf_repo or hf_token.strip() == "":
-        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     try:
         from huggingface_hub import HfApi
         api = HfApi(token=hf_token)
@@ -1631,8 +1625,6 @@ async def upload_bgm_file(
 ):
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "Airpyk98/EpicSync-Dataset"
-    if not hf_repo or hf_token.strip() == "":
-        hf_repo = base64.b64decode("WU9VUl9IRl9UT0tFTl9IRVJF").decode("ascii")
     
     clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', custom_name.strip())
     if not clean_name:
