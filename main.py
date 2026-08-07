@@ -536,9 +536,14 @@ if os.path.exists(current_video_path):
                     print(f"Successfully adjusted video speed to {speed_val}x!", flush=True)
         except Exception as e:
             print(f"Warning: Video speed adjustment failed: {e}", flush=True)
+    # Final Rename
+    if os.path.exists(current_video_path):
+        final_output = f"/kaggle/working/result_{job_id}.mp4"
+        os.rename(current_video_path, final_output)
+        print(f"Final video renamed to {final_output}", flush=True)
 
 # Cleanup to avoid massive zip downloads
-run_cmd("rm -rf video-retalking /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/input.mp4 /kaggle/working/result_speed_adjusted.mp4")
+run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/input.mp4 /kaggle/working/result_speed_adjusted.mp4")
 """
 
 PREMIUM_KERNEL_TEMPLATE = """import os
@@ -1029,8 +1034,14 @@ if os.path.exists(current_video_path):
         except Exception as e:
             print(f"Warning: Video speed adjustment failed: {e}", flush=True)
 
+# Final Rename
+if os.path.exists(current_video_path):
+    final_output = f"/kaggle/working/result_{job_id}.mp4"
+    os.rename(current_video_path, final_output)
+    print(f"Final video renamed to {final_output}", flush=True)
+
 # Cleanup massive repo and intermediate chunk videos to ensure clean output packaging
-run_cmd("rm -rf Wan2GP /kaggle/working/chunk_*.mp4 /kaggle/working/result_retalking_silent.mp4 /kaggle/working/concat_list.txt /kaggle/working/input.wav /kaggle/working/input.png /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/result_speed_adjusted.mp4")
+run_cmd("rm -rf Wan2GP /kaggle/working/result_retalking.mp4 /kaggle/working/chunk_*.mp4 /kaggle/working/result_retalking_silent.mp4 /kaggle/working/concat_list.txt /kaggle/working/input.wav /kaggle/working/input.png /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/result_speed_adjusted.mp4")
 """
 
 def upload_video_to_youtube(job_id, video_path, uid, project_id):
@@ -1150,42 +1161,28 @@ def monitor_job(job_id, slug, env, hf_repo, hf_token):
                 dl_cmd = f"kaggle kernels output {slug} -p {dl_dir}"
                 subprocess.run(dl_cmd, shell=True, env=env)
                 
-                # Step 1: Search specifically for result_retalking.mp4 across dl_dir and all subdirectories
+                # Search specifically for result_{job_id}.mp4 across dl_dir and all subdirectories
                 downloaded_result = None
                 for root, _, files in os.walk(dl_dir):
-                    if "result_retalking.mp4" in files:
-                        downloaded_result = os.path.join(root, "result_retalking.mp4")
+                    if f"result_{job_id}.mp4" in files:
+                        downloaded_result = os.path.join(root, f"result_{job_id}.mp4")
                         break
                         
-                # Step 2: If result_retalking.mp4 wasn't found, look for result_retalking_silent.mp4
-                if not downloaded_result:
-                    for root, _, files in os.walk(dl_dir):
-                        if "result_retalking_silent.mp4" in files:
-                            downloaded_result = os.path.join(root, "result_retalking_silent.mp4")
-                            break
-                            
-                # Step 3: Last resort fallback: find the largest .mp4 file that is NOT a chunk_
-                if not downloaded_result:
-                    best_size = -1
-                    for root, _, files in os.walk(dl_dir):
-                        for f in files:
-                            if f.endswith(".mp4") and not f.startswith("chunk_"):
-                                fpath = os.path.join(root, f)
-                                if os.path.getsize(fpath) > best_size:
-                                    best_size = os.path.getsize(fpath)
-                                    downloaded_result = fpath
-
                 if downloaded_result and os.path.exists(downloaded_result):
                     if os.path.exists(out_path):
                         os.remove(out_path)
                     shutil.move(downloaded_result, out_path)
-                shutil.rmtree(dl_dir, ignore_errors=True)
+                    shutil.rmtree(dl_dir, ignore_errors=True)
+                else:
+                    append_log(job_id, "Kaggle returned old version output. Waiting 15s for the new version to finish...")
+                    shutil.rmtree(dl_dir, ignore_errors=True)
+                    continue
                 
                 if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
                     append_log(job_id, f"Video successfully downloaded ({os.path.getsize(out_path)} bytes).")
                     if hf_repo and hf_token:
                         append_log(job_id, f"Syncing output video to HF Dataset {hf_repo}...")
-                        upload_to_hf_hub(out_path, hf_token, f"outputs/{job_id}.mp4", hf_repo)
+                        upload_to_hf_hub(out_path, hf_repo, f"outputs/{job_id}.mp4", hf_token)
                     jobs = load_jobs()
                     jobs[job_id]["status"] = "SUCCESS"
                     jobs[job_id]["progress"] = 100
@@ -1265,7 +1262,7 @@ def prepare_and_launch_standard_job(
             if hf_repo and hf_token:
                 bgm_repo_path = f"inputs/{job_id}_bgm.mp3"
                 append_log(job_id, f"Uploading background music to Hugging Face Dataset {hf_repo}...")
-                upload_to_hf_hub(bgm_path, hf_token, bgm_repo_path, hf_repo)
+                upload_to_hf_hub(bgm_path, hf_repo, bgm_repo_path, hf_token)
         elif bgm_repo_path:
             append_log(job_id, f"Using pre-uploaded background music from dataset: {bgm_repo_path}")
 
@@ -1280,7 +1277,7 @@ def prepare_and_launch_standard_job(
 
         if hf_repo and hf_token:
             append_log(job_id, f"Uploading source video to Hugging Face Dataset {hf_repo}...")
-            upload_to_hf_hub(video_path, hf_token, f"inputs/{job_id}.mp4", hf_repo)
+            upload_to_hf_hub(video_path, hf_repo, f"inputs/{job_id}.mp4", hf_token)
 
         script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
@@ -1352,7 +1349,7 @@ def prepare_and_launch_premium_job(
             if hf_repo and hf_token:
                 bgm_repo_path = f"inputs/{job_id}_bgm.mp3"
                 append_log(job_id, f"Uploading background music to Hugging Face Dataset {hf_repo}...")
-                upload_to_hf_hub(bgm_path, hf_token, bgm_repo_path, hf_repo)
+                upload_to_hf_hub(bgm_path, hf_repo, bgm_repo_path, hf_token)
         elif bgm_repo_path:
             append_log(job_id, f"Using pre-uploaded background music from dataset: {bgm_repo_path}")
 
@@ -1367,7 +1364,7 @@ def prepare_and_launch_premium_job(
 
         if hf_repo and hf_token:
             append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {hf_repo}...")
-            upload_to_hf_hub(image_path, hf_token, f"inputs/{job_id}.png", hf_repo)
+            upload_to_hf_hub(image_path, hf_repo, f"inputs/{job_id}.png", hf_token)
 
         script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
@@ -1447,7 +1444,7 @@ async def create_job(
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "Airpyk98/EpicSync-Dataset"
     job_id = f"epicsync_{int(time.time())}"
-    kernel_id = f"{kaggle_user}/epicsync-standard-{job_id.replace('_', '-')}"
+    kernel_id = f"{kaggle_user}/epicsync-standard-runner"
     
     staging = os.path.join(STAGING_DIR, job_id)
     os.makedirs(staging, exist_ok=True)
@@ -1522,7 +1519,7 @@ async def create_premium_job(
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "Airpyk98/EpicSync-Dataset"
     job_id = f"epicsync_premium_{int(time.time())}"
-    kernel_id = f"{kaggle_user}/epicsync-premium-{job_id.replace('_', '-')}"
+    kernel_id = f"{kaggle_user}/epicsync-premium-runner"
     
     staging = os.path.join(STAGING_DIR, job_id)
     os.makedirs(staging, exist_ok=True)
@@ -1637,7 +1634,7 @@ async def upload_bgm_file(
         f.write(await file.read())
         
     try:
-        upload_to_hf_hub(temp_path, hf_token, repo_path, hf_repo)
+        upload_to_hf_hub(temp_path, hf_repo, repo_path, hf_token)
         if os.path.exists(temp_path):
             os.remove(temp_path)
         return {"status": "success", "repo_path": repo_path, "message": f"Successfully saved {clean_name} to dataset!"}
