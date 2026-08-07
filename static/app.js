@@ -491,13 +491,17 @@ function loadLogs() {
             const div = document.createElement('div');
             div.className = 'log-card';
             const escapedTitle = (data.title || 'Untitled Video').replace(/'/g, "\\'");
+            const isActive = !['SUCCESS', 'FAILED', 'CANCELLED'].includes(data.status);
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
                         <h4>${data.title || 'Untitled Video'}</h4>
                         <p class="text-sm mt-2 text-muted">Status: ${data.status}</p>
                     </div>
-                    <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" onclick="openLogModal('${docSnap.id}', '${escapedTitle}')">👁️ View Console</button>
+                    <div style="display: flex; gap: 8px;">
+                        ${isActive ? `<button class="btn-secondary" style="font-size: 12px; padding: 4px 8px; color: #ff4444;" onclick="cancelJob('${docSnap.id}')">🛑 Cancel</button>` : ''}
+                        <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" onclick="openLogModal('${docSnap.id}', '${escapedTitle}')">👁️ View Console</button>
+                    </div>
                 </div>
                 ${data.videoUrl ? `
                 <div style="margin-top: 10px; display: flex; gap: 8px;">
@@ -513,6 +517,28 @@ function loadLogs() {
 }
 
 let logModalUnsubscribe = null;
+
+window.cancelJob = async function(jobId) {
+    if (!confirm('Are you sure you want to cancel this job?')) return;
+    try {
+        const formData = new FormData();
+        formData.append('kaggle_user', 'gabrielnjoku');
+        formData.append('kaggle_key', 'KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e');
+        
+        const res = await fetch(`${BACKEND_URL}/api/cancel/${jobId}`, {
+            method: 'POST',
+            body: formData
+        });
+        if (res.ok) {
+            alert('Job cancelled successfully.');
+        } else {
+            alert('Failed to cancel job. Backend returned an error.');
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Failed to cancel job: ' + err.message);
+    }
+};
 
 window.openLogModal = function(jobId, title) {
     document.getElementById('logModalTitle').innerText = title || 'Job ' + jobId;

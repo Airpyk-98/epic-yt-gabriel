@@ -1161,6 +1161,7 @@ def monitor_job(job_id, slug, env, hf_repo, hf_token):
     
     last_status = "running"
     consecutive_errors = 0
+    download_retries = 0
     
     while True:
         time.sleep(15)
@@ -1202,7 +1203,19 @@ def monitor_job(job_id, slug, env, hf_repo, hf_token):
                     shutil.move(downloaded_result, out_path)
                     shutil.rmtree(dl_dir, ignore_errors=True)
                 else:
-                    append_log(job_id, "Kaggle returned old version output. Waiting 15s for the new version to finish...")
+                    download_retries += 1
+                    if download_retries >= 5:
+                        append_log(job_id, "ERROR: Execution finished but output video was not found after multiple retries. It likely crashed silently.")
+                        jobs = load_jobs()
+                        jobs[job_id]["status"] = "FAILED"
+                        jobs[job_id]["progress"] = 100
+                        jobs[job_id]["step_text"] = "Generation failed silently (no video output)."
+                        save_jobs(jobs)
+                        update_firebase_job(job_id, jobs[job_id])
+                        shutil.rmtree(dl_dir, ignore_errors=True)
+                        break
+                    
+                    append_log(job_id, f"Kaggle returned old version output. Waiting 15s for the new version to finish... (Retry {download_retries}/5)")
                     shutil.rmtree(dl_dir, ignore_errors=True)
                     continue
                 
