@@ -1407,7 +1407,11 @@ def prepare_and_launch_premium_job(
             "enable_tpu": False,
             "enable_internet": True,
             "keywords": ["gpu", "diffusion", "ltx"],
-            "dataset_sources": [],
+            "dataset_sources": [
+                "mikerozer/wan2gp-gemma-models",
+                "mikerozer/wan2gp-ltx-models",
+                "mikerozer/wan2gp-shared-models"
+            ],
             "competition_sources": [],
             "kernel_sources": [],
             "model_sources": [],
