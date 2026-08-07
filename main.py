@@ -919,7 +919,8 @@ for idx in range(num_chunks):
         audio_scale=1.0,
     )
     
-    video_out = ltx2_model.generate(**gen_kwargs)
+    with torch.autocast("cuda", dtype=torch.float16):
+        video_out = ltx2_model.generate(**gen_kwargs)
     if video_out is not None:
         if isinstance(video_out, dict):
             video_tensor = video_out.get("x")
