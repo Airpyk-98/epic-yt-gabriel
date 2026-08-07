@@ -356,14 +356,14 @@ createContentForm.addEventListener('submit', async (e) => {
     titles.forEach((t, i) => {
         const el = document.createElement('div');
         el.className = 'log-card';
-        el.innerHTML = 
+        el.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <strong>. </strong>
-                <span id="queue-status-" style="color:#e5b300;">Pending</span>
+                <strong>${i+1}. ${t}</strong>
+                <span id="queue-status-${i}" style="color:#e5b300;">Pending</span>
             </div>
-        ;
+        `;
         queueList.appendChild(el);
-        queueElements.push(document.getElementById(queue-status-));
+        queueElements.push(document.getElementById(`queue-status-${i}`));
     });
 
     const token = await currentUser.getIdToken();
@@ -376,11 +376,11 @@ createContentForm.addEventListener('submit', async (e) => {
         let scriptText = '';
         try {
             statusEl.innerText = 'Generating Script...';
-            const res = await fetch(${BACKEND_URL}/api/generate-script, {
+            const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': Bearer 
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({ titles: title })
             });
@@ -388,7 +388,7 @@ createContentForm.addEventListener('submit', async (e) => {
             if (res.ok) {
                 scriptText = data.script;
             } else {
-                statusEl.innerText = Failed: ;
+                statusEl.innerText = `Failed: ${data.error || 'Unknown Error'}`;
                 statusEl.style.color = '#ff4444';
                 continue;
             }
@@ -432,9 +432,9 @@ createContentForm.addEventListener('submit', async (e) => {
             formData.append('video', mediaFile);
             formData.append('projectId', currentProject);
             
-            const res = await fetch(${BACKEND_URL}/api/run_premium, {
+            const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
                 method: 'POST',
-                headers: { 'Authorization': Bearer  },
+                headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
             
@@ -456,7 +456,7 @@ createContentForm.addEventListener('submit', async (e) => {
                     statusEl.style.color = '#4caf50';
                 }
             } else {
-                statusEl.innerText = Launch Error: ;
+                statusEl.innerText = `Launch Error: ${data.error || 'Unknown'}`;
                 statusEl.style.color = '#ff4444';
             }
         } catch (err) {
