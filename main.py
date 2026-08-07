@@ -1805,7 +1805,8 @@ def auth_youtube_callback(state: str, code: str, request: Request):
                 "youtubeConnectionId": "connected"
             })
             
-        return RedirectResponse("/?yt_success=true")
+        FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://epic-yt-gab.web.app")
+        return RedirectResponse(f"{FRONTEND_URL}/?yt_success=true")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch token: {str(e)}")
 
