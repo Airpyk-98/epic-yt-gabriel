@@ -1133,7 +1133,7 @@ def monitor_job(job_id, slug, env, hf_repo, hf_token):
         try:
             cmd = f"kaggle kernels status {slug}"
             res = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env)
-            out = res.stdout.strip()
+            out = (res.stdout + " " + res.stderr).strip()
             
             if "complete" in out.lower():
                 append_log(job_id, "Kaggle reported: COMPLETE. Downloading generated video...")
@@ -1207,9 +1207,10 @@ def monitor_job(job_id, slug, env, hf_repo, hf_token):
                     jobs[job_id]["progress"] = 100
                     jobs[job_id]["step_text"] = "Generation finished but video output missing."
                     save_jobs(jobs)
+                    update_firebase_job(job_id, jobs[job_id])
                 break
                 
-            elif "error" in out.lower() or "cancel" in out.lower():
+            elif "error" in out.lower() or "cancel" in out.lower() or "denied" in out.lower() or "not found" in out.lower():
                 append_log(job_id, f"Kaggle reported status: {out}")
                 jobs = load_jobs()
                 jobs[job_id]["status"] = "FAILED"
