@@ -202,11 +202,12 @@ if bgm_repo_path and HF_REPO:
         print(f"Warning: Could not download background music: {e}", flush=True)
 
 # ========== 1. INSTALL DEPENDENCIES ==========
-run_cmd("pip install edge-tts")
+run_cmd("pip install --no-cache-dir edge-tts")
 run_cmd("git clone https://github.com/OpenTalker/video-retalking.git")
 
 # Install deps individually - skip numpy (use Kaggle's numpy 2.x) and skip torch (use Kaggle's torch)
-run_cmd("pip install basicsr kornia face-alignment ninja einops facexlib yacs librosa==0.9.2 dlib cmake gfpgan")
+run_cmd("pip install --no-cache-dir basicsr kornia face-alignment ninja einops facexlib yacs librosa==0.9.2 dlib cmake gfpgan")
+run_cmd("rm -rf /root/.cache/pip /tmp/*")
 
 # ========== 2. DOWNLOAD CHECKPOINTS FROM HUGGINGFACE ==========
 os.makedirs("video-retalking/checkpoints", exist_ok=True)
@@ -636,11 +637,12 @@ run_cmd(f'edge-tts --voice "{voice}" --text "{script_text}" --write-media /kaggl
 
 # 3. INSTALL COMPATIBLE PYTORCH & WAN2GP
 print("Installing PyTorch 2.3.1 (CUDA 12.1 compatible)...", flush=True)
-run_cmd("pip install -q torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121")
+run_cmd("pip install --no-cache-dir -q torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121")
 
 run_cmd("git clone https://github.com/DeepBeepMeep/Wan2GP.git")
-run_cmd("pip install --timeout 120 --retries 5 -q -r Wan2GP/requirements.txt")
-run_cmd("pip install --timeout 120 --retries 5 -q mmgp gradio gguf soundfile")
+run_cmd("pip install --no-cache-dir --timeout 120 --retries 5 -q -r Wan2GP/requirements.txt")
+run_cmd("pip install --no-cache-dir --timeout 120 --retries 5 -q mmgp gradio gguf soundfile")
+run_cmd("rm -rf /root/.cache/pip /tmp/*")
 
 # 4. UNIVERSAL DATASET AUTODISCOVERY OR FAST AUTHENTICATED DOWNLOAD
 os.makedirs("Wan2GP/models", exist_ok=True)
