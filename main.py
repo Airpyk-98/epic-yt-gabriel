@@ -560,7 +560,7 @@ run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/wor
 """
 
 PREMIUM_KERNEL_TEMPLATE = """import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,garbage_collection_threshold:0.6"
 os.environ["MALLOC_ARENA_MAX"] = "2"
 os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"
 import subprocess
@@ -848,19 +848,19 @@ if _IS_SM60:
 offload.profile(
     pipe,
     profile_no=4,
-    quantizeTransformer=False,
+    quantizeTransformer=True,
     convertWeightsFloatTo=torch.float16,
     budgets={
-        "transformer": 2500,
-        "text_encoder": 500,
-        "video_encoder": 200,
-        "video_decoder": 500,
-        "audio_encoder": 200,
-        "audio_decoder": 200,
-        "vocoder": 100,
-        "spatial_upsampler": 200,
-        "vae": 200,
-        "*": 200,
+        "transformer": 5000,
+        "text_encoder": 1500,
+        "video_encoder": 500,
+        "video_decoder": 1000,
+        "audio_encoder": 500,
+        "audio_decoder": 500,
+        "vocoder": 300,
+        "spatial_upsampler": 1000,
+        "vae": 1500,
+        "*": 500,
     },
 )
 offload.shared_state["_attention"] = "sdpa"
@@ -903,7 +903,51 @@ def prepare_image_for_ltx(img, target_w, target_h):
 current_img = prepare_image_for_ltx(Image.open("/kaggle/working/input.png").convert("RGB"), target_width, target_height)
 chunk_video_files = []
 
+import ctypes
+_libc = None
+try:
+    _libc = ctypes.CDLL("libc.so.6")
+except Exception:
+    pass
+
+def _flush_all_memory():
+    """Nuclear memory cleanup: Python GC + CUDA sync + CUDA cache + glibc malloc_trim"""
+    gc.collect()
+    gc.collect()
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    if _libc:
+        _libc.malloc_trim(0)
+
+def _get_ram_usage_pct():
+    """Read RAM usage directly from cgroup (most accurate on Kaggle)"""
+    try:
+        with open("/sys/fs/cgroup/memory/memory.usage_in_bytes") as f:
+            usage = int(f.read().strip())
+        with open("/sys/fs/cgroup/memory/memory.limit_in_bytes") as f:
+            limit = int(f.read().strip())
+        return (usage / limit) * 100.0, usage / (1024**3), limit / (1024**3)
+    except Exception:
+        try:
+            import psutil
+            vm = psutil.virtual_memory()
+            return vm.percent, vm.used / (1024**3), vm.total / (1024**3)
+        except Exception:
+            return 0.0, 0.0, 0.0
+
 for idx in range(num_chunks):
+    # === RAM SAFETY CHECK ===
+    ram_pct, ram_used_gb, ram_total_gb = _get_ram_usage_pct()
+    print(f"  [RAM Monitor] {ram_used_gb:.1f} / {ram_total_gb:.1f} GB ({ram_pct:.0f}%) used before chunk {idx+1}", flush=True)
+    if ram_pct > 85:
+        print(f"  [RAM WARNING] Usage at {ram_pct:.0f}%! Running emergency memory flush...", flush=True)
+        _flush_all_memory()
+        ram_pct, ram_used_gb, ram_total_gb = _get_ram_usage_pct()
+        print(f"  [RAM Monitor] After flush: {ram_used_gb:.1f} / {ram_total_gb:.1f} GB ({ram_pct:.0f}%)", flush=True)
+        if ram_pct > 92:
+            print(f"  [RAM CRITICAL] Usage still at {ram_pct:.0f}% after flush. Skipping remaining chunks to avoid SIGKILL.", flush=True)
+            break
+
     start_s = idx * chunk_samples
     end_s = min(len(full_waveform), (idx + 1) * chunk_samples)
     sub_wav = full_waveform[start_s:end_s]
@@ -925,7 +969,7 @@ for idx in range(num_chunks):
         frame_num=num_frames,
         fps=24.0,
         seed=42 + idx,
-        VAE_tile_size=256,
+        VAE_tile_size=128,
         input_video_strength=1.0,
         denoising_strength=1.0,
         guide_scale=4.0,
@@ -968,18 +1012,10 @@ for idx in range(num_chunks):
             if ret:
                 current_img = prepare_image_for_ltx(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), target_width, target_height)
             
-    # Proactive 4-step memory flush between chunks
+    # Nuclear memory cleanup between chunks
     del video_out, gen_kwargs, sub_wav
-    gc.collect()
-    gc.collect()
-    torch.cuda.empty_cache()
-    torch.cuda.ipc_collect()
-    try:
-        import ctypes
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except Exception:
-        pass
-    time.sleep(1.5)
+    _flush_all_memory()
+    time.sleep(1.0)
 
 if len(chunk_video_files) == 1:
     os.rename(chunk_video_files[0], "/kaggle/working/result_retalking_silent.mp4")
