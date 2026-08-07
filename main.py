@@ -1666,7 +1666,7 @@ def generate_script(req: ScriptGenRequest, request: Request):
     if not all([base_url, api_key, model]):
         raise HTTPException(status_code=400, detail="Incomplete AI settings. Please configure settings first.")
         
-    tts_enforcement = "\n\nCRITICAL: Return ONLY the raw spoken text that the voiceover artist will read. Do NOT include any scene descriptions, stage directions, speaker labels (like 'Narrator:'), bracketed text (like '[HOOK]'), or introductory/closing notes. Your entire output will be passed directly to a Text-To-Speech engine, so any extra words will be spoken out loud."
+    tts_enforcement = "\n\nCRITICAL FORMAT INSTRUCTION: You must enclose the EXACT spoken text inside <SCRIPT> and </SCRIPT> XML tags. Output absolutely NO bracketed stage directions (like [HOOK]), no speaker labels (like 'Narrator:'), and no markdown formatting (like **bold**). Just the plain spoken words wrapped in the <SCRIPT> tags."
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -1684,7 +1684,23 @@ def generate_script(req: ScriptGenRequest, request: Request):
         resp = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
-        script = data['choices'][0]['message']['content']
+        raw_script = data['choices'][0]['message']['content']
+        
+        import re
+        match = re.search(r"<SCRIPT>(.*?)</SCRIPT>", raw_script, re.DOTALL | re.IGNORECASE)
+        if match:
+            script = match.group(1).strip()
+        else:
+            # Fallback aggressive cleanup
+            script = re.sub(r'\[.*?\]', '', raw_script) # Remove [HOOK], [END], etc
+            script = re.sub(r'\(.*?\)', '', script) # Remove (Visual: ...)
+            script = script.replace('**', '').replace('---', '')
+            
+            # Remove "Narrator: " or "Script: " prefixes
+            script = re.sub(r'^(Narrator|Script|Audio|Voiceover):?\s*', '', script, flags=re.IGNORECASE | re.MULTILINE)
+            
+            script = script.strip()
+            
         return {"script": script}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Provider error: {str(e)}")
