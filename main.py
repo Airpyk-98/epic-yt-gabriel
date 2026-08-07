@@ -1703,13 +1703,19 @@ def auth_youtube(uid: str, request: Request, project: str = None):
         if not client_id or not client_secret:
             raise HTTPException(status_code=500, detail="Platform YouTube Client ID/Secret not configured on backend.")
 
+        base_url = str(request.base_url)
+        if "onrender.com" in base_url and base_url.startswith("http://"):
+            base_url = base_url.replace("http://", "https://")
+            
+        redirect_uri = base_url + "api/auth/youtube/callback"
+
         client_config = {
             "web": {
                 "client_id": client_id,
                 "client_secret": client_secret,
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [str(request.base_url) + "api/auth/youtube/callback"]
+                "redirect_uris": [redirect_uri]
             }
         }
 
@@ -1717,7 +1723,7 @@ def auth_youtube(uid: str, request: Request, project: str = None):
             client_config,
             scopes=["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
         )
-        flow.redirect_uri = str(request.base_url) + "api/auth/youtube/callback"
+        flow.redirect_uri = redirect_uri
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
