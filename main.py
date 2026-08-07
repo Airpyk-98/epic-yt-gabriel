@@ -76,6 +76,20 @@ def save_jobs(jobs):
         with open(JOBS_FILE, "w", encoding="utf-8") as f:
             json.dump(jobs, f, indent=2)
 
+def update_firebase_job(job_id, job_info):
+    if not db: return
+    uid = job_info.get("uid")
+    project_id = job_info.get("projectId")
+    if not uid or not project_id: return
+    try:
+        db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
+            "status": job_info.get("status", "STAGING"),
+            "progress": job_info.get("progress", 0),
+            "step_text": job_info.get("step_text", "")
+        }, merge=True)
+    except Exception as e:
+        print(f"Firebase sync error: {e}", flush=True)
+
 def append_log(job_id, message):
     jobs = load_jobs()
     if job_id in jobs:
@@ -1088,6 +1102,11 @@ def upload_video_to_youtube(job_id, video_path, uid, project_id):
         
         response = request.execute()
         append_log(job_id, f"Successfully uploaded to YouTube! Video ID: {response.get('id')}")
+        jobs = load_jobs()
+        if job_id in jobs:
+            jobs[job_id]["status"] = "POSTED_TO_YOUTUBE"
+            save_jobs(jobs)
+            update_firebase_job(job_id, jobs[job_id])
         
     except Exception as e:
         append_log(job_id, f"YouTube Upload Error: {str(e)}")
@@ -1099,6 +1118,7 @@ def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
     jobs[job_id]["progress"] = 30
     jobs[job_id]["step_text"] = "Compute engine booting & provisioning GPU acceleration..."
     save_jobs(jobs)
+    update_firebase_job(job_id, jobs[job_id])
     
     last_status = "running"
     consecutive_errors = 0
@@ -1122,6 +1142,7 @@ def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
                 jobs[job_id]["progress"] = 90
                 jobs[job_id]["step_text"] = "Downloading generated video artifact..."
                 save_jobs(jobs)
+                update_firebase_job(job_id, jobs[job_id])
                 
                 out_path = os.path.join(OUTPUTS_DIR, f"{job_id}.mp4")
                 dl_dir = os.path.join(OUTPUTS_DIR, f"tmp_{job_id}")
@@ -1171,6 +1192,7 @@ def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
                     jobs[job_id]["step_text"] = "Video lip-sync generated successfully!"
                     jobs[job_id]["output_file"] = f"/api/video/{job_id}"
                     save_jobs(jobs)
+                    update_firebase_job(job_id, jobs[job_id])
                     
                     # Check and Trigger YouTube Auto-Upload
                     uid = jobs[job_id].get("uid")
@@ -1194,6 +1216,7 @@ def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
                 jobs[job_id]["progress"] = 100
                 jobs[job_id]["step_text"] = "Generation failed or error reported."
                 save_jobs(jobs)
+                update_firebase_job(job_id, jobs[job_id])
                 break
             else:
                 if out != last_status:
@@ -1216,6 +1239,7 @@ def monitor_job(job_id, slug, env, YOUR_HF_TOKEN, YOUR_HF_TOKEN2):
                 jobs[job_id]["progress"] = 100
                 jobs[job_id]["step_text"] = "Monitoring connection failed."
                 save_jobs(jobs)
+                update_firebase_job(job_id, jobs[job_id])
                 break
 
 def prepare_and_launch_standard_job(

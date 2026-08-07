@@ -311,6 +311,25 @@ generatedScriptText.addEventListener('input', checkVideoSubmitState);
 mediaFileInput.addEventListener('change', checkVideoSubmitState);
 
 // Main submission loop
+// Helper to wait for a job to complete by listening to Firestore
+function waitForJobCompletion(uid, projectId, jobId, uiStatusElement) {
+    return new Promise((resolve) => {
+        const unsubscribe = onSnapshot(doc(db, 'users', uid, 'projects', projectId, 'executions', jobId), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (uiStatusElement && data.status) {
+                    uiStatusElement.innerText = data.status;
+                }
+                
+                if (data.status === 'SUCCESS' || data.status === 'FAILED' || data.status === 'POSTED_TO_YOUTUBE') {
+                    unsubscribe();
+                    resolve(data.status);
+                }
+            }
+        });
+    });
+}
+
 createContentForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentProject) return alert('Select a project first!');
@@ -324,22 +343,44 @@ createContentForm.addEventListener('submit', async (e) => {
     
     if (!mediaFile) return alert('Missing source image.');
     
-    submitContentBtn.innerText = 'Processing...';
+    submitContentBtn.innerText = 'Processing Queue...';
     submitContentBtn.disabled = true;
+    
+    // Setup UI Queue
+    const queueContainer = document.getElementById('bulkQueueContainer');
+    const queueList = document.getElementById('bulkQueueList');
+    queueContainer.style.display = 'block';
+    queueList.innerHTML = '';
+    
+    const queueElements = [];
+    titles.forEach((t, i) => {
+        const el = document.createElement('div');
+        el.className = 'log-card';
+        el.innerHTML = 
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <strong>. </strong>
+                <span id="queue-status-" style="color:#e5b300;">Pending</span>
+            </div>
+        ;
+        queueList.appendChild(el);
+        queueElements.push(document.getElementById(queue-status-));
+    });
+
     const token = await currentUser.getIdToken();
     
     for (let i = 0; i < titles.length; i++) {
         const title = titles[i];
+        const statusEl = queueElements[i];
         
         // 1. Generate Script
         let scriptText = '';
         try {
-            submitContentBtn.innerText = `Generating script for title ${i+1}/${titles.length}...`;
-            const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
+            statusEl.innerText = 'Generating Script...';
+            const res = await fetch(${BACKEND_URL}/api/generate-script, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': Bearer 
                 },
                 body: JSON.stringify({ titles: title })
             });
@@ -347,21 +388,24 @@ createContentForm.addEventListener('submit', async (e) => {
             if (res.ok) {
                 scriptText = data.script;
             } else {
-                alert(`Error generating script for "${title}": ` + data.detail);
+                statusEl.innerText = Failed: ;
+                statusEl.style.color = '#ff4444';
                 continue;
             }
         } catch (err) {
             console.error(err);
-            alert(`Failed to connect to backend for script generation on "${title}".`);
+            statusEl.innerText = 'Failed: Network Error';
+            statusEl.style.color = '#ff4444';
             continue;
         }
 
         // 2. Handle Preview Mode vs Automatic Mode
         if (isPreviewOn) {
+            statusEl.innerText = 'Waiting for User Approval...';
             generatedScriptText.value = scriptText;
             scriptResultArea.style.display = 'block';
             checkVideoSubmitState();
-            submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+            submitContentBtn.innerText = 'Confirm to Launch';
             submitContentBtn.disabled = false;
             
             // Wait for user to click "Continue to Video"
@@ -374,11 +418,13 @@ createContentForm.addEventListener('submit', async (e) => {
             });
             scriptText = generatedScriptText.value.trim();
             scriptResultArea.style.display = 'none';
+            submitContentBtn.innerText = 'Processing Queue...';
+            submitContentBtn.disabled = true;
         }
         
         // 3. Launch Video Generation
         try {
-            submitContentBtn.innerText = `Launching GPU for title ${i+1}/${titles.length}...`;
+            statusEl.innerText = 'Staging GPU...';
             const formData = new FormData();
             formData.append('script_text', scriptText);
             formData.append('voice', voiceModel);
@@ -386,9 +432,9 @@ createContentForm.addEventListener('submit', async (e) => {
             formData.append('video', mediaFile);
             formData.append('projectId', currentProject);
             
-            const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
+            const res = await fetch(${BACKEND_URL}/api/run_premium, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
+                headers: { 'Authorization': Bearer  },
                 body: formData
             });
             
@@ -400,16 +446,27 @@ createContentForm.addEventListener('submit', async (e) => {
                     job_id: data.job_id,
                     createdAt: serverTimestamp()
                 });
+                statusEl.innerText = 'STAGING';
+                
+                // 4. Wait for Job Completion Sequentially
+                const finalStatus = await waitForJobCompletion(currentUser.uid, currentProject, data.job_id, statusEl);
+                if (finalStatus === 'FAILED') {
+                    statusEl.style.color = '#ff4444';
+                } else {
+                    statusEl.style.color = '#4caf50';
+                }
             } else {
-                alert(`Error starting job for "${title}": ` + (data.detail || 'Unknown error'));
+                statusEl.innerText = Launch Error: ;
+                statusEl.style.color = '#ff4444';
             }
         } catch (err) {
             console.error(err);
-            alert(`Failed to launch video generation for "${title}".`);
+            statusEl.innerText = 'Launch Failed';
+            statusEl.style.color = '#ff4444';
         }
     }
     
-    alert('All jobs dispatched! Check Execution Logs.');
+    alert('Queue processing finished! Check Execution Logs.');
     document.querySelector('[data-target="view-logs"]').click();
     
     submitContentBtn.innerText = '🚀 Launch EpicSync GPU';

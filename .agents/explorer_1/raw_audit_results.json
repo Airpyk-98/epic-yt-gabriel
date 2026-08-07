@@ -1,0 +1,53 @@
+{
+  "auth_test": {
+    "logged_in": false,
+    "used_email": "gabrielyoutubeautomation@gmail.com",
+    "session_persisted": false,
+    "logout_successful": true
+  },
+  "navigation_test": {
+    "view-dashboard": true,
+    "view-projects": true,
+    "view-settings": true,
+    "view-logs": true
+  },
+  "projects_test": {},
+  "settings_test": {},
+  "studio_test": {},
+  "logs_test": {},
+  "console_errors": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "type": "error",
+      "text": "Error: Invalid format\n    at fetchModels (https://epic-yt-gab.web.app/app.js:189:19)\n    at async HTMLButtonElement.<anonymous> (https://epic-yt-gab.web.app/app.js:159:5)"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "type": "error",
+      "text": "[2026-08-06T01:03:22.734Z]  @firebase/firestore: Firestore (10.12.2): Uncaught Error in snapshot listener: FirebaseError: [code=permission-denied]: Missing or insufficient permissions."
+    },
+    {
+      "type": "error",
+      "text": "[2026-08-06T01:03:22.735Z]  @firebase/firestore: Firestore (10.12.2): Uncaught Error in snapshot listener: FirebaseError: [code=permission-denied]: Missing or insufficient permissions."
+    },
+    {
+      "type": "error",
+      "text": "[2026-08-06T01:03:22.735Z]  @firebase/firestore: Firestore (10.12.2): Uncaught Error in snapshot listener: FirebaseError: [code=permission-denied]: Missing or insufficient permissions."
+    }
+  ],
+  "uncaught_exceptions": [
+    "Cannot read properties of null (reading 'value')"
+  ],
+  "dialogs": [
+    {
+      "type": "alert",
+      "message": "Error generating script: Method Not Allowed"
+    }
+  ]
+}
