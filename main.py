@@ -138,7 +138,8 @@ def upload_to_hf_hub(file_path, repo_id, path_in_repo, hf_token):
 KERNEL_TEMPLATE = """import os
 import subprocess
 import glob
-import sys`nimport builtins
+import sys
+import builtins
 import requests
 
 def custom_print(*args, **kwargs):
@@ -560,7 +561,8 @@ run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/wor
 PREMIUM_KERNEL_TEMPLATE = """import os
 import subprocess
 import glob
-import sys`nimport builtins
+import sys
+import builtins
 import requests
 import json
 import base64
