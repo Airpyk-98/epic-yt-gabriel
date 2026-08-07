@@ -561,6 +561,8 @@ run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/wor
 
 PREMIUM_KERNEL_TEMPLATE = """import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
+os.environ["MALLOC_ARENA_MAX"] = "2"
+os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"
 import subprocess
 import glob
 import sys
@@ -849,16 +851,16 @@ offload.profile(
     quantizeTransformer=False,
     convertWeightsFloatTo=torch.float16,
     budgets={
-        "transformer": 4500,
-        "text_encoder": 1000,
-        "video_encoder": 500,
-        "video_decoder": 1000,
-        "audio_encoder": 500,
-        "audio_decoder": 500,
-        "vocoder": 300,
-        "spatial_upsampler": 500,
-        "vae": 500,
-        "*": 500,
+        "transformer": 2500,
+        "text_encoder": 500,
+        "video_encoder": 200,
+        "video_decoder": 500,
+        "audio_encoder": 200,
+        "audio_decoder": 200,
+        "vocoder": 100,
+        "spatial_upsampler": 200,
+        "vae": 200,
+        "*": 200,
     },
 )
 offload.shared_state["_attention"] = "sdpa"
@@ -972,6 +974,11 @@ for idx in range(num_chunks):
     gc.collect()
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
     time.sleep(1.5)
 
 if len(chunk_video_files) == 1:
