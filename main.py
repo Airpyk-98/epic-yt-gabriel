@@ -1396,8 +1396,8 @@ async def create_job(
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     projectId: str = Form(""),
-    kaggle_user: str = Form("ikechukwuebiringa1"),
-    kaggle_key: str = Form("KGAT_fc473ab2c166567756eac24217d1fbd2"),
+    kaggle_user: str = Form("gabrielnjoku"),
+    kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
     YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
     YOUR_HF_TOKEN2: str = Form(""),
     video: UploadFile = File(...),
@@ -1413,7 +1413,7 @@ async def create_job(
         except:
             pass
     if not kaggle_key or "0f12d3a4" in kaggle_key:
-        kaggle_key = "KGAT_fc473ab2c166567756eac24217d1fbd2"
+        kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
     if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
@@ -1473,8 +1473,8 @@ async def create_premium_job(
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     projectId: str = Form(""),
-    kaggle_user: str = Form("ikechukwuebiringa1"),
-    kaggle_key: str = Form("KGAT_fc473ab2c166567756eac24217d1fbd2"),
+    kaggle_user: str = Form("gabrielnjoku"),
+    kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
     YOUR_HF_TOKEN: str = Form("Airpyk98/EpicSync-Dataset"),
     YOUR_HF_TOKEN2: str = Form(""),
     image: UploadFile = File(...),
@@ -1490,7 +1490,7 @@ async def create_premium_job(
         except:
             pass
     if not kaggle_key or "0f12d3a4" in kaggle_key:
-        kaggle_key = "KGAT_fc473ab2c166567756eac24217d1fbd2"
+        kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
         YOUR_HF_TOKEN = "Airpyk98/EpicSync-Dataset"
     if not YOUR_HF_TOKEN or YOUR_HF_TOKEN2.strip() == "":
@@ -1546,7 +1546,7 @@ def get_jobs():
     return load_jobs()
 
 @app.post("/api/cancel/{job_id}")
-def cancel_job(job_id: str, kaggle_user: str = Form("ikechukwuebiringa1"), kaggle_key: str = Form("KGAT_fc473ab2c166567756eac24217d1fbd2")):
+def cancel_job(job_id: str, kaggle_user: str = Form("gabrielnjoku"), kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e")):
     jobs = load_jobs()
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
