@@ -560,6 +560,7 @@ run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/wor
 """
 
 PREMIUM_KERNEL_TEMPLATE = """import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 import subprocess
 import glob
 import sys
@@ -848,16 +849,16 @@ offload.profile(
     quantizeTransformer=False,
     convertWeightsFloatTo=torch.float16,
     budgets={
-        "transformer": 6000,
-        "text_encoder": 1500,
-        "video_encoder": 2000,
-        "video_decoder": 3000,
-        "audio_encoder": 1000,
-        "audio_decoder": 1000,
-        "vocoder": 500,
-        "spatial_upsampler": 1500,
-        "vae": 1000,
-        "*": 1000,
+        "transformer": 4500,
+        "text_encoder": 1000,
+        "video_encoder": 500,
+        "video_decoder": 1000,
+        "audio_encoder": 500,
+        "audio_decoder": 500,
+        "vocoder": 300,
+        "spatial_upsampler": 500,
+        "vae": 500,
+        "*": 500,
     },
 )
 offload.shared_state["_attention"] = "sdpa"
