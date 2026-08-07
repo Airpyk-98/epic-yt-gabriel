@@ -637,6 +637,7 @@ run_cmd(f'edge-tts --voice "{voice}" --text "{script_text}" --write-media /kaggl
 
 # 3. INSTALL COMPATIBLE PYTORCH & WAN2GP
 print("Installing PyTorch 2.3.1 (CUDA 12.1 compatible)...", flush=True)
+run_cmd('pip uninstall -y torch torchvision torchaudio')
 run_cmd("pip install --no-cache-dir -q torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121")
 
 run_cmd("git clone https://github.com/DeepBeepMeep/Wan2GP.git")
@@ -1284,6 +1285,9 @@ def prepare_and_launch_standard_job(
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
+        # Add uninstall for standard too if needed, but per instructions, specifically updated here
+        # (Though not explicitly requested, I will match the structure logic)
+        
         if not bgm_repo_path and bgm_path and os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 0:
             if hf_repo and hf_token:
                 bgm_repo_path = f"inputs/{job_id}_bgm.mp3"
@@ -1306,6 +1310,7 @@ def prepare_and_launch_standard_job(
             upload_to_hf_hub(video_path, hf_repo, f"inputs/{job_id}.mp4", hf_token)
 
         script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
@@ -1408,9 +1413,8 @@ def prepare_and_launch_premium_job(
             "enable_internet": True,
             "keywords": ["gpu", "diffusion", "ltx"],
             "dataset_sources": [
-                "mikerozer/wan2gp-gemma-models",
-                "mikerozer/wan2gp-ltx-models",
-                "mikerozer/wan2gp-shared-models"
+                "mikerozer/wan2gp-shared-models",
+                "trailtalknick/ltx-23-22b-q4-gguf"
             ],
             "competition_sources": [],
             "kernel_sources": [],
