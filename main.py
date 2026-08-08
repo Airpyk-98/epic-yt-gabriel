@@ -576,20 +576,18 @@ def run_cmd(cmd):
 print("=== STARTING APTAVATAR (14B) PIPELINE ===", flush=True)
 
 # 1. SETUP SWAP (For 14B Model memory buffering on T4)
-print("Attempting to allocate 8GB swapfile to prevent OOM...", flush=True)
-os.system("fallocate -l 8G /swapfile")
-os.system("chmod 600 /swapfile")
-os.system("mkswap /swapfile")
-os.system("swapon /swapfile")
+# Note: Kaggle containers don't allow swapon (Operation not permitted).
+# We must rely on standard memory management.
 
 # 2. HF AUTH & ENV
 hf_token = ___HF_TOKEN___
 os.environ["HF_TOKEN"] = hf_token
 
 # 3. INSTALL DEPENDENCIES
+# We remove flash_attn compilation because it takes 45 mins to build on Kaggle's newer PyTorch versions.
+# Most models gracefully fallback to PyTorch native SDPA.
 run_cmd("pip install -q huggingface_hub edge-tts soundfile ffmpeg-python")
 run_cmd("pip install ninja")
-run_cmd("pip install flash_attn==2.8.0.post2 --no-build-isolation")
 
 # 4. GENERATE AUDIO VOICEOVER VIA TTS
 script_text = ___SCRIPT_TEXT___
@@ -632,6 +630,7 @@ with open("/kaggle/working/action_prompt.txt", "w", encoding="utf-8") as f:
 # 7. CLONE REPO & FETCH WEIGHTS
 run_cmd("git clone https://github.com/TaoLiveAIGC/AptAvatar.git /kaggle/working/AptAvatar")
 os.chdir("/kaggle/working/AptAvatar")
+run_cmd("sed -i '/torch/d' requirements.txt")
 run_cmd("pip install -r requirements.txt")
 
 # Download 14B Weights and Audio Encoder
