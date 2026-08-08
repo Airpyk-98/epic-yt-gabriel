@@ -98,12 +98,64 @@
                                 <option value="motivational">Motivational / Self-Help</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="tabs" style="display: flex; gap: 10px; margin-bottom: 15px;">
+                            <button type="button" class="tab-btn active" onclick="switchPromptTab('ai')" style="flex:1; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 8px; cursor: pointer;">AI Generation</button>
+                            <button type="button" class="tab-btn" onclick="switchPromptTab('manual')" style="flex:1; padding: 10px; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #888; border-radius: 8px; cursor: pointer;">Manual Script</button>
+                        </div>
+                        <div id="aiPromptSection" class="form-group">
                             <label>Video Title(s)</label>
                             <textarea id="videoTitles" placeholder="Enter a video title, or paste multiple titles separated by newlines for bulk..." rows="3" required></textarea>
                             <small class="text-muted">For bulk generation, paste multiple titles (one per line). Preview feature is disabled for bulk.</small>
                         </div>
+                        <div id="manualPromptSection" class="form-group" style="display: none;">
+                            <label>Manual Script</label>
+                            <textarea id="manualScript" placeholder="Type your exact voiceover script here. The AI writer will be bypassed." rows="6"></textarea>
+                            <small class="text-muted">Only the first video will use this script if you submit multiple jobs.</small>
+                        </div>
                         
+                        <script>
+
+
+        function switchPromptTab(tab) {
+            const btns = document.querySelectorAll('.tab-btn');
+            const aiSec = document.getElementById('aiPromptSection');
+            const manualSec = document.getElementById('manualPromptSection');
+            const videoTitles = document.getElementById('videoTitles');
+            
+            if (tab === 'ai') {
+                btns[0].classList.add('active');
+                btns[0].style.background = 'rgba(255,255,255,0.1)';
+                btns[0].style.color = '#fff';
+                btns[0].style.borderColor = 'rgba(255,255,255,0.2)';
+                
+                btns[1].classList.remove('active');
+                btns[1].style.background = 'transparent';
+                btns[1].style.color = '#888';
+                btns[1].style.borderColor = 'rgba(255,255,255,0.1)';
+                
+                aiSec.style.display = 'block';
+                manualSec.style.display = 'none';
+                window.currentPromptMode = 'ai';
+                videoTitles.setAttribute('required', 'true');
+            } else {
+                btns[1].classList.add('active');
+                btns[1].style.background = 'rgba(255,255,255,0.1)';
+                btns[1].style.color = '#fff';
+                btns[1].style.borderColor = 'rgba(255,255,255,0.2)';
+                
+                btns[0].classList.remove('active');
+                btns[0].style.background = 'transparent';
+                btns[0].style.color = '#888';
+                btns[0].style.borderColor = 'rgba(255,255,255,0.1)';
+                
+                aiSec.style.display = 'none';
+                manualSec.style.display = 'block';
+                window.currentPromptMode = 'manual';
+                videoTitles.removeAttribute('required');
+            }
+        }
+        window.currentPromptMode = 'ai';
+                        </script>
                         <div class="form-group">
                             <label>Source Image</label>
                             <div class="file-upload" onclick="document.getElementById('mediaFile').click()">
@@ -116,6 +168,14 @@
                             <select id="videoModelSelect">
                                 <option value="ltx-video" selected>LTX-Video (Cinematic / Action)</option>
                                 <option value="aptavatar">AptAvatar (Talking Head / 60x Fast)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Aspect Ratio</label>
+                            <select id="aspectRatioSelect">
+                                <option value="9:16" selected>9:16 (Vertical Shorts/Reels)</option>
+                                <option value="16:9">16:9 (Horizontal YouTube)</option>
+                                <option value="1:1">1:1 (Square Instagram)</option>
                             </select>
                         </div>
                         <div class="form-group">

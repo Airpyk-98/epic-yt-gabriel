@@ -334,12 +334,20 @@ createContentForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentProject) return alert('Select a project first!');
     
-    const titles = videoTitlesInput.value.split('\n').filter(line => line.trim().length > 0);
-    if (titles.length === 0) return alert('Please enter at least one title.');
+    let titles = [];
+    if (window.currentPromptMode === 'manual') {
+        const script = document.getElementById('manualScript').value.trim();
+        if (!script) return alert('Please enter your manual script.');
+        titles = ["Manual Video Generation"];
+    } else {
+        titles = videoTitlesInput.value.split('\n').filter(line => line.trim().length > 0);
+        if (titles.length === 0) return alert('Please enter at least one title.');
+    }
     
-    const isPreviewOn = previewScriptToggle.checked && titles.length === 1;
+    const isPreviewOn = previewScriptToggle.checked && titles.length === 1 && window.currentPromptMode === 'ai';
     const mediaFile = mediaFileInput.files[0];
     const voiceModel = document.getElementById('voiceModelSelect').value;
+    const aspectRatio = document.getElementById('aspectRatioSelect').value;
     
     if (!mediaFile) return alert('Missing source image.');
     
@@ -372,60 +380,64 @@ createContentForm.addEventListener('submit', async (e) => {
         const title = titles[i];
         const statusEl = queueElements[i];
         
-        // 1. Generate Script
         let scriptText = '';
-        try {
-            statusEl.innerText = 'Generating Script...';
-            const videoModel = document.getElementById('videoModelSelect').value;
-            const targetDuration = document.getElementById('targetDurationSelect').value;
-            const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ 
-                    titles: title,
-                    video_model: videoModel,
-                    target_duration: targetDuration
-                })
-            });
-            const data = await res.json();
-            if (res.ok) {
-                scriptText = data.script;
-            } else {
-                statusEl.innerText = `Failed: ${data.error || 'Unknown Error'}`;
+        if (window.currentPromptMode === 'manual') {
+            scriptText = document.getElementById('manualScript').value.trim();
+        } else {
+            // 1. Generate Script
+            try {
+                statusEl.innerText = 'Generating Script...';
+                const videoModel = document.getElementById('videoModelSelect').value;
+                const targetDuration = document.getElementById('targetDurationSelect').value;
+                const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ 
+                        titles: title,
+                        video_model: videoModel,
+                        target_duration: targetDuration
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    scriptText = data.script;
+                } else {
+                    statusEl.innerText = `Failed: ${data.error || 'Unknown Error'}`;
+                    statusEl.style.color = '#ff4444';
+                    continue;
+                }
+            } catch (err) {
+                console.error(err);
+                statusEl.innerText = 'Failed: Network Error';
                 statusEl.style.color = '#ff4444';
                 continue;
             }
-        } catch (err) {
-            console.error(err);
-            statusEl.innerText = 'Failed: Network Error';
-            statusEl.style.color = '#ff4444';
-            continue;
-        }
 
-        // 2. Handle Preview Mode vs Automatic Mode
-        if (isPreviewOn) {
-            statusEl.innerText = 'Waiting for User Approval...';
-            generatedScriptText.value = scriptText;
-            scriptResultArea.style.display = 'block';
-            checkVideoSubmitState();
-            submitContentBtn.innerText = 'Confirm to Launch';
-            submitContentBtn.disabled = false;
-            
-            // Wait for user to click "Continue to Video"
-            await new Promise(resolve => {
-                const handler = () => {
-                    continueVideoBtn.removeEventListener('click', handler);
-                    resolve();
-                };
-                continueVideoBtn.addEventListener('click', handler);
-            });
-            scriptText = generatedScriptText.value.trim();
-            scriptResultArea.style.display = 'none';
-            submitContentBtn.innerText = 'Processing Queue...';
-            submitContentBtn.disabled = true;
+            // 2. Handle Preview Mode vs Automatic Mode
+            if (isPreviewOn) {
+                statusEl.innerText = 'Waiting for User Approval...';
+                generatedScriptText.value = scriptText;
+                scriptResultArea.style.display = 'block';
+                checkVideoSubmitState();
+                submitContentBtn.innerText = 'Confirm to Launch';
+                submitContentBtn.disabled = false;
+                
+                // Wait for user to click "Continue to Video"
+                await new Promise(resolve => {
+                    const handler = () => {
+                        continueVideoBtn.removeEventListener('click', handler);
+                        resolve();
+                    };
+                    continueVideoBtn.addEventListener('click', handler);
+                });
+                scriptText = generatedScriptText.value.trim();
+                scriptResultArea.style.display = 'none';
+                submitContentBtn.innerText = 'Processing Queue...';
+                submitContentBtn.disabled = true;
+            }
         }
         
         // 3. Launch Video Generation
@@ -440,6 +452,7 @@ createContentForm.addEventListener('submit', async (e) => {
             formData.append('resolution', document.getElementById('resolutionSelect').value);
             formData.append('video_model', document.getElementById('videoModelSelect').value);
             formData.append('target_duration', document.getElementById('targetDurationSelect').value);
+            formData.append('aspect_ratio', aspectRatio);
             
             const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
                 method: 'POST',
@@ -491,16 +504,51 @@ function loadLogs() {
     const q = query(collection(db, 'users', currentUser.uid, 'projects', currentProject, 'executions'), orderBy('createdAt', 'desc'));
     unsubscribeLogs = onSnapshot(q, (snapshot) => {
         logsContainer.innerHTML = '';
+        
+        let hasActiveTasks = false;
+        const queueContainer = document.getElementById('bulkQueueContainer');
+        const queueList = document.getElementById('bulkQueueList');
+        
+        // Only clear the queue list if we aren't actively injecting items in a loop during submission
+        if (submitContentBtn.innerText !== 'Processing Queue...') {
+            queueList.innerHTML = '';
+        }
+
         if (snapshot.empty) {
             logsContainer.innerHTML = '<div class="empty-state">No videos generated yet in this project.</div>';
+            
+            if (submitContentBtn.innerText !== 'Processing Queue...' && submitContentBtn.innerText !== 'Confirm to Launch') {
+                queueContainer.style.display = 'none';
+                submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+                submitContentBtn.disabled = false;
+            }
             return;
         }
+        
         snapshot.forEach(docSnap => {
             const data = docSnap.data();
             const div = document.createElement('div');
             div.className = 'log-card';
             const escapedTitle = (data.title || 'Untitled Video').replace(/'/g, "\\'");
-            const isActive = !['SUCCESS', 'FAILED', 'CANCELLED'].includes(data.status);
+            const isActive = !['SUCCESS', 'FAILED', 'CANCELLED', 'POSTED_TO_YOUTUBE'].includes(data.status);
+            
+            // Queue Persistence Logic
+            if (isActive && submitContentBtn.innerText !== 'Processing Queue...' && submitContentBtn.innerText !== 'Confirm to Launch') {
+                hasActiveTasks = true;
+                const queueEl = document.createElement('div');
+                queueEl.className = 'log-card';
+                queueEl.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong>${data.title || 'Untitled'}</strong>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <span style="color:#e5b300;">${data.status}</span>
+                            <button class="btn-secondary" style="font-size: 12px; padding: 2px 6px; color: #ff4444;" onclick="cancelJob('${docSnap.id}')">🛑</button>
+                        </div>
+                    </div>
+                `;
+                queueList.appendChild(queueEl);
+            }
+
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
@@ -526,6 +574,19 @@ function loadLogs() {
             `;
             logsContainer.appendChild(div);
         });
+        
+        // Finalize Queue State
+        if (submitContentBtn.innerText !== 'Processing Queue...' && submitContentBtn.innerText !== 'Confirm to Launch') {
+            if (hasActiveTasks) {
+                queueContainer.style.display = 'block';
+                submitContentBtn.innerText = 'Tasks Running...';
+                submitContentBtn.disabled = true;
+            } else {
+                queueContainer.style.display = 'none';
+                submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+                submitContentBtn.disabled = false;
+            }
+        }
     });
 }
 
@@ -537,6 +598,8 @@ window.cancelJob = async function(jobId) {
         const formData = new FormData();
         formData.append('kaggle_user', 'gabrielnjoku');
         formData.append('kaggle_key', 'KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e');
+        if (currentUser) formData.append('uid', currentUser.uid);
+        if (currentProject) formData.append('projectId', currentProject);
         
         const res = await fetch(`${BACKEND_URL}/api/cancel/${jobId}`, {
             method: 'POST',

@@ -611,6 +611,19 @@ else:
     run_cmd(f"huggingface-cli download {hf_repo} inputs/{job_id}.png --local-dir /kaggle/working --repo-type dataset")
     run_cmd(f"mv /kaggle/working/inputs/{job_id}.png /kaggle/working/input.png")
 
+from PIL import Image, ImageOps
+aspect_ratio_mode = ___ASPECT_RATIO___
+if aspect_ratio_mode == "16:9":
+    target_w, target_h = 1280, 720
+elif aspect_ratio_mode == "1:1":
+    target_w, target_h = 768, 768
+else:
+    target_w, target_h = 768, 1280
+
+img = Image.open("/kaggle/working/input.png").convert("RGB")
+img = ImageOps.fit(img, (target_w, target_h), Image.Resampling.LANCZOS)
+img.save("/kaggle/working/input.png")
+
 # 6. WRITE STRUCTURED ACTION PROMPT
 structured_prompt = ___APTAVATAR_PROMPT___
 with open("/kaggle/working/action_prompt.txt", "w", encoding="utf-8") as f:
@@ -1598,7 +1611,7 @@ def prepare_and_launch_premium_job(
                 spoken_script = script_text.replace(apt_match.group(0), "").strip()
 
         if video_model == "aptavatar":
-            script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt))
+            script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
         else:
             script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
             
@@ -1816,24 +1829,43 @@ def get_jobs():
     return load_jobs()
 
 @app.post("/api/cancel/{job_id}")
-def cancel_job(job_id: str, kaggle_user: str = Form("gabrielnjoku"), kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e")):
+def cancel_job(
+    job_id: str, 
+    kaggle_user: str = Form("gabrielnjoku"), 
+    kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
+    uid: Optional[str] = Form(None),
+    projectId: Optional[str] = Form(None)
+):
     try:
         jobs = load_jobs()
         if job_id not in jobs:
-            raise HTTPException(status_code=404, detail="Job not found")
+            # If backend restarted and lost the job locally, force update Firebase if we have uid and projectId
+            if uid and projectId:
+                db.collection("users").document(uid).collection("projects").document(projectId).collection("executions").document(job_id).update({
+                    "status": "CANCELLED",
+                    "step_text": "Task cancelled by user (force).",
+                    "progress": 0
+                })
+                return {"status": "CANCELLED", "note": "Forced via Firebase"}
+            else:
+                raise HTTPException(status_code=404, detail="Job not found locally and no Firebase context provided")
+                
         slug = jobs[job_id].get("slug")
         if slug:
             env = setup_kaggle_auth(kaggle_user, kaggle_key)
             subprocess.run(f"kaggle kernels cancel {slug}", shell=True, env=env)
+        
         jobs[job_id]["status"] = "CANCELLED"
         jobs[job_id]["progress"] = 0
         jobs[job_id]["step_text"] = "Task cancelled by user."
         append_log(job_id, "Job explicitly cancelled by user.")
         save_jobs(jobs)
+        
         try:
             update_firebase_job(job_id, jobs[job_id])
         except Exception as e:
             print(f"Error syncing cancel status to Firebase: {e}", flush=True)
+            
         return {"status": "CANCELLED"}
     except Exception as e:
         import traceback
