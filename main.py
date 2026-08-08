@@ -611,7 +611,7 @@ else:
     # Fetch from HF if not embedded
     job_id = ___JOB_ID___
     hf_repo = ___HF_REPO___
-    run_cmd(f"huggingface-cli download {hf_repo} inputs/{job_id}.png --local-dir /kaggle/working --repo-type dataset")
+    run_cmd(f"python -c 'from huggingface_hub import hf_hub_download; hf_hub_download(repo_id=\"{hf_repo}\", filename=\"inputs/{job_id}.png\", repo_type=\"dataset\", local_dir=\"/kaggle/working\")'")
     run_cmd(f"mv /kaggle/working/inputs/{job_id}.png /kaggle/working/input.png")
 
 from PIL import Image, ImageOps
@@ -639,8 +639,8 @@ run_cmd("sed -i '/torch/d' requirements.txt")
 run_cmd("pip install -r requirements.txt")
 
 # Download 14B Weights and Audio Encoder
-run_cmd("huggingface-cli download TaoLiveAIGC/AptAvatar --local-dir ./models/AptAvatar")
-run_cmd("huggingface-cli download TencentGameMate/chinese-wav2vec2-base --local-dir ./models/chinese-wav2vec2-base")
+run_cmd("python -c 'from huggingface_hub import snapshot_download; snapshot_download(repo_id=\"TaoLiveAIGC/AptAvatar\", local_dir=\"./models/AptAvatar\")'")
+run_cmd("python -c 'from huggingface_hub import snapshot_download; snapshot_download(repo_id=\"TencentGameMate/chinese-wav2vec2-base\", local_dir=\"./models/chinese-wav2vec2-base\")'")
 
 # 8. INFERENCE (2-Step NFE)
 print("Starting 2-Step NFE Generation...", flush=True)
