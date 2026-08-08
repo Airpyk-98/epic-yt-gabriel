@@ -82,11 +82,16 @@ def update_firebase_job(job_id, job_info):
     project_id = job_info.get("projectId")
     if not uid or not project_id: return
     try:
-        db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
+        data_to_sync = {
             "status": job_info.get("status", "STAGING"),
             "progress": job_info.get("progress", 0),
-            "step_text": job_info.get("step_text", "")
-        }, merge=True)
+            "step_text": job_info.get("step_text", ""),
+            "logs": job_info.get("logs", [])
+        }
+        if "error" in job_info:
+            data_to_sync["error"] = job_info["error"]
+            
+        db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set(data_to_sync, merge=True)
     except Exception as e:
         print(f"Firebase sync error: {e}", flush=True)
 
