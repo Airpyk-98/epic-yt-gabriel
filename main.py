@@ -1521,7 +1521,7 @@ def prepare_and_launch_standard_job(
 
         meta = {
             "id": kernel_id,
-            "title": "EpicSync Standard Runner",
+            "title": kernel_id.split("/")[-1],
             "code_file": "run_epicsync.py",
             "language": "python",
             "kernel_type": "script",
@@ -1624,7 +1624,7 @@ def prepare_and_launch_premium_job(
 
         meta = {
             "id": kernel_id,
-            "title": "EpicSync Premium Runner",
+            "title": kernel_id.split("/")[-1],
             "code_file": "run_epicsync.py",
             "language": "python",
             "kernel_type": "script",
