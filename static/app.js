@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, addDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, onSnapshot, addDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -244,6 +244,15 @@ function loadProjects() {
                         ${data.youtubeConnectionId ? '✅ YT Connected' : '▶️ Connect YouTube'}
                     </button>
                 </div>
+                <div class="mt-4 form-group" style="background: var(--bg-card); padding: 10px; border-radius: 8px;">
+                    <label style="font-size: 0.8rem; margin-bottom: 5px;">Kaggle Username</label>
+                    <input type="text" class="kaggle-user-input" data-id="${docSnap.id}" value="${data.kaggleUsername || ''}" placeholder="e.g. gabrielnjoku" style="margin-bottom: 10px; padding: 0.5rem; width: 100%; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-base); color: white;">
+                    
+                    <label style="font-size: 0.8rem; margin-bottom: 5px;">Kaggle API Key</label>
+                    <input type="password" class="kaggle-key-input" data-id="${docSnap.id}" value="${data.kaggleKey || ''}" placeholder="Kaggle API Token..." style="margin-bottom: 10px; padding: 0.5rem; width: 100%; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-base); color: white;">
+                    
+                    <button class="btn-accent save-kaggle-btn" data-id="${docSnap.id}" style="font-size: 0.8rem; padding: 0.5rem;">Save Kaggle Settings</button>
+                </div>
             `;
             
             // Attach event listeners explicitly to avoid inline onclick CSP issues
@@ -255,6 +264,22 @@ function loadProjects() {
             
             div.querySelector('.connect-yt-btn').addEventListener('click', (e) => {
                 window.connectYouTube(e.target.getAttribute('data-id') || e.currentTarget.getAttribute('data-id'));
+            });
+            
+            div.querySelector('.save-kaggle-btn').addEventListener('click', async (e) => {
+                const id = e.target.getAttribute('data-id');
+                const user = div.querySelector('.kaggle-user-input').value.trim();
+                const key = div.querySelector('.kaggle-key-input').value.trim();
+                try {
+                    await updateDoc(doc(db, 'users', currentUser.uid, 'projects', id), {
+                        kaggleUsername: user,
+                        kaggleKey: key
+                    });
+                    alert("Kaggle settings saved for this project!");
+                } catch (err) {
+                    console.error("Error saving Kaggle settings:", err);
+                    alert("Failed to save settings.");
+                }
             });
             
             projectsList.appendChild(div);
@@ -453,6 +478,14 @@ createContentForm.addEventListener('submit', async (e) => {
             formData.append('video_model', document.getElementById('videoModelSelect').value);
             formData.append('target_duration', document.getElementById('targetDurationSelect').value);
             formData.append('aspect_ratio', aspectRatio);
+            
+            // Fetch Kaggle credentials for the project
+            const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
+            if (projDoc.exists()) {
+                const pData = projDoc.data();
+                if (pData.kaggleUsername) formData.append('kaggle_user', pData.kaggleUsername);
+                if (pData.kaggleKey) formData.append('kaggle_key', pData.kaggleKey);
+            }
             
             const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
                 method: 'POST',

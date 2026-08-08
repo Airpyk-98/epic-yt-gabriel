@@ -1695,7 +1695,13 @@ async def create_job(
         hf_repo = "epic-gab/EpicSync-Dataset"
         hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
     job_id = f"epicsync_{int(time.time())}"
-    kernel_id = f"{kaggle_user}/epicsync-standard-runner"
+    
+    # Isolate Execution per project by embedding projectId in the kernel slug
+    if projectId:
+        proj_slug = "".join([c for c in projectId if c.isalnum()]).lower()[:15]
+        kernel_id = f"{kaggle_user}/epicsync-std-{proj_slug}"
+    else:
+        kernel_id = f"{kaggle_user}/epicsync-standard-runner"
     
     staging = os.path.join(STAGING_DIR, job_id)
     os.makedirs(staging, exist_ok=True)
@@ -1723,6 +1729,8 @@ async def create_job(
         "script": script_text,
         "voice": voice,
         "slug": kernel_id,
+        "kaggle_user": kaggle_user,
+        "kaggle_key": kaggle_key,
         "uid": uid,
         "projectId": projectId,
         "created_at": time.time(),
@@ -1774,7 +1782,13 @@ async def create_premium_job(
         hf_repo = "epic-gab/EpicSync-Dataset"
         hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
     job_id = f"epicsync_premium_{int(time.time())}"
-    kernel_id = f"{kaggle_user}/epicsync-premium-runner"
+    
+    # Isolate Execution per project by embedding projectId in the kernel slug
+    if projectId:
+        proj_slug = "".join([c for c in projectId if c.isalnum()]).lower()[:15]
+        kernel_id = f"{kaggle_user}/epicsync-proj-{proj_slug}"
+    else:
+        kernel_id = f"{kaggle_user}/epicsync-premium-runner"
     
     staging = os.path.join(STAGING_DIR, job_id)
     os.makedirs(staging, exist_ok=True)
@@ -1807,6 +1821,8 @@ async def create_premium_job(
         "voice": voice,
         "aspect_ratio": aspect_ratio,
         "slug": kernel_id,
+        "kaggle_user": kaggle_user,
+        "kaggle_key": kaggle_key,
         "mode": "premium",
         "uid": uid,
         "projectId": projectId,
@@ -1851,8 +1867,10 @@ def cancel_job(
                 
         slug = jobs[job_id].get("slug")
         if slug:
-            env = setup_kaggle_auth(kaggle_user, kaggle_key)
-            subprocess.run(f"kaggle kernels cancel {slug}", shell=True, env=env)
+            j_user = jobs[job_id].get("kaggle_user", kaggle_user)
+            j_key = jobs[job_id].get("kaggle_key", kaggle_key)
+            env = setup_kaggle_auth(j_user, j_key)
+            subprocess.run(f"kaggle kernels delete {slug} -y", shell=True, env=env)
         
         jobs[job_id]["status"] = "CANCELLED"
         jobs[job_id]["progress"] = 0
