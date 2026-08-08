@@ -1007,7 +1007,7 @@ except Exception:
     pass
 
 def _flush_all_memory():
-    """Nuclear memory cleanup: Python GC + CUDA sync + CUDA cache + glibc malloc_trim"""
+    # Nuclear memory cleanup: Python GC + CUDA sync + CUDA cache + glibc malloc_trim
     gc.collect()
     gc.collect()
     torch.cuda.synchronize()
@@ -1016,7 +1016,7 @@ def _flush_all_memory():
         _libc.malloc_trim(0)
 
 def _get_ram_usage_pct():
-    """Read RAM usage directly from cgroup (most accurate on Kaggle)"""
+    # Read RAM usage directly from cgroup (most accurate on Kaggle)
     try:
         with open("/sys/fs/cgroup/memory/memory.usage_in_bytes") as f:
             usage = int(f.read().strip())
@@ -1781,12 +1781,16 @@ async def create_premium_job(
             f.write(await bg_music.read())
         
     jobs = load_jobs()
+    job_title = f"✨ AptAvatar (14B) Job {time.strftime('%H:%M:%S')}" if video_model == "aptavatar" else f"✨ Premium LTX-2.3 Job {time.strftime('%H:%M:%S')}"
+    job_step_text = f"Packaging input & provisioning AptAvatar engine..." if video_model == "aptavatar" else f"Packaging {aspect_ratio} portrait image & provisioning LTX-2.3 3D compute engine..."
+    job_log_text = f"[{time.strftime('%H:%M:%S')}] AptAvatar Job initialized." if video_model == "aptavatar" else f"[{time.strftime('%H:%M:%S')}] Premium LTX-2.3 Job initialized with {aspect_ratio} aspect ratio."
+    
     jobs[job_id] = {
         "id": job_id,
-        "title": f"✨ Premium LTX-2.3 Job {time.strftime('%H:%M:%S')}",
+        "title": job_title,
         "status": "STAGING",
         "progress": 15,
-        "step_text": f"Packaging {aspect_ratio} portrait image & provisioning LTX-2.3 3D compute engine...",
+        "step_text": job_step_text,
         "script": script_text,
         "voice": voice,
         "aspect_ratio": aspect_ratio,
@@ -1795,7 +1799,7 @@ async def create_premium_job(
         "uid": uid,
         "projectId": projectId,
         "created_at": time.time(),
-        "logs": [f"[{time.strftime('%H:%M:%S')}] Premium LTX-2.3 Job initialized with {aspect_ratio} aspect ratio."]
+        "logs": [job_log_text]
     }
     save_jobs(jobs)
     
