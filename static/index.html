@@ -137,6 +137,8 @@
                 manualSec.style.display = 'none';
                 window.currentPromptMode = 'ai';
                 videoTitles.setAttribute('required', 'true');
+                document.getElementById('targetDurationGroup').style.display = 'block';
+                document.getElementById('previewScriptGroup').style.display = 'flex';
             } else {
                 btns[1].classList.add('active');
                 btns[1].style.background = 'rgba(255,255,255,0.1)';
@@ -152,6 +154,8 @@
                 manualSec.style.display = 'block';
                 window.currentPromptMode = 'manual';
                 videoTitles.removeAttribute('required');
+                document.getElementById('targetDurationGroup').style.display = 'none';
+                document.getElementById('previewScriptGroup').style.display = 'none';
             }
         }
         window.currentPromptMode = 'ai';
@@ -178,7 +182,7 @@
                                 <option value="1:1">1:1 (Square Instagram)</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" id="targetDurationGroup">
                             <label>Target Video Duration</label>
                             <select id="targetDurationSelect">
                                 <option value="30 seconds">~30 Seconds (Shorts)</option>
@@ -223,7 +227,7 @@
                             <input type="datetime-local" id="ytSchedule" style="width: 100%; padding: 0.8rem; background: var(--bg-card); border: 1px solid var(--border-color); color: #fff; border-radius: 8px;">
                         </div>
 
-                        <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class="form-group toggle-group mt-4" id="previewScriptGroup" style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <label for="previewScriptToggle" style="margin-bottom: 0;">Preview script before generation</label>
                                 <small class="text-muted" style="display: block; font-size: 0.75rem;">Only available for a single title</small>
@@ -299,6 +303,14 @@
                         <div class="form-group">
                             <label>ElevenLabs API Key (For Custom Voices)</label>
                             <input type="password" id="elevenLabsKey" placeholder="eleven-...">
+                        </div>
+                        <div class="form-group">
+                            <label>Kaggle Username</label>
+                            <input type="text" id="kaggleUsername" placeholder="e.g. gabrielnjoku">
+                        </div>
+                        <div class="form-group">
+                            <label>Kaggle API Key</label>
+                            <input type="password" id="kaggleKey" placeholder="e.g. KGAT_...">
                         </div>
                         <div class="form-group">
                             <label>System Prompt (Writing Style)</label>

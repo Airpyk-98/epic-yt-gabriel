@@ -442,7 +442,7 @@ createContentForm.addEventListener('submit', async (e) => {
             }
 
             // 2. Handle Preview Mode vs Automatic Mode
-            if (isPreviewOn) {
+            if (isPreviewOn && window.currentPromptMode !== 'manual') {
                 statusEl.innerText = 'Waiting for User Approval...';
                 generatedScriptText.value = scriptText;
                 scriptResultArea.style.display = 'block';
@@ -632,7 +632,19 @@ window.cancelJob = async function(jobId) {
         formData.append('kaggle_user', 'gabrielnjoku');
         formData.append('kaggle_key', 'KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e');
         if (currentUser) formData.append('uid', currentUser.uid);
-        if (currentProject) formData.append('projectId', currentProject);
+        if (currentProject) {
+            formData.append('projectId', currentProject);
+            try {
+                const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
+                if (projDoc.exists()) {
+                    const pData = projDoc.data();
+                    if (pData.kaggleUsername) formData.set('kaggle_user', pData.kaggleUsername);
+                    if (pData.kaggleKey) formData.set('kaggle_key', pData.kaggleKey);
+                }
+            } catch (e) {
+                console.warn('Could not fetch project credentials for cancel', e);
+            }
+        }
         
         const res = await fetch(`${BACKEND_URL}/api/cancel/${jobId}`, {
             method: 'POST',

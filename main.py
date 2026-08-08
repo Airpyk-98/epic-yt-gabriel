@@ -1865,6 +1865,10 @@ def cancel_job(
 ):
     try:
         jobs = load_jobs()
+        slug = None
+        j_user = kaggle_user
+        j_key = kaggle_key
+        
         if job_id not in jobs:
             # If backend restarted and lost the job locally, force update Firebase if we have uid and projectId
             if uid and projectId:
@@ -1873,16 +1877,25 @@ def cancel_job(
                     "step_text": "Task cancelled by user (force).",
                     "progress": 0
                 })
-                return {"status": "CANCELLED", "note": "Forced via Firebase"}
+                # Attempt to kill predictable slugs (both premium and standard)
+                proj_slug = "".join([c for c in projectId if c.isalnum()]).lower()[:15]
+                env = setup_kaggle_auth(j_user, j_key)
+                subprocess.run(f"kaggle kernels delete {j_user}/epicsync-proj-{proj_slug} -y", shell=True, env=env)
+                subprocess.run(f"kaggle kernels delete {j_user}/epicsync-std-{proj_slug} -y", shell=True, env=env)
+                return {"status": "CANCELLED", "note": "Forced via Firebase and predictable slug"}
             else:
                 raise HTTPException(status_code=404, detail="Job not found locally and no Firebase context provided")
-                
-        slug = jobs[job_id].get("slug")
-        if slug:
+        else:
+            slug = jobs[job_id].get("slug")
             j_user = jobs[job_id].get("kaggle_user", kaggle_user)
             j_key = jobs[job_id].get("kaggle_key", kaggle_key)
+            
+        if slug:
             env = setup_kaggle_auth(j_user, j_key)
             subprocess.run(f"kaggle kernels delete {slug} -y", shell=True, env=env)
+            
+        if job_id not in jobs:
+            return {"status": "CANCELLED", "note": "Forced via Firebase and predictable slug"}
         
         jobs[job_id]["status"] = "CANCELLED"
         jobs[job_id]["progress"] = 0
