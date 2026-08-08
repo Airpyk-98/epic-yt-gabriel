@@ -1696,7 +1696,7 @@ async def create_job(
         hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
     job_id = f"epicsync_{int(time.time())}"
     
-    kaggle_user = kaggle_user.lower()
+    kaggle_user = "".join([c for c in kaggle_user if c.isalnum() or c in "_-"]).lower()
     
     # Isolate Execution per project by embedding projectId in the kernel slug
     if projectId:
@@ -1785,7 +1785,7 @@ async def create_premium_job(
         hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
     job_id = f"epicsync_premium_{int(time.time())}"
     
-    kaggle_user = kaggle_user.lower()
+    kaggle_user = "".join([c for c in kaggle_user if c.isalnum() or c in "_-"]).lower()
     
     # Isolate Execution per project by embedding projectId in the kernel slug
     if projectId:
