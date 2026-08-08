@@ -235,7 +235,9 @@ print()
 # ========== 3. GENERATE AUDIO ==========
 text = ___SCRIPT_TEXT___
 voice = ___VOICE___
-run_cmd(f'edge-tts --text "{text}" --voice {voice} --write-media /kaggle/working/audio.wav')
+with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
+    f.write(text)
+run_cmd(f'edge-tts -f /kaggle/working/tts_script.txt --voice "{voice}" --write-media /kaggle/working/audio.wav')
 audio_path = "/kaggle/working/audio.wav"
 
 # ========== 4. APPLY ALL COMPATIBILITY PATCHES ==========
@@ -651,7 +653,9 @@ run_cmd("pip install -q edge-tts soundfile pillow psutil")
 script_text = ___SCRIPT_TEXT___
 voice = ___VOICE___
 print(f"Generating studio voiceover with voice: {voice}...", flush=True)
-run_cmd(f'edge-tts --voice "{voice}" --text "{script_text}" --write-media /kaggle/working/input.wav')
+with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
+    f.write(script_text)
+run_cmd(f'edge-tts --voice "{voice}" -f /kaggle/working/tts_script.txt --write-media /kaggle/working/input.wav')
 
 # 3. INSTALL COMPATIBLE PYTORCH & WAN2GP
 print("Installing PyTorch 2.3.1 (CUDA 12.1 compatible)...", flush=True)
@@ -848,7 +852,7 @@ if _IS_SM60:
 offload.profile(
     pipe,
     profile_no=4,
-    quantizeTransformer=True,
+    quantizeTransformer=False,
     convertWeightsFloatTo=torch.float16,
     budgets={
         "transformer": 5000,
