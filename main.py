@@ -651,7 +651,9 @@ run_cmd("ln -s /tmp/models/chinese-wav2vec2-base /kaggle/working/AptAvatar/model
 
 # 8. INFERENCE (2-Step NFE)
 print("Starting 2-Step NFE Generation...", flush=True)
-run_cmd("python generate_video.py --image_path /kaggle/working/input.png --audio_path /kaggle/working/input.wav --prompt_path /kaggle/working/action_prompt.txt --output_path /kaggle/working/raw_aptavatar.mp4")
+with open("/kaggle/working/run_gen.py", "w") as f:
+    f.write("import subprocess\\nprompt=open('/kaggle/working/action_prompt.txt').read()\\nsubprocess.run(['python', 'generate_video.py', '--cond_image', '/kaggle/working/input.png', '--audio_path', '/kaggle/working/input.wav', '--input_prompt', prompt, '--save_file', '/kaggle/working/raw_aptavatar.mp4', '--cpu_offload'], check=True)")
+run_cmd("python /kaggle/working/run_gen.py")
 
 # 9. DOWNSCALE/UPSCALE & UPLOAD
 resolution = ___RESOLUTION___
