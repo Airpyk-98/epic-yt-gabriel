@@ -376,13 +376,19 @@ createContentForm.addEventListener('submit', async (e) => {
         let scriptText = '';
         try {
             statusEl.innerText = 'Generating Script...';
+            const videoModel = document.getElementById('videoModelSelect').value;
+            const targetDuration = document.getElementById('targetDurationSelect').value;
             const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ titles: title })
+                body: JSON.stringify({ 
+                    titles: title,
+                    video_model: videoModel,
+                    target_duration: targetDuration
+                })
             });
             const data = await res.json();
             if (res.ok) {
@@ -432,6 +438,8 @@ createContentForm.addEventListener('submit', async (e) => {
             formData.append('video', mediaFile);
             formData.append('projectId', currentProject);
             formData.append('resolution', document.getElementById('resolutionSelect').value);
+            formData.append('video_model', document.getElementById('videoModelSelect').value);
+            formData.append('target_duration', document.getElementById('targetDurationSelect').value);
             
             const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
                 method: 'POST',

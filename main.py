@@ -561,6 +561,98 @@ if os.path.exists(current_video_path):
 run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/input.mp4 /kaggle/working/result_speed_adjusted.mp4")
 """
 
+APTAVATAR_KERNEL_TEMPLATE = """import os
+import sys
+import time
+import base64
+from huggingface_hub import HfApi
+
+def run_cmd(cmd):
+    print(f"Executing: {cmd}", flush=True)
+    res = os.system(cmd)
+    if res != 0:
+        print(f"Command failed with code {res}", flush=True)
+
+print("=== STARTING APTAVATAR (14B) PIPELINE ===", flush=True)
+
+# 1. SETUP SWAP (For 14B Model memory buffering on T4)
+print("Attempting to allocate 8GB swapfile to prevent OOM...", flush=True)
+os.system("fallocate -l 8G /swapfile")
+os.system("chmod 600 /swapfile")
+os.system("mkswap /swapfile")
+os.system("swapon /swapfile")
+
+# 2. HF AUTH & ENV
+hf_token = ___HF_TOKEN___
+os.environ["HF_TOKEN"] = hf_token
+
+# 3. INSTALL DEPENDENCIES
+run_cmd("pip install -q huggingface_hub edge-tts soundfile ffmpeg-python")
+run_cmd("pip install ninja")
+run_cmd("pip install flash_attn==2.8.0.post2 --no-build-isolation")
+
+# 4. GENERATE AUDIO VOICEOVER VIA TTS
+script_text = ___SCRIPT_TEXT___
+voice = ___VOICE___
+print(f"Generating studio voiceover with voice: {voice}...", flush=True)
+with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
+    f.write(script_text)
+run_cmd(f'edge-tts --voice "{voice}" -f /kaggle/working/tts_script.txt --write-media /kaggle/working/input.wav')
+
+# 5. DECODE INPUT IMAGE
+ib64 = ___IMAGE_B64___
+if ib64:
+    with open("/kaggle/working/input.png", "wb") as f:
+        f.write(base64.b64decode(ib64))
+else:
+    # Fetch from HF if not embedded
+    job_id = ___JOB_ID___
+    hf_repo = ___HF_REPO___
+    run_cmd(f"huggingface-cli download {hf_repo} inputs/{job_id}.png --local-dir /kaggle/working --repo-type dataset")
+    run_cmd(f"mv /kaggle/working/inputs/{job_id}.png /kaggle/working/input.png")
+
+# 6. WRITE STRUCTURED ACTION PROMPT
+structured_prompt = ___APTAVATAR_PROMPT___
+with open("/kaggle/working/action_prompt.txt", "w", encoding="utf-8") as f:
+    f.write(structured_prompt)
+
+# 7. CLONE REPO & FETCH WEIGHTS
+run_cmd("git clone https://github.com/TaoLiveAIGC/AptAvatar.git /kaggle/working/AptAvatar")
+os.chdir("/kaggle/working/AptAvatar")
+run_cmd("pip install -r requirements.txt")
+
+# Download 14B Weights and Audio Encoder
+run_cmd("huggingface-cli download TaoLiveAIGC/AptAvatar --local-dir ./models/AptAvatar")
+run_cmd("huggingface-cli download TencentGameMate/chinese-wav2vec2-base --local-dir ./models/chinese-wav2vec2-base")
+
+# 8. INFERENCE (2-Step NFE)
+print("Starting 2-Step NFE Generation...", flush=True)
+run_cmd("python generate_video.py --image_path /kaggle/working/input.png --audio_path /kaggle/working/input.wav --prompt_path /kaggle/working/action_prompt.txt --output_path /kaggle/working/raw_aptavatar.mp4")
+
+# 9. DOWNSCALE/UPSCALE & UPLOAD
+resolution = ___RESOLUTION___
+os.chdir("/kaggle/working")
+if resolution == "480p":
+    run_cmd('ffmpeg -y -i /kaggle/working/AptAvatar/raw_aptavatar.mp4 -vf scale=480:-2 -c:v libx264 -preset fast -crf 23 -c:a aac /kaggle/working/result.mp4')
+elif resolution == "960p":
+    run_cmd('ffmpeg -y -i /kaggle/working/AptAvatar/raw_aptavatar.mp4 -vf scale=960:-2 -c:v libx264 -preset fast -crf 23 -c:a aac /kaggle/working/result.mp4')
+else:
+    run_cmd('mv /kaggle/working/AptAvatar/raw_aptavatar.mp4 /kaggle/working/result.mp4')
+
+print("Uploading to Hugging Face dataset...", flush=True)
+try:
+    api = HfApi(token=hf_token)
+    api.upload_file(
+        path_or_fileobj="/kaggle/working/result.mp4",
+        path_in_repo=f"outputs/___JOB_ID___.mp4",
+        repo_id=___HF_REPO___,
+        repo_type="dataset"
+    )
+    print("SUCCESS: Uploaded to HF Hub!")
+except Exception as e:
+    print(f"Failed to upload to HF Hub: {e}", flush=True)
+"""
+
 PREMIUM_KERNEL_TEMPLATE = """import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,garbage_collection_threshold:0.6"
 os.environ["MALLOC_ARENA_MAX"] = "2"
@@ -1462,13 +1554,15 @@ def prepare_and_launch_premium_job(
     script_text: str,
     voice: str,
     aspect_ratio: str,
+    resolution: str,
     add_captions: str,
     video_speed: str,
     kaggle_user: str,
     kaggle_key: str,
     hf_repo: str,
     hf_token: str,
-    kernel_id: str
+    kernel_id: str,
+    video_model: str
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
@@ -1493,7 +1587,21 @@ def prepare_and_launch_premium_job(
             append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {hf_repo}...")
             upload_to_hf_hub(image_path, hf_repo, f"inputs/{job_id}.png", hf_token)
 
-        script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+        # Handle AptAvatar split logic
+        apt_prompt = ""
+        spoken_script = script_text
+        if video_model == "aptavatar":
+            import re
+            apt_match = re.search(r"<APTAVATAR_PROMPT>(.*?)</APTAVATAR_PROMPT>", script_text, re.DOTALL | re.IGNORECASE)
+            if apt_match:
+                apt_prompt = apt_match.group(1).strip()
+                spoken_script = script_text.replace(apt_match.group(0), "").strip()
+
+        if video_model == "aptavatar":
+            script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt))
+        else:
+            script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+            
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
@@ -1634,6 +1742,8 @@ async def create_premium_job(
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
     hf_repo: str = Form("epic-gab/EpicSync-Dataset"),
     hf_token: str = Form(""),
+    video_model: str = Form("ltx-video"),
+    target_duration: str = Form("60 seconds"),
     image: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
 ):
@@ -1691,8 +1801,8 @@ async def create_premium_job(
     
     background_tasks.add_task(
         prepare_and_launch_premium_job,
-        job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id
+        job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(video_speed),
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -1823,6 +1933,8 @@ async def proxy_models(url: str, key: str):
 class ScriptGenRequest(BaseModel):
     titles: str
     niche: str = "general"
+    video_model: Optional[str] = "ltx-video"
+    target_duration: Optional[str] = "60 seconds"
 
 @app.post("/api/generate-script")
 def generate_script(req: ScriptGenRequest, request: Request):
@@ -1852,6 +1964,14 @@ def generate_script(req: ScriptGenRequest, request: Request):
         
     tts_enforcement = "\n\nCRITICAL FORMAT INSTRUCTION: You are generating a script for a TTS (Text-to-Speech) engine. Your ENTIRE OUTPUT must be the EXACT spoken text only. Do NOT include markdown formatting, bold text (**), italics, headers, or lists. Do NOT include stage directions, visual cues, or brackets like [HOOK] or [BODY]. Output ONLY the raw plaintext words that the voice actor should read. Do not include 'Script:' or 'Narrator:' prefixes."
     
+    duration_enforcement = f"\n\nTARGET DURATION: The user has requested this video to be roughly {req.target_duration} long. Calibrate your word count accordingly (average speaking rate is 150 words per minute). For example, 30 seconds = ~75 words, 60 seconds = ~150 words."
+    
+    aptavatar_enforcement = ""
+    if req.video_model == "aptavatar":
+        aptavatar_enforcement = "\n\nCRITICAL APTAVATAR FORMAT: The user is using the AptAvatar model. In addition to the spoken script, you MUST append a structured action prompt for the avatar at the very end of your response, separated by a blank line. Format it EXACTLY like this: \n\n<APTAVATAR_PROMPT>\n步骤1：*帧 0~30* talking naturally\n步骤2：*帧 30~90* gesturing with hands\n</APTAVATAR_PROMPT>\nAdjust the frame numbers (24 fps) to match the length of your script. Keep the action descriptions in English."
+
+    final_sys_prompt = sys_prompt + tts_enforcement + duration_enforcement + aptavatar_enforcement
+    
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -1859,7 +1979,7 @@ def generate_script(req: ScriptGenRequest, request: Request):
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": sys_prompt + tts_enforcement},
+            {"role": "system", "content": final_sys_prompt},
             {"role": "user", "content": f"Write a script for the following titles: {req.titles}"}
         ]
     }
@@ -1871,6 +1991,9 @@ def generate_script(req: ScriptGenRequest, request: Request):
         raw_script = data['choices'][0]['message']['content']
         
         import re
+        apt_match = re.search(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", raw_script, re.DOTALL | re.IGNORECASE)
+        apt_prompt = apt_match.group(0) if apt_match else ""
+
         match = re.search(r"<SCRIPT>(.*?)</SCRIPT>", raw_script, re.DOTALL | re.IGNORECASE)
         if match:
             script = match.group(1).strip()
@@ -1883,7 +2006,13 @@ def generate_script(req: ScriptGenRequest, request: Request):
             # Remove "Narrator: " or "Script: " prefixes
             script = re.sub(r'^(Narrator|Script|Audio|Voiceover):?\s*', '', script, flags=re.IGNORECASE | re.MULTILINE)
             
+            # Remove the APTAVATAR_PROMPT from the fallback script to avoid duplication
+            script = re.sub(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", "", script, flags=re.DOTALL | re.IGNORECASE)
+            
             script = script.strip()
+            
+        if apt_prompt:
+            script = script + "\n\n" + apt_prompt
             
         return {"script": script}
     except Exception as e:
