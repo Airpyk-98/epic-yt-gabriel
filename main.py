@@ -638,12 +638,16 @@ with open("/kaggle/working/action_prompt.txt", "w", encoding="utf-8") as f:
 run_cmd("git clone https://github.com/TaoLiveAIGC/AptAvatar.git /kaggle/working/AptAvatar")
 os.chdir("/kaggle/working/AptAvatar")
 run_cmd("sed -i '/torch/d' requirements.txt")
+run_cmd("sed -i '/xformers/d' requirements.txt")
 run_cmd("pip install -r requirements.txt")
 
-# Download 14B Weights and Audio Encoder
+# Download 14B Weights and Audio Encoder into /tmp which has 73GB free space, then symlink it
 with open('/kaggle/working/download_models.py', 'w') as f:
-    f.write("from huggingface_hub import snapshot_download\\nsnapshot_download(repo_id='TaoLiveAIGC/AptAvatar', local_dir='./models/AptAvatar')\\nsnapshot_download(repo_id='TencentGameMate/chinese-wav2vec2-base', local_dir='./models/chinese-wav2vec2-base')")
+    f.write("import os\\nos.environ['HF_HOME'] = '/tmp/.cache/huggingface'\\nfrom huggingface_hub import snapshot_download\\nsnapshot_download(repo_id='TaoLiveAIGC/AptAvatar', local_dir='/tmp/models/AptAvatar')\\nsnapshot_download(repo_id='TencentGameMate/chinese-wav2vec2-base', local_dir='/tmp/models/chinese-wav2vec2-base')")
 run_cmd("python /kaggle/working/download_models.py")
+run_cmd("mkdir -p /kaggle/working/AptAvatar/models")
+run_cmd("ln -s /tmp/models/AptAvatar /kaggle/working/AptAvatar/models/AptAvatar")
+run_cmd("ln -s /tmp/models/chinese-wav2vec2-base /kaggle/working/AptAvatar/models/chinese-wav2vec2-base")
 
 # 8. INFERENCE (2-Step NFE)
 print("Starting 2-Step NFE Generation...", flush=True)
@@ -858,6 +862,12 @@ for gf in gemma_files:
 
 # 5. EXECUTE LTX-2.3 SMART CHUNKING GENERATION SCRIPT
 ltx_script = '''import os, sys, gc, psutil, json, glob, time
+os.environ["HF_HOME"] = "/tmp/.cache/huggingface"
+os.makedirs("/tmp/Wan2GP/models", exist_ok=True)
+os.makedirs("Wan2GP", exist_ok=True)
+if not os.path.lexists("Wan2GP/models"):
+    os.symlink("/tmp/Wan2GP/models", "Wan2GP/models")
+
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128,garbage_collection_threshold:0.5"
 import numpy as np
 import soundfile as sf
@@ -1114,7 +1124,7 @@ for idx in range(num_chunks):
             from shared.utils.audio_video import save_video
             out_path = f"/kaggle/working/chunk_{idx}.mp4"
             # Pass directly to save_video with nrow=1 to avoid full-tensor make_grid copies
-            save_video(tensor=video_tensor.unsqueeze(0), save_file=out_path, fps=24.0, nrow=1, normalize=True, value_range=(-1, 1))
+            save_video(tensor=video_tensor.float(), save_file=out_path, fps=24.0, nrow=1, normalize=True, value_range=(-1, 1))
             chunk_video_files.append(out_path)
             del video_tensor
         
@@ -1140,11 +1150,11 @@ elif len(chunk_video_files) > 1:
     with open("/kaggle/working/concat_list.txt", "w") as f:
         for fpath in chunk_video_files:
             f.write("file '" + str(fpath) + "'" + chr(10))
-    os.system("ffmpeg -y -f concat -safe 0 -i /kaggle/working/concat_list.txt -c copy /kaggle/working/result_retalking_silent.mp4")
+    os.system("ffmpeg -y -f concat -safe 0 -i /kaggle/working/concat_list.txt -pix_fmt yuv420p -c:v copy /kaggle/working/result_retalking_silent.mp4")
 
 if os.path.exists("/kaggle/working/result_retalking_silent.mp4"):
     print("Muxing studio voiceover audio onto final video...", flush=True)
-    os.system("ffmpeg -y -i /kaggle/working/result_retalking_silent.mp4 -i /kaggle/working/input.wav -c:v copy -c:a aac -b:a 192k -shortest /kaggle/working/result_retalking.mp4")
+    os.system("ffmpeg -y -i /kaggle/working/result_retalking_silent.mp4 -i /kaggle/working/input.wav -c:v copy -c:a aac -b:a 192k -pix_fmt yuv420p -shortest /kaggle/working/result_retalking.mp4")
 
 # Resolution scaling
 output_resolution = "___RESOLUTION___"
@@ -1158,7 +1168,7 @@ if output_resolution != "960p" and os.path.exists("/kaggle/working/result_retalk
     scale_val = RESOLUTION_MAP.get(output_resolution, {}).get(aspect_ratio_mode, None)
     if scale_val:
         print(f"Scaling final video to {output_resolution} ({scale_val})...", flush=True)
-        os.system(f"ffmpeg -y -i /kaggle/working/result_retalking.mp4 -vf scale={scale_val} -c:v libx264 -preset fast -crf 18 -c:a copy /kaggle/working/result_scaled.mp4")
+        os.system(f"ffmpeg -y -i /kaggle/working/result_retalking.mp4 -vf scale={scale_val} -c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -c:a copy /kaggle/working/result_scaled.mp4")
         if os.path.exists("/kaggle/working/result_scaled.mp4") and os.path.getsize("/kaggle/working/result_scaled.mp4") > 0:
             os.replace("/kaggle/working/result_scaled.mp4", "/kaggle/working/result_retalking.mp4")
             print(f"Scaled to {output_resolution} successfully.", flush=True)
