@@ -600,7 +600,7 @@ job_id = ___JOB_ID___
 script_text = ___SCRIPT_TEXT___
 voice = ___VOICE___
 segments_json = ___PEXELS_SEGMENTS_JSON___
-PEXELS_API_KEY = "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K"
+PEXELS_API_KEY = ___PEXELS_API_KEY___
 
 # 1. SETUP AUDIO AND CAPTURE WORD TIMINGS
 run_cmd("pip install -q edge-tts moviepy")
@@ -629,31 +629,56 @@ print(f"Captured {len(word_timings)} word timings.", flush=True)
 # 2. MATCH SEGMENTS TO AUDIO TIMINGS
 try:
     segments = json.loads(segments_json)
+    if not segments: raise ValueError("Empty segments")
 except Exception as e:
-    print(f"Failed to parse segments JSON: {e}. Falling back to default split.", flush=True)
-    segments = [{"text": script_text, "keyword": "cinematic"}]
+    print(f"Failed to parse segments JSON: {e}. Falling back to heuristic split.", flush=True)
+    import re
+    sentences = re.split(r'(?<=[.!?]) +', script_text)
+    segments = []
+    for s in sentences:
+        if not s.strip(): continue
+        words = [w for w in s.replace(",", "").replace(".", "").split() if len(w) > 4]
+        kw = words[0] if words else "cinematic"
+        segments.append({"text": s, "keyword": kw})
+    if not segments:
+        segments = [{"text": script_text, "keyword": "cinematic"}]
 
 print("Calculating precise segment durations...", flush=True)
-current_word_idx = 0
-for i, seg in enumerate(segments):
-    seg_words = seg['text'].split()
-    if not seg_words or current_word_idx >= len(word_timings):
-        seg['start'] = word_timings[-1]['end'] if word_timings else 0
-        seg['end'] = word_timings[-1]['end'] if word_timings else 0
-        seg['duration'] = 0.1
-        continue
+from moviepy.editor import AudioFileClip
+audio_clip = AudioFileClip("/kaggle/working/input.wav")
+total_dur = audio_clip.duration
+
+if not word_timings:
+    print("WARNING: Edge-TTS emitted no WordBoundary events. Using proportional duration fallback.", flush=True)
+    total_words = sum(len(seg['text'].split()) for seg in segments)
+    current_time = 0
+    for seg in segments:
+        seg_dur = (len(seg['text'].split()) / max(total_words, 1)) * total_dur
+        seg['start'] = current_time
+        seg['end'] = current_time + seg_dur
+        seg['duration'] = max(0.5, seg_dur)
+        current_time += seg_dur
+else:
+    current_word_idx = 0
+    for i, seg in enumerate(segments):
+        seg_words = seg['text'].split()
+        if not seg_words or current_word_idx >= len(word_timings):
+            seg['start'] = word_timings[-1]['end'] if word_timings else 0
+            seg['end'] = word_timings[-1]['end'] if word_timings else 0
+            seg['duration'] = 0.1
+            continue
+            
+        start_time = word_timings[current_word_idx]['start']
+        end_word_idx = min(current_word_idx + len(seg_words) - 1, len(word_timings) - 1)
+        end_time = word_timings[end_word_idx]['end']
         
-    start_time = word_timings[current_word_idx]['start']
-    end_word_idx = min(current_word_idx + len(seg_words) - 1, len(word_timings) - 1)
-    end_time = word_timings[end_word_idx]['end']
-    
-    if i == len(segments) - 1:
-        end_time = word_timings[-1]['end']
-        
-    seg['start'] = start_time
-    seg['end'] = end_time
-    seg['duration'] = max(0.5, end_time - start_time)
-    current_word_idx = end_word_idx + 1
+        if i == len(segments) - 1:
+            end_time = word_timings[-1]['end']
+            
+        seg['start'] = start_time
+        seg['end'] = end_time
+        seg['duration'] = max(0.5, end_time - start_time)
+        current_word_idx = end_word_idx + 1
 
 # 3. FETCH PEXELS VIDEOS
 print("Fetching B-Roll from Pexels API...", flush=True)
@@ -1899,7 +1924,9 @@ def prepare_and_launch_premium_job(
         if video_model == "aptavatar":
             script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
         elif video_model == "pexels":
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json))
+            import os
+            pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K")
+            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key))
         else:
             script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
             
