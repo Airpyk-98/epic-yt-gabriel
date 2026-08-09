@@ -817,8 +817,8 @@ try:
     print("SUCCESS: Uploaded to HF Hub!")
 except Exception as e:
     print(f"Failed to upload to HF Hub: {e}", flush=True)
-"""
-\n\nAPTAVATAR_KERNEL_TEMPLATE = """import os
+
+APTAVATAR_KERNEL_TEMPLATE = """import os
 import sys
 import time
 import base64
