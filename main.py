@@ -1879,7 +1879,8 @@ def prepare_and_launch_premium_job(
     hf_repo: str,
     hf_token: str,
     kernel_id: str,
-    video_model: str
+    video_model: str,
+    uid: str = None
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
@@ -1916,15 +1917,63 @@ def prepare_and_launch_premium_job(
                 spoken_script = script_text.replace(apt_match.group(0), "").strip()
         elif video_model == "pexels":
             import re
+            import requests
             pexels_match = re.search(r"<PEXELS_SEGMENTS>(.*?)</PEXELS_SEGMENTS>", script_text, re.DOTALL | re.IGNORECASE)
             if pexels_match:
                 pexels_segments_json = pexels_match.group(1).strip()
                 spoken_script = script_text.replace(pexels_match.group(0), "").strip()
+            else:
+                # Fallback: Call AI to generate PEXELS_SEGMENTS
+                append_log(job_id, "No PEXELS_SEGMENTS found in manual script. Querying AI for cinematic segments...")
+                try:
+                    if uid:
+                        user_doc = db.collection('users').document(uid).get()
+                        if user_doc.exists:
+                            user_data = user_doc.to_dict()
+                            base_url = user_data.get("aiBaseUrl")
+                            api_key = user_data.get("aiApiKey")
+                            model = user_data.get("aiModel")
+                            
+                            if base_url and api_key and model:
+                                sys_prompt = "You are an expert video director. Your job is to break down the user's raw script into high-retention video segments."
+                                fallback_prompt = (
+                                    "Break this script down into segments. For each sentence, provide a highly descriptive cinematic keyword for stock footage search.\n\n"
+                                    "Script:\n" + script_text + "\n\n"
+                                    "CRITICAL REQUIREMENT: Output EXACTLY a JSON array wrapped in <PEXELS_SEGMENTS>...</PEXELS_SEGMENTS> tags. Each object must have 'text' (the exact sentence) and 'keyword' (a short 1-3 word stock footage search term like 'neon city' or 'happy man'). DO NOT OUTPUT ANYTHING ELSE. NO INTRODUCTIONS. JUST THE TAGS AND JSON."
+                                )
+                                headers = {
+                                    "Authorization": f"Bearer {api_key}",
+                                    "Content-Type": "application/json"
+                                }
+                                payload = {
+                                    "model": model,
+                                    "messages": [
+                                        {"role": "system", "content": sys_prompt},
+                                        {"role": "user", "content": fallback_prompt}
+                                    ],
+                                    "temperature": 0.7
+                                }
+                                resp = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=20)
+                                resp.raise_for_status()
+                                data = resp.json()
+                                raw_ai = data['choices'][0]['message']['content']
+                                ai_match = re.search(r"<PEXELS_SEGMENTS>(.*?)</PEXELS_SEGMENTS>", raw_ai, re.DOTALL | re.IGNORECASE)
+                                if ai_match:
+                                    pexels_segments_json = ai_match.group(1).strip()
+                                    append_log(job_id, "AI successfully generated script segments.")
+                                else:
+                                    append_log(job_id, "AI failed to return correct segment tags. Falling back to heuristic.")
+                            else:
+                                append_log(job_id, "Incomplete AI settings in Firestore. Using heuristic fallback.")
+                    else:
+                        append_log(job_id, "User not authenticated. Using heuristic fallback.")
+                except Exception as e:
+                    append_log(job_id, f"AI segment generation failed: {str(e)}. Using heuristic fallback.")
 
         if video_model == "aptavatar":
             script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
         elif video_model == "pexels":
-            pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K")
+            pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K").strip().strip('"').strip("'")
             script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key))
         else:
             script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
@@ -2163,7 +2212,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, uid
     )
         
     return {"job_id": job_id, "status": "STAGING"}
