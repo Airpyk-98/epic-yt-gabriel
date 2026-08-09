@@ -39,13 +39,17 @@ t5_file = '/kaggle/working/AptAvatar/AptAvatar/wan/modules/t5.py'
 if os.path.exists(t5_file):
     with open(t5_file, 'r') as f:
         code = f.read()
-    code = code.replace(
-        'with torch.device(device):',
-        'torch.set_default_dtype(dtype)\n        with torch.device(device):'
+    code = re.sub(
+        r"^(\s*)with torch\.device\(device\):",
+        r"\1torch.set_default_dtype(dtype)\n\1with torch.device(device):",
+        code,
+        flags=re.MULTILINE
     )
-    code = code.replace(
-        'model = model_cls(**kwargs)',
-        'model = model_cls(**kwargs)\n        torch.set_default_dtype(torch.float32)'
+    code = re.sub(
+        r"^(\s*)model = model_cls\(\*\*kwargs\)",
+        r"\1model = model_cls(**kwargs)\n\1torch.set_default_dtype(torch.float32)",
+        code,
+        flags=re.MULTILINE
     )
     with open(t5_file, 'w') as f:
         f.write(code)
