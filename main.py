@@ -637,7 +637,9 @@ with open("/kaggle/working/action_prompt.txt", "w", encoding="utf-8") as f:
 # 7. CLONE REPO & FETCH WEIGHTS
 run_cmd("git clone https://github.com/TaoLiveAIGC/AptAvatar.git /kaggle/working/AptAvatar")
 os.chdir("/kaggle/working/AptAvatar")
-run_cmd("pip install -q easydict loguru imageio-ffmpeg ftfy optimum-quanto decord pyloudnorm librosa")
+run_cmd("sed -i '/torch/d' requirements.txt")
+run_cmd("sed -i 's/xformers==.*/xformers/g' requirements.txt")
+run_cmd("pip install -q -r requirements.txt")
 run_cmd("pip install -q --no-deps xfuser yunchang distvae")
 
 # Download 14B Weights and Audio Encoder into /tmp which has 73GB free space, then symlink it
@@ -650,9 +652,92 @@ run_cmd("ln -s /tmp/models/chinese-wav2vec2-base /kaggle/working/AptAvatar/model
 
 # 7.5 PATCH MEMORY MANAGEMENT FOR 16GB GPUs
 print("Patching AptAvatar memory hooks for Kaggle dual T4...", flush=True)
-patch_b64 = "aW1wb3J0IG9zCmltcG9ydCByZQoKIyAxLiBQYXRjaCBUNSBtZW1vcnkgc3Bpa2UKdDVfcGF0aCA9ICcva2FnZ2xlL3dvcmtpbmcvQXB0QXZhdGFyL0FwdEF2YXRhci93YW4vbW9kdWxlcy90NS5weScKd2l0aCBvcGVuKHQ1X3BhdGgsICdyJykgYXMgZjoKICAgIHQ1X2NvZGUgPSBmLnJlYWQoKQoKdDVfY29kZSA9IHQ1X2NvZGUucmVwbGFjZSgnd2l0aCB0b3JjaC5kZXZpY2UoZGV2aWNlKTonLCAndG9yY2guc2V0X2RlZmF1bHRfZHR5cGUoZHR5cGUpXG4gICAgd2l0aCB0b3JjaC5kZXZpY2UoZGV2aWNlKTonKQp0NV9jb2RlID0gdDVfY29kZS5yZXBsYWNlKCdtb2RlbCA9IG1vZGVsX2NscygqKmt3YXJncyknLCAnbW9kZWwgPSBtb2RlbF9jbHMoKiprd2FyZ3MpXG4gICAgdG9yY2guc2V0X2RlZmF1bHRfZHR5cGUodG9yY2guZmxvYXQzMiknKQoKd2l0aCBvcGVuKHQ1X3BhdGgsICd3JykgYXMgZjoKICAgIGYud3JpdGUodDVfY29kZSkKCiMgMi4gUGF0Y2ggUGlwZWxpbmUKcGlwZV9wYXRoID0gJy9rYWdnbGUvd29ya2luZy9BcHRBdmF0YXIvQXB0QXZhdGFyL3NyYy9waXBlbGluZS9BcHRBdmF0YXJfcGlwZWxpbmUucHknCndpdGggb3BlbihwaXBlX3BhdGgsICdyJykgYXMgZjoKICAgIHBpcGVfY29kZSA9IGYucmVhZCgpCgpwaXBlX2NvZGUgPSByZS5zdWIoCiAgICByInNlbGZcLnRleHRfZW5jb2RlciA9IFQ1RW5jb2Rlck1vZGVsXChbXHNcU10qP2RldmljZT1zZWxmXC5kZXZpY2UsIiwKICAgICJzZWxmLnRleHRfZW5jb2RlciA9IFQ1RW5jb2Rlck1vZGVsKFxuICAgICAgICAgICAgdGV4dF9sZW49Y29uZmlnLnRleHRfbGVuLFxuICAgICAgICAgICAgZHR5cGU9Y29uZmlnLnQ1X2R0eXBlLFxuICAgICAgICAgICAgZGV2aWNlPSdjcHUnLCIsCiAgICBwaXBlX2NvZGUKKQoKcGlwZV9jb2RlID0gcGlwZV9jb2RlLnJlcGxhY2UoCiAgICAnZGV2aWNlX21hcD17IiI6IG1vZGVsX2xvYWRfZGV2aWNlfSwnLAogICAgJ2RldmljZV9tYXA9ImF1dG8iLCBtYXhfbWVtb3J5PXswOiAiMkdpQiIsIDE6ICIxNEdpQiIsICJjcHUiOiAiMzBHaUIifSwnCikKCnBpcGVfY29kZSA9IHBpcGVfY29kZS5yZXBsYWNlKCdpZiBzZWxmLmNwdV9vZmZsb2FkOlxuICAgICAgICAgICAgc2VsZi5tb2RlbC50byhzZWxmLmRldmljZSknLCAnJykKcGlwZV9jb2RlID0gcGlwZV9jb2RlLnJlcGxhY2UoJ2lmIHNlbGYuY3B1X29mZmxvYWQ6XG4gICAgICAgICAgICAgICAgc2VsZi5tb2RlbC5jcHUoKScsICcnKQoKbmV3X3Byb21wdF9mdW5jID0gIiIiICAgIEB0b3JjaC5ub19ncmFkKCkKICAgIGRlZiBzZXRfaW5wdXRfcHJvbXB0KHNlbGYsIGlucHV0X3Byb21wdCk6CiAgICAgICAgY29udGV4dCA9IHNlbGYuX3Byb21wdF9jb250ZXh0X2NhY2hlLmdldChpbnB1dF9wcm9tcHQpCiAgICAgICAgaWYgY29udGV4dCBpcyBOb25lOgogICAgICAgICAgICBjb250ZXh0ID0gc2VsZi50ZXh0X2VuY29kZXIoW2lucHV0X3Byb21wdF0sICJjcHUiKVswXQogICAgICAgICAgICBjb250ZXh0ID0gY29udGV4dC50byhzZWxmLmRldmljZSkKICAgICAgICAgICAgc2VsZi5fcHJvbXB0X2NvbnRleHRfY2FjaGVbaW5wdXRfcHJvbXB0XSA9IGNvbnRleHQKICAgICAgICBzZWxmLmFyZ19jWydjb250ZXh0J10gPSBbY29udGV4dF0iIiIKCnBpcGVfY29kZSA9IHJlLnN1YigKICAgIHIiICAgIEB0b3JjaFwubm9fZ3JhZFwoXClcbiAgICBkZWYgc2V0X2lucHV0X3Byb21wdC4qP3NlbGZcLmFyZ19jXFsnY29udGV4dCdcXSA9IFxbY29udGV4dFxdIiwKICAgIG5ld19wcm9tcHRfZnVuYywKICAgIHBpcGVfY29kZSwKICAgIGZsYWdzPXJlLkRPVEFMTAopCgp3aXRoIG9wZW4ocGlwZV9wYXRoLCAndycpIGFzIGY6CiAgICBmLndyaXRlKHBpcGVfY29kZSkKCiMgMy4gUGF0Y2ggbXVsdGl0YWxrX21vZGVsLnB5IGZvciBhY2NlbGVyYXRlIGRldmljZV9tYXAgY29tcGF0aWJpbGl0eQptb2RlbF9wYXRoID0gJy9rYWdnbGUvd29ya2luZy9BcHRBdmF0YXIvQXB0QXZhdGFyL2luZmluaXRlX3RhbGsvbW9kdWxlcy9tdWx0aXRhbGtfbW9kZWwucHknCmlmIG9zLnBhdGguZXhpc3RzKG1vZGVsX3BhdGgpOgogICAgd2l0aCBvcGVuKG1vZGVsX3BhdGgsICdyJykgYXMgZjoKICAgICAgICBtb2RlbF9jb2RlID0gZi5yZWFkKCkKCiAgICBtb2RlbF9jb2RlID0gbW9kZWxfY29kZS5yZXBsYWNlKAogICAgICAgICdjbGFzcyBBdWRpb1Byb2pNb2RlbChNb2RlbE1peGluLCBDb25maWdNaXhpbik6JywKICAgICAgICAnY2xhc3MgQXVkaW9Qcm9qTW9kZWwoTW9kZWxNaXhpbiwgQ29uZmlnTWl4aW4pOlxuICAgIF9ub19zcGxpdF9tb2R1bGVzID0gW10nCiAgICApCgogICAgd2l0aCBvcGVuKG1vZGVsX3BhdGgsICd3JykgYXMgZjoKICAgICAgICBmLndyaXRlKG1vZGVsX2NvZGUpCgojIDQuIFBhdGNoIGF0dGVudGlvbi5weSB0byBncmFjZWZ1bGx5IGZhbGxiYWNrIHRvIFNEUEEgd2hlbiBGbGFzaCBBdHRlbnRpb24gaXMgdW5hdmFpbGFibGUKYXR0bl9wYXRoID0gJy9rYWdnbGUvd29ya2luZy9BcHRBdmF0YXIvQXB0QXZhdGFyL3dhbi9tb2R1bGVzL2F0dGVudGlvbi5weScKaWYgb3MucGF0aC5leGlzdHMoYXR0bl9wYXRoKToKICAgIHdpdGggb3BlKGF0dG5fcGF0aCwgJ3InKSBhcyBmOgogICAgICAgIGF0dG5fY29kZSA9IGYucmVhZCgpCgogICAgYXR0bl9wYXRjaCA9ICcnJwpfb3JpZ2luYWxfZmxhc2hfYXR0ZW50aW9uID0gZmxhc2hfYXR0ZW50aW9uCmRlZiBfcGF0Y2hlZF9mbGFzaF9hdHRlbnRpb24oKmFyZ3MsICoqa3dhcmdzKToKICAgIGlmIG5vdCAoRkxBU0hfQVRUTl8yX0FWQUlMQUJMRSBvciBGTEFTSF9BVFROXzNfQVZBSUxBQkxFKToKICAgICAgICBrd2FyZ3MucG9wKCd2ZXJzaW9uJywgTm9uZSkKICAgICAgICByZXR1cm4gYXR0ZW50aW9uKCphcmdzLCAqKmt3YXJncykKICAgIHJldHVybiBfb3JpZ2luYWxfZmxhc2hfYXR0ZW50aW9uKCphcmdzLCAqKmt3YXJncykKCmZsYXNoX2F0dGVudGlvbiA9IF9wYXRjaGVkX2ZsYXNoX2F0dGVudGlvbicnJwogICAgd2l0aCBvcGVuKGF0dG5fcGF0aCwgJ2EnKSBhcyBmOgogICAgICAgIGYud3JpdGUoYXR0bl9wYXRjaCkK"
+patch_code = r'''import os
+import re
+
+# 1. Patch T5 memory spike
+t5_path = '/kaggle/working/AptAvatar/AptAvatar/wan/modules/t5.py'
+with open(t5_path, 'r') as f:
+    t5_code = f.read()
+
+t5_code = t5_code.replace('with torch.device(device):', 'torch.set_default_dtype(dtype)\n    with torch.device(device):')
+t5_code = t5_code.replace('model = model_cls(**kwargs)', 'model = model_cls(**kwargs)\n    torch.set_default_dtype(torch.float32)')
+
+with open(t5_path, 'w') as f:
+    f.write(t5_code)
+
+# 2. Patch Pipeline
+pipe_path = '/kaggle/working/AptAvatar/AptAvatar/src/pipeline/AptAvatar_pipeline.py'
+with open(pipe_path, 'r') as f:
+    pipe_code = f.read()
+
+pipe_code = re.sub(
+    r"self\.text_encoder = T5EncoderModel\([\s\S]*?device=self\.device,",
+    "self.text_encoder = T5EncoderModel(\n            text_len=config.text_len,\n            dtype=config.t5_dtype,\n            device='cpu',",
+    pipe_code
+)
+
+pipe_code = pipe_code.replace(
+    'device_map={"": model_load_device},',
+    'device_map="auto", max_memory={0: "2GiB", 1: "14GiB", "cpu": "30GiB"},'
+)
+
+pipe_code = pipe_code.replace('if self.cpu_offload:\n            self.model.to(self.device)', '')
+pipe_code = pipe_code.replace('if self.cpu_offload:\n                self.model.cpu()', '')
+
+new_prompt_func = """    @torch.no_grad()
+    def set_input_prompt(self, input_prompt):
+        context = self._prompt_context_cache.get(input_prompt)
+        if context is None:
+            context = self.text_encoder([input_prompt], "cpu")[0]
+            context = context.to(self.device)
+            self._prompt_context_cache[input_prompt] = context
+        self.arg_c['context'] = [context]"""
+
+pipe_code = re.sub(
+    r"    @torch\.no_grad\(\)\n    def set_input_prompt.*?self\.arg_c\['context'\] = \[context\]",
+    new_prompt_func,
+    pipe_code,
+    flags=re.DOTALL
+)
+
+with open(pipe_path, 'w') as f:
+    f.write(pipe_code)
+
+# 3. Patch multitalk_model.py for accelerate device_map compatibility
+model_path = '/kaggle/working/AptAvatar/AptAvatar/infinite_talk/modules/multitalk_model.py'
+if os.path.exists(model_path):
+    with open(model_path, 'r') as f:
+        model_code = f.read()
+
+    model_code = model_code.replace(
+        'class AudioProjModel(ModelMixin, ConfigMixin):',
+        'class AudioProjModel(ModelMixin, ConfigMixin):\n    _no_split_modules = []'
+    )
+
+    with open(model_path, 'w') as f:
+        f.write(model_code)
+
+# 4. Patch attention.py to gracefully fallback to SDPA when Flash Attention is unavailable
+attn_path = '/kaggle/working/AptAvatar/AptAvatar/wan/modules/attention.py'
+if os.path.exists(attn_path):
+    with open(attn_path, 'r') as f:
+        attn_code = f.read()
+
+    attn_patch = \'''
+_original_flash_attention = flash_attention
+def _patched_flash_attention(*args, **kwargs):
+    if not (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE):
+        kwargs.pop('version', None)
+        return attention(*args, **kwargs)
+    return _original_flash_attention(*args, **kwargs)
+
+flash_attention = _patched_flash_attention\'''
+    with open(attn_path, 'a') as f:
+        f.write(attn_patch)
+'''
 with open("/kaggle/working/patch_memory.py", "w") as f:
-    f.write(base64.b64decode(patch_b64).decode('utf-8'))
+    f.write(patch_code)
 run_cmd("python /kaggle/working/patch_memory.py")
 
 
@@ -1525,10 +1610,8 @@ def prepare_and_launch_standard_job(
 
         vb64 = ""
         vsize = os.path.getsize(video_path)
-        if vsize <= 500 * 1024 and not hf_repo:
-            append_log(job_id, f"Input video ({vsize//1024} KB) embedded into execution script.")
-            with open(video_path, "rb") as vf:
-                vb64 = base64.b64encode(vf.read()).decode("ascii")
+        if False:
+            pass
         else:
             append_log(job_id, f"Input video ({vsize//1024} KB) will be fetched via dataset URL.")
 
@@ -1615,10 +1698,8 @@ def prepare_and_launch_premium_job(
 
         ib64 = ""
         isize = os.path.getsize(image_path)
-        if isize <= 500 * 1024 and not hf_repo:
-            append_log(job_id, f"Input image ({isize//1024} KB) embedded into script.")
-            with open(image_path, "rb") as vf:
-                ib64 = base64.b64encode(vf.read()).decode("ascii")
+        if False:
+            pass
         else:
             append_log(job_id, f"Input image ({isize//1024} KB) will be fetched via dataset URL.")
 
