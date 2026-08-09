@@ -817,6 +817,7 @@ try:
     print("SUCCESS: Uploaded to HF Hub!")
 except Exception as e:
     print(f"Failed to upload to HF Hub: {e}", flush=True)
+"""
 
 APTAVATAR_KERNEL_TEMPLATE = """import os
 import sys
