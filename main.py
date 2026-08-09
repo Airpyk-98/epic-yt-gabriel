@@ -637,9 +637,8 @@ with open("/kaggle/working/action_prompt.txt", "w", encoding="utf-8") as f:
 # 7. CLONE REPO & FETCH WEIGHTS
 run_cmd("git clone https://github.com/TaoLiveAIGC/AptAvatar.git /kaggle/working/AptAvatar")
 os.chdir("/kaggle/working/AptAvatar")
-run_cmd("sed -i '/torch/d' requirements.txt")
-run_cmd("sed -i 's/xformers==.*/xformers/g' requirements.txt")
-run_cmd("pip install -q -r requirements.txt")
+run_cmd("pip install -q easydict loguru imageio-ffmpeg ftfy optimum-quanto decord pyloudnorm librosa")
+run_cmd("pip install -q --no-deps xfuser yunchang distvae")
 
 # Download 14B Weights and Audio Encoder into /tmp which has 73GB free space, then symlink it
 with open('/kaggle/working/download_models.py', 'w') as f:
