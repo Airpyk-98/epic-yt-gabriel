@@ -1981,7 +1981,7 @@ async def create_job(
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "epic-gab/EpicSync-Dataset"
-        hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
+        hf_token = os.environ.get("HF_TOKEN", "")
     job_id = f"epicsync_{int(time.time())}"
     
     kaggle_user = "".join([c for c in kaggle_user if c.isalnum() or c in "_-"]).lower()
@@ -2070,7 +2070,7 @@ async def create_premium_job(
         kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "epic-gab/EpicSync-Dataset"
-        hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
+        hf_token = os.environ.get("HF_TOKEN", "")
     job_id = f"epicsync_premium_{int(time.time())}"
     
     kaggle_user = "".join([c for c in kaggle_user if c.isalnum() or c in "_-"]).lower()
@@ -2244,7 +2244,7 @@ def get_video(job_id: str):
 def list_bgm_files(hf_repo: str = "epic-gab/EpicSync-Dataset", hf_token: str = ""):
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "epic-gab/EpicSync-Dataset"
-        hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
+        hf_token = os.environ.get("HF_TOKEN", "")
     try:
         from huggingface_hub import HfApi
         api = HfApi(token=hf_token)
@@ -2264,7 +2264,7 @@ async def upload_bgm_file(
 ):
     if not hf_repo or hf_token.strip() == "":
         hf_repo = "epic-gab/EpicSync-Dataset"
-        hf_token = os.environ.get("HF_TOKEN", "hf_vp" + "zWbnXCckxAYuo" + "gVfYqvRsmcTfrHHzgSo")
+        hf_token = os.environ.get("HF_TOKEN", "")
     
     clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', custom_name.strip())
     if not clean_name:
