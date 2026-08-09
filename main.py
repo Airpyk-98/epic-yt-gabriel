@@ -685,14 +685,7 @@ pipe_code = pipe_code.replace(
 pipe_code = pipe_code.replace('if self.cpu_offload:\n            self.model.to(self.device)', '')
 pipe_code = pipe_code.replace('if self.cpu_offload:\n                self.model.cpu()', '')
 
-new_prompt_func = """    @torch.no_grad()
-    def set_input_prompt(self, input_prompt):
-        context = self._prompt_context_cache.get(input_prompt)
-        if context is None:
-            context = self.text_encoder([input_prompt], "cpu")[0]
-            context = context.to(self.device)
-            self._prompt_context_cache[input_prompt] = context
-        self.arg_c['context'] = [context]"""
+new_prompt_func = "    @torch.no_grad()\\n    def set_input_prompt(self, input_prompt):\\n        context = self._prompt_context_cache.get(input_prompt)\\n        if context is None:\\n            context = self.text_encoder([input_prompt], 'cpu')[0]\\n            context = context.to(self.device)\\n            self._prompt_context_cache[input_prompt] = context\\n        self.arg_c['context'] = [context]"
 
 pipe_code = re.sub(
     r"    @torch\.no_grad\(\)\n    def set_input_prompt.*?self\.arg_c\['context'\] = \[context\]",
@@ -724,15 +717,7 @@ if os.path.exists(attn_path):
     with open(attn_path, 'r') as f:
         attn_code = f.read()
 
-    attn_patch = \'''
-_original_flash_attention = flash_attention
-def _patched_flash_attention(*args, **kwargs):
-    if not (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE):
-        kwargs.pop('version', None)
-        return attention(*args, **kwargs)
-    return _original_flash_attention(*args, **kwargs)
-
-flash_attention = _patched_flash_attention\'''
+    attn_patch = "\\n_original_flash_attention = flash_attention\\ndef _patched_flash_attention(*args, **kwargs):\\n    if not (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE):\\n        kwargs.pop('version', None)\\n        return attention(*args, **kwargs)\\n    return _original_flash_attention(*args, **kwargs)\\n\\nflash_attention = _patched_flash_attention"
     with open(attn_path, 'a') as f:
         f.write(attn_patch)
 '''
