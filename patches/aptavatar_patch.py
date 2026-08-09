@@ -70,9 +70,10 @@ if os.path.exists(pipe_file):
         code
     )
 
-    # Remove CPU offload toggling that causes errors with device_map
-    code = code.replace('if self.cpu_offload:\n            self.model.to(self.device)', '')
-    code = code.replace('if self.cpu_offload:\n                self.model.cpu()', '')
+    # Remove CPU offload toggling for self.model that causes errors with device_map
+    # Replaces the method call with 'pass' to preserve python indentation
+    code = re.sub(r"self\.model\.to\(self\.device\)", "pass", code)
+    code = re.sub(r"self\.model\.cpu\(\)", "pass", code)
 
     # Patch set_input_prompt to encode on CPU and cache results
     new_prompt_func = """    @torch.no_grad()
