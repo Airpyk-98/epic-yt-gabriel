@@ -72,7 +72,7 @@ if os.path.exists(pipe_file):
     # Use device_map auto with memory limits instead of loading everything on one GPU
     code = code.replace(
         'device_map={"": model_load_device},',
-        'device_map="auto", max_memory={0: "2GiB", 1: "14GiB", "cpu": "30GiB"},'
+        'device_map="auto", max_memory={0: "10GiB", 1: "10GiB", "cpu": "30GiB"},'
     )
 
     # Load T5 text encoder on CPU to save GPU memory

@@ -643,6 +643,7 @@ run_cmd("sed -i '/numpy/d' requirements.txt")
 run_cmd("sed -i '/gradio/d' requirements.txt")
 run_cmd("pip install -q -r requirements.txt")
 run_cmd("pip install -q --no-deps xfuser yunchang distvae")
+run_cmd("pip install -q entrypoints==0.4 jupyter_client")
 
 # Download 14B Weights and Audio Encoder into /tmp which has 73GB free space, then symlink it
 with open('/kaggle/working/download_models.py', 'w') as f:
