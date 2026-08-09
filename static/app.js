@@ -333,6 +333,20 @@ function checkVideoSubmitState() {
     const hasImage = mediaFileInput.files.length > 0 || videoModel === 'pexels';
     continueVideoBtn.disabled = !(hasScript && hasImage);
 }
+
+document.getElementById('videoModelSelect').addEventListener('change', (e) => {
+    const model = e.target.value;
+    const sourceImageGroup = document.getElementById('sourceImageGroup');
+    if (sourceImageGroup) {
+        if (model === 'pexels') {
+            sourceImageGroup.style.display = 'none';
+        } else {
+            sourceImageGroup.style.display = 'block';
+        }
+    }
+    checkVideoSubmitState();
+});
+
 generatedScriptText.addEventListener('input', checkVideoSubmitState);
 mediaFileInput.addEventListener('change', checkVideoSubmitState);
 
@@ -373,9 +387,10 @@ createContentForm.addEventListener('submit', async (e) => {
     const isPreviewOn = previewScriptToggle.checked && titles.length === 1 && window.currentPromptMode === 'ai';
     const mediaFile = mediaFileInput.files[0];
     const voiceModel = document.getElementById('voiceModelSelect').value;
+    const videoModel = document.getElementById('videoModelSelect').value;
     const aspectRatio = document.getElementById('aspectRatioSelect').value;
     
-    if (!mediaFile) return alert('Missing source image.');
+    if (!mediaFile && videoModel !== 'pexels') return alert('Missing source image.');
     
     submitContentBtn.innerText = 'Processing Queue...';
     submitContentBtn.disabled = true;

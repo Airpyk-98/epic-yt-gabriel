@@ -160,13 +160,13 @@
         }
         window.currentPromptMode = 'ai';
                         </script>
-                        <div class="form-group">
-                            <label>Source Image</label>
-                            <div class="file-upload" onclick="document.getElementById('mediaFile').click()">
-                                <span id="fileName">Select Portrait Image File (.png/.jpg)</span>
-                                <input type="file" id="mediaFile" name="image" accept="image/*" required onchange="document.getElementById('fileName').innerText = this.files[0] ? this.files[0].name : 'Select Portrait Image File (.png/.jpg)'; document.getElementById('fileName').style.color = '#fff';">
-                            </div>
-                        </div>
+                          <div class="form-group" id="sourceImageGroup">
+                              <label>Source Image</label>
+                              <div class="file-upload" onclick="document.getElementById('mediaFile').click()">
+                                  <span id="fileName">Select Portrait Image File (.png/.jpg)</span>
+                                  <input type="file" id="mediaFile" name="image" accept="image/*" onchange="document.getElementById('fileName').innerText = this.files[0] ? this.files[0].name : 'Select Portrait Image File (.png/.jpg)'; document.getElementById('fileName').style.color = '#fff';">
+                              </div>
+                          </div>
                         <div class="form-group">
                             <label>Video Generation Model</label>
                             <select id="videoModelSelect">
