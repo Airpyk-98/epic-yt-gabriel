@@ -55,11 +55,19 @@ if os.path.exists(t5_file):
         f.write(code)
     print("  [OK] t5.py — dtype management patched", flush=True)
 
-# 4. Patch AptAvatar_pipeline.py — load T5 on CPU, use device_map auto
+# 4. Patch AptAvatar_pipeline.py — VAE tiling and T5 CPU offload
 pipe_file = '/kaggle/working/AptAvatar/AptAvatar/src/pipeline/AptAvatar_pipeline.py'
 if os.path.exists(pipe_file):
     with open(pipe_file, 'r') as f:
         code = f.read()
+
+    # Enable VAE tiling to prevent CUDA OOM during encoding/decoding on 15GB T4 GPU
+    code = re.sub(
+        r"(self\.vae = WanVAE\(.*?device=self\.device,)", 
+        r"\1\n            use_tiling=True,", 
+        code, 
+        flags=re.DOTALL
+    )
 
     # Use device_map auto with memory limits instead of loading everything on one GPU
     code = code.replace(
@@ -75,7 +83,6 @@ if os.path.exists(pipe_file):
     )
 
     # Remove CPU offload toggling for self.model that causes errors with device_map
-    # Replaces the method call with 'pass' to preserve python indentation
     code = re.sub(r"self\.model\.to\(self\.device\)", "pass", code)
     code = re.sub(r"self\.model\.cpu\(\)", "pass", code)
 
@@ -98,7 +105,7 @@ if os.path.exists(pipe_file):
 
     with open(pipe_file, 'w') as f:
         f.write(code)
-    print("  [OK] AptAvatar_pipeline.py — T5 on CPU, device_map auto", flush=True)
+    print("  [OK] AptAvatar_pipeline.py — VAE tiling and T5 CPU offload patched", flush=True)
 
 # 5. Patch attention.py — fallback flash_attention to SDPA when unavailable
 attn_mod = '/kaggle/working/AptAvatar/AptAvatar/wan/modules/attention.py'

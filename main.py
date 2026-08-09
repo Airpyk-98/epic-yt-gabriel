@@ -639,6 +639,8 @@ run_cmd("git clone https://github.com/TaoLiveAIGC/AptAvatar.git /kaggle/working/
 os.chdir("/kaggle/working/AptAvatar")
 run_cmd("sed -i '/torch/d' requirements.txt")
 run_cmd("sed -i 's/xformers==.*/xformers/g' requirements.txt")
+run_cmd("sed -i '/numpy/d' requirements.txt")
+run_cmd("sed -i '/gradio/d' requirements.txt")
 run_cmd("pip install -q -r requirements.txt")
 run_cmd("pip install -q --no-deps xfuser yunchang distvae")
 
