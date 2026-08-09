@@ -566,259 +566,7 @@ if os.path.exists(current_video_path):
 run_cmd("rm -rf video-retalking /kaggle/working/result_retalking.mp4 /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/input.mp4 /kaggle/working/result_speed_adjusted.mp4")
 """
 
-PEXELS_KERNEL_TEMPLATE = """import os
-import subprocess
-import sys
-import builtins
-import requests
-import json
-import time
-import shutil
-
-def custom_print(*args, **kwargs):
-    msg = " ".join(str(a) for a in args)
-    builtins.print(*args, **kwargs)
-    try:
-        requests.post("https://epic-yt-gabriel.onrender.com/api/kaggle_log", json={"job_id": "___JOB_ID___", "message": msg, "token": "epic_kaggle_secret_99"}, timeout=3)
-    except:
-        pass
-print = custom_print
-
-def run_cmd(cmd):
-    print(f"Executing: {cmd}", flush=True)
-    res = subprocess.run(cmd, shell=True)
-    return res
-
-print("=== STARTING PEXELS STOCK B-ROLL PIPELINE ===", flush=True)
-
-hf_token = ___HF_TOKEN___
-if hf_token and len(hf_token) > 5:
-    os.environ["HF_TOKEN"] = hf_token
-
-hf_repo = ___HF_REPO___
-job_id = ___JOB_ID___
-script_text = ___SCRIPT_TEXT___
-voice = ___VOICE___
-segments_json = ___PEXELS_SEGMENTS_JSON___
-PEXELS_API_KEY = "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K"
-
-# 1. SETUP AUDIO AND CAPTURE WORD TIMINGS
-run_cmd("pip install -q edge-tts moviepy")
-print(f"Generating studio voiceover and extracting word boundaries...", flush=True)
-
-with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
-    f.write(script_text)
-
-import asyncio, edge_tts
-word_timings = []
-
-async def generate_audio_and_timings():
-    comm = edge_tts.Communicate(script_text, voice)
-    await comm.save("/kaggle/working/input.wav")
-    
-    comm_events = edge_tts.Communicate(script_text, voice)
-    async for event in comm_events.stream():
-        if event["type"] == "WordBoundary":
-            start_sec = event["offset"] / 10000000.0
-            word_dur = event["duration"] / 10000000.0
-            word_timings.append({"word": event["text"], "start": start_sec, "end": start_sec + word_dur})
-            
-asyncio.run(generate_audio_and_timings())
-print(f"Captured {len(word_timings)} word timings.", flush=True)
-
-# 2. MATCH SEGMENTS TO AUDIO TIMINGS
-try:
-    segments = json.loads(segments_json)
-except Exception as e:
-    print(f"Failed to parse segments JSON: {e}. Falling back to default split.", flush=True)
-    segments = [{"text": script_text, "keyword": "cinematic"}]
-
-print("Calculating precise segment durations...", flush=True)
-current_word_idx = 0
-for i, seg in enumerate(segments):
-    seg_words = seg['text'].split()
-    if not seg_words or current_word_idx >= len(word_timings):
-        seg['start'] = word_timings[-1]['end'] if word_timings else 0
-        seg['end'] = word_timings[-1]['end'] if word_timings else 0
-        seg['duration'] = 0.1
-        continue
-        
-    start_time = word_timings[current_word_idx]['start']
-    end_word_idx = min(current_word_idx + len(seg_words) - 1, len(word_timings) - 1)
-    end_time = word_timings[end_word_idx]['end']
-    
-    if i == len(segments) - 1:
-        end_time = word_timings[-1]['end']
-        
-    seg['start'] = start_time
-    seg['end'] = end_time
-    seg['duration'] = max(0.5, end_time - start_time)
-    current_word_idx = end_word_idx + 1
-
-# 3. FETCH PEXELS VIDEOS
-print("Fetching B-Roll from Pexels API...", flush=True)
-headers = {"Authorization": PEXELS_API_KEY}
-video_files = []
-
-aspect = ___ASPECT_RATIO___
-orientation = "portrait" if aspect == "9:16" else "landscape" if aspect == "16:9" else "square"
-
-for i, seg in enumerate(segments):
-    kw = seg['keyword']
-    dur = seg['duration']
-    print(f"Searching Pexels for: '{kw}' (Duration: {dur:.2f}s)", flush=True)
-    
-    url = f"https://api.pexels.com/videos/search?query={kw}&per_page=5&orientation={orientation}&size=medium"
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("videos"):
-            resp = requests.get(f"https://api.pexels.com/videos/search?query=nature&per_page=1&orientation={orientation}", headers=headers)
-            data = resp.json()
-            
-        video_url = None
-        for v in data.get("videos", []):
-            if v["duration"] >= dur:
-                for file_obj in v["video_files"]:
-                    if file_obj["quality"] == "hd":
-                        video_url = file_obj["link"]
-                        break
-                if video_url: break
-                
-        if not video_url and data.get("videos"):
-            video_url = data["videos"][0]["video_files"][0]["link"]
-            
-        out_name = f"/kaggle/working/clip_{i}.mp4"
-        v_data = requests.get(video_url).content
-        with open(out_name, "wb") as f:
-            f.write(v_data)
-            
-        video_files.append((out_name, dur))
-    except Exception as e:
-        print(f"Failed to fetch video for '{kw}': {e}", flush=True)
-
-# 4. ASSEMBLE WITH MOVIEPY
-print("Assembling timeline with MoviePy...", flush=True)
-from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, vfx
-
-clips = []
-target_w, target_h = (1080, 1920) if orientation == "portrait" else (1920, 1080)
-
-for fpath, dur in video_files:
-    if not os.path.exists(fpath): continue
-    clip = VideoFileClip(fpath)
-    if clip.duration < dur:
-        clip = clip.fx(vfx.loop, duration=dur)
-    else:
-        clip = clip.subclip(0, dur)
-        
-    clip = clip.resize(height=target_h)
-    if clip.w < target_w:
-        clip = clip.resize(width=target_w)
-    
-    x_center = clip.w / 2
-    y_center = clip.h / 2
-    clip = clip.crop(x1=x_center - target_w/2, y1=y_center - target_h/2, x2=x_center + target_w/2, y2=y_center + target_h/2)
-    clips.append(clip)
-
-if not clips:
-    print("ERROR: No clips were successfully generated.", flush=True)
-    sys.exit(1)
-
-final_video = concatenate_videoclips(clips, method="compose")
-audio_clip = AudioFileClip("/kaggle/working/input.wav")
-final_video = final_video.set_audio(audio_clip)
-
-final_output = "/kaggle/working/raw_pexels.mp4"
-final_video.write_videofile(final_output, fps=24, codec="libx264", audio_codec="aac")
-
-for c in clips: c.close()
-final_video.close()
-audio_clip.close()
-
-# 5. POST-PROCESSING (Subtitles, BGM)
-current_video_path = final_output
-has_bgm = False
-bgm_repo_path = ___BGM_REPO_PATH___
-if bgm_repo_path and hf_repo:
-    print(f"Fetching background music...", flush=True)
-    try:
-        from huggingface_hub import hf_hub_download
-        bgm_file = hf_hub_download(repo_id=hf_repo, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=hf_token or None)
-        if bgm_file != "/kaggle/working/bg_music.mp3":
-            shutil.copy(bgm_file, "/kaggle/working/bg_music.mp3")
-        has_bgm = True
-    except Exception as e:
-        pass
-
-if os.path.exists(current_video_path):
-    q = '"'
-    if has_bgm and os.path.exists("/kaggle/working/bg_music.mp3"):
-        print("Integrating background music...", flush=True)
-        bgm_out_path = "/kaggle/working/result_with_bgm.mp4"
-        bgm_filter = "[0:a]volume=1.0[speech];[1:a]volume=0.18[bg];[speech][bg]amix=inputs=2:duration=first[a]"
-        bgm_cmd = f"ffmpeg -y -i {q}{current_video_path}{q} -stream_loop -1 -i /kaggle/working/bg_music.mp3 -filter_complex {q}{bgm_filter}{q} -map 0:v -map {q}[a]{q} -c:v copy -c:a aac -b:a 192k {q}{bgm_out_path}{q}"
-        if os.system(bgm_cmd) == 0 and os.path.exists(bgm_out_path):
-            os.remove(current_video_path)
-            os.rename(bgm_out_path, current_video_path)
-
-    add_captions = ___ADD_CAPTIONS___
-    if str(add_captions).lower() in ["true", "1", "yes"]:
-        print("Adding Subtitles...", flush=True)
-        try:
-            sub_cues = []
-            cur_time = 0.0
-            for seg in segments:
-                words = seg['text'].split()
-                chunk_size = 4
-                chunks = [words[j:j + chunk_size] for j in range(0, len(words), chunk_size)]
-                total_chars = sum(len(" ".join(c)) for c in chunks) or 1
-                cur_time = seg['start']
-                dur_sec = seg['duration']
-                for c in chunks:
-                    chunk_text = " ".join(c)
-                    c_dur = dur_sec * (len(chunk_text) / total_chars)
-                    c_end = cur_time + c_dur
-                    sub_cues.append((cur_time, c_end, chunk_text))
-                    cur_time = c_end
-
-            if sub_cues:
-                def format_srt_time(sec):
-                    hrs = int(sec // 3600)
-                    mins = int((sec % 3600) // 60)
-                    secs = int(sec % 60)
-                    msecs = int(round((sec - int(sec)) * 1000))
-                    return f"{hrs:02d}:{mins:02d}:{secs:02d},{msecs:03d}"
-                nl = chr(10)
-                with open("/kaggle/working/captions.srt", "w", encoding="utf-8") as sf:
-                    for idx, (st, et, txt) in enumerate(sub_cues, 1):
-                        sf.write(f"{idx}{nl}{format_srt_time(st)} --> {format_srt_time(et)}{nl}{txt}{nl}{nl}")
-                sub_out_path = "/kaggle/working/result_subtitled.mp4"
-                sub_filter = "subtitles=/kaggle/working/captions.srt:force_style='FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV=25'"
-                sub_cmd = f"ffmpeg -y -i {q}{current_video_path}{q} -vf {q}{sub_filter}{q} -c:a copy {q}{sub_out_path}{q}"
-                if os.system(sub_cmd) == 0 and os.path.exists(sub_out_path):
-                    os.remove(current_video_path)
-                    os.rename(sub_out_path, current_video_path)
-        except Exception as e:
-            pass
-
-# 6. UPLOAD TO HF
-print("Uploading to Hugging Face dataset...", flush=True)
-try:
-    from huggingface_hub import HfApi
-    api = HfApi(token=hf_token)
-    api.upload_file(
-        path_or_fileobj=current_video_path,
-        path_in_repo=f"outputs/{job_id}.mp4",
-        repo_id=hf_repo,
-        repo_type="dataset"
-    )
-    print("SUCCESS: Uploaded to HF Hub!")
-except Exception as e:
-    print(f"Failed to upload to HF Hub: {e}", flush=True)
-"""
-\n\nAPTAVATAR_KERNEL_TEMPLATE = """import os
+APTAVATAR_KERNEL_TEMPLATE = """import os
 import sys
 import time
 import base64
@@ -891,11 +639,8 @@ run_cmd("git clone https://github.com/TaoLiveAIGC/AptAvatar.git /kaggle/working/
 os.chdir("/kaggle/working/AptAvatar")
 run_cmd("sed -i '/torch/d' requirements.txt")
 run_cmd("sed -i 's/xformers==.*/xformers/g' requirements.txt")
-run_cmd("sed -i '/numpy/d' requirements.txt")
-run_cmd("sed -i '/gradio/d' requirements.txt")
 run_cmd("pip install -q -r requirements.txt")
 run_cmd("pip install -q --no-deps xfuser yunchang distvae")
-run_cmd("pip install -q entrypoints==0.4 jupyter_client")
 
 # Download 14B Weights and Audio Encoder into /tmp which has 73GB free space, then symlink it
 with open('/kaggle/working/download_models.py', 'w') as f:
@@ -1866,39 +1611,28 @@ def prepare_and_launch_premium_job(
             append_log(job_id, f"Using pre-uploaded background music from dataset: {bgm_repo_path}")
 
         ib64 = ""
-        if os.path.exists(image_path):
-            isize = os.path.getsize(image_path)
-            if False:
-                pass
-            else:
-                append_log(job_id, f"Input image ({isize//1024} KB) will be fetched via dataset URL.")
+        isize = os.path.getsize(image_path)
+        if False:
+            pass
+        else:
+            append_log(job_id, f"Input image ({isize//1024} KB) will be fetched via dataset URL.")
 
-            if hf_repo and hf_token:
-                append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {hf_repo}...")
-                upload_to_hf_hub(image_path, hf_repo, f"inputs/{job_id}.png", hf_token)
+        if hf_repo and hf_token:
+            append_log(job_id, f"Uploading source portrait to Hugging Face Dataset {hf_repo}...")
+            upload_to_hf_hub(image_path, hf_repo, f"inputs/{job_id}.png", hf_token)
 
-        # Handle AptAvatar / Pexels split logic
+        # Handle AptAvatar split logic
         apt_prompt = ""
-        pexels_segments_json = ""
         spoken_script = script_text
-        
         if video_model == "aptavatar":
             import re
             apt_match = re.search(r"<APTAVATAR_PROMPT>(.*?)</APTAVATAR_PROMPT>", script_text, re.DOTALL | re.IGNORECASE)
             if apt_match:
                 apt_prompt = apt_match.group(1).strip()
                 spoken_script = script_text.replace(apt_match.group(0), "").strip()
-        elif video_model == "pexels":
-            import re
-            pexels_match = re.search(r"<PEXELS_SEGMENTS>(.*?)</PEXELS_SEGMENTS>", script_text, re.DOTALL | re.IGNORECASE)
-            if pexels_match:
-                pexels_segments_json = pexels_match.group(1).strip()
-                spoken_script = script_text.replace(pexels_match.group(0), "").strip()
 
         if video_model == "aptavatar":
             script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
-        elif video_model == "pexels":
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json))
         else:
             script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
             
@@ -2054,7 +1788,7 @@ async def create_premium_job(
     hf_token: str = Form(""),
     video_model: str = Form("ltx-video"),
     target_duration: str = Form("60 seconds"),
-    image: Optional[UploadFile] = File(None),
+    image: UploadFile = File(...),
     bg_music: Optional[UploadFile] = File(None)
 ):
     uid = None
@@ -2086,9 +1820,8 @@ async def create_premium_job(
     os.makedirs(staging, exist_ok=True)
     
     image_path = os.path.join(staging, "input.png")
-    if image and image.filename:
-        with open(image_path, "wb") as f:
-            f.write(await image.read())
+    with open(image_path, "wb") as f:
+        f.write(await image.read())
         
     bgm_path = ""
     bgm_repo_path = ""
@@ -2100,18 +1833,9 @@ async def create_premium_job(
             f.write(await bg_music.read())
         
     jobs = load_jobs()
-    if video_model == "aptavatar":
-        job_title = f"✨ AptAvatar (14B) Job {time.strftime('%H:%M:%S')}"
-        job_step_text = f"Packaging input & provisioning AptAvatar engine..."
-        job_log_text = f"[{time.strftime('%H:%M:%S')}] AptAvatar Job initialized."
-    elif video_model == "pexels":
-        job_title = f"✨ Pexels Stock B-Roll Job {time.strftime('%H:%M:%S')}"
-        job_step_text = f"Packaging segments & provisioning Pexels assembly engine..."
-        job_log_text = f"[{time.strftime('%H:%M:%S')}] Pexels Job initialized."
-    else:
-        job_title = f"✨ Premium LTX-2.3 Job {time.strftime('%H:%M:%S')}"
-        job_step_text = f"Packaging {aspect_ratio} portrait image & provisioning LTX-2.3 3D compute engine..."
-        job_log_text = f"[{time.strftime('%H:%M:%S')}] Premium LTX-2.3 Job initialized with {aspect_ratio} aspect ratio."
+    job_title = f"✨ AptAvatar (14B) Job {time.strftime('%H:%M:%S')}" if video_model == "aptavatar" else f"✨ Premium LTX-2.3 Job {time.strftime('%H:%M:%S')}"
+    job_step_text = f"Packaging input & provisioning AptAvatar engine..." if video_model == "aptavatar" else f"Packaging {aspect_ratio} portrait image & provisioning LTX-2.3 3D compute engine..."
+    job_log_text = f"[{time.strftime('%H:%M:%S')}] AptAvatar Job initialized." if video_model == "aptavatar" else f"[{time.strftime('%H:%M:%S')}] Premium LTX-2.3 Job initialized with {aspect_ratio} aspect ratio."
     
     jobs[job_id] = {
         "id": job_id,
@@ -2338,11 +2062,7 @@ def generate_script(req: ScriptGenRequest, request: Request):
     if req.video_model == "aptavatar":
         aptavatar_enforcement = "\n\nCRITICAL APTAVATAR FORMAT: The user is using the AptAvatar model. In addition to the spoken script, you MUST append a structured action prompt for the avatar at the very end of your response, separated by a blank line. Format it EXACTLY like this: \n\n<APTAVATAR_PROMPT>\n步骤1：*帧 0~30* talking naturally\n步骤2：*帧 30~90* gesturing with hands\n</APTAVATAR_PROMPT>\nAdjust the frame numbers (24 fps) to match the length of your script. Keep the action descriptions in English."
 
-    pexels_enforcement = ""
-    if req.video_model == "pexels":
-        pexels_enforcement = "\n\nCRITICAL PEXELS FORMAT: The user is using the Pexels Stock Video model. You MUST break down the generated script into segments based on full stops, commas, and conjunctions. For each segment, provide a single highly visual search keyword (1-3 words max) for Pexels. Append this structured JSON array at the very end of your response, separated by a blank line. Format it EXACTLY like this:\n\n<PEXELS_SEGMENTS>\n[\n  {\"text\": \"First segment text here,\", \"keyword\": \"office worker\"},\n  {\"text\": \"second segment text.\", \"keyword\": \"drinking coffee\"}\n]\n</PEXELS_SEGMENTS>\nMake sure the segments exactly match the spoken script words."
-
-    final_sys_prompt = sys_prompt + tts_enforcement + duration_enforcement + aptavatar_enforcement + pexels_enforcement
+    final_sys_prompt = sys_prompt + tts_enforcement + duration_enforcement + aptavatar_enforcement
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -2366,9 +2086,6 @@ def generate_script(req: ScriptGenRequest, request: Request):
         apt_match = re.search(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", raw_script, re.DOTALL | re.IGNORECASE)
         apt_prompt = apt_match.group(0) if apt_match else ""
 
-        pexels_match = re.search(r"<PEXELS_SEGMENTS>.*?</PEXELS_SEGMENTS>", raw_script, re.DOTALL | re.IGNORECASE)
-        pexels_prompt = pexels_match.group(0) if pexels_match else ""
-
         match = re.search(r"<SCRIPT>(.*?)</SCRIPT>", raw_script, re.DOTALL | re.IGNORECASE)
         if match:
             script = match.group(1).strip()
@@ -2383,15 +2100,11 @@ def generate_script(req: ScriptGenRequest, request: Request):
             
             # Remove the APTAVATAR_PROMPT from the fallback script to avoid duplication
             script = re.sub(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", "", script, flags=re.DOTALL | re.IGNORECASE)
-            # Remove the PEXELS_SEGMENTS from the fallback script to avoid duplication
-            script = re.sub(r"<PEXELS_SEGMENTS>.*?</PEXELS_SEGMENTS>", "", script, flags=re.DOTALL | re.IGNORECASE)
             
             script = script.strip()
             
         if apt_prompt:
             script = script + "\n\n" + apt_prompt
-        if pexels_prompt:
-            script = script + "\n\n" + pexels_prompt
             
         return {"script": script}
     except Exception as e:

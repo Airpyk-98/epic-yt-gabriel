@@ -328,8 +328,9 @@ videoTitlesInput.addEventListener('input', () => {
 
 // Helper to check if inputs are valid for video generation
 function checkVideoSubmitState() {
+    const videoModel = document.getElementById('videoModelSelect').value;
     const hasScript = generatedScriptText.value.trim().length > 0;
-    const hasImage = mediaFileInput.files.length > 0;
+    const hasImage = mediaFileInput.files.length > 0 || videoModel === 'pexels';
     continueVideoBtn.disabled = !(hasScript && hasImage);
 }
 generatedScriptText.addEventListener('input', checkVideoSubmitState);
