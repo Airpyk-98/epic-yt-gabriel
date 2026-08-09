@@ -487,8 +487,10 @@ createContentForm.addEventListener('submit', async (e) => {
             const formData = new FormData();
             formData.append('script_text', scriptText);
             formData.append('voice', voiceModel);
-            formData.append('image', mediaFile);
-            formData.append('video', mediaFile);
+            if (mediaFile) {
+                formData.append('image', mediaFile);
+                formData.append('video', mediaFile);
+            }
             formData.append('projectId', currentProject);
             formData.append('resolution', document.getElementById('resolutionSelect').value);
             formData.append('video_model', document.getElementById('videoModelSelect').value);
