@@ -195,13 +195,13 @@ elif HF_REPO and JOB_ID:
 # 0.5 SETUP BACKGROUND MUSIC (IF PROVIDED)
 bgm_repo_path = ___BGM_REPO_PATH___
 has_bgm = False
-if bgm_repo_path and HF_REPO:
-    print(f"Fetching background music from HF dataset {HF_REPO}...", flush=True)
+if bgm_repo_path:
+    print(f"Fetching background music {bgm_repo_path} from epic-yt-gab.web.app...", flush=True)
     try:
-        from huggingface_hub import hf_hub_download
-        bgm_file = hf_hub_download(repo_id=HF_REPO, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=___HF_TOKEN___ or None)
-        if bgm_file != "/kaggle/working/bg_music.mp3":
-            shutil.copy(bgm_file, "/kaggle/working/bg_music.mp3")
+        import urllib.request
+        bgm_url = f"https://epic-yt-gab.web.app/bgm/{bgm_repo_path.replace('inputs/', '')}"
+        bgm_file = "/kaggle/working/bg_music.mp3"
+        urllib.request.urlretrieve(bgm_url, bgm_file)
         if os.path.exists("/kaggle/working/bg_music.mp3"):
             has_bgm = True
             print("Successfully downloaded and staged background music!", flush=True)
@@ -898,14 +898,15 @@ audio_clip.close()
 current_video_path = final_output
 has_bgm = False
 bgm_repo_path = ___BGM_REPO_PATH___
-if bgm_repo_path and hf_repo:
-    print(f"Fetching background music...", flush=True)
+if bgm_repo_path:
+    print(f"Fetching background music {bgm_repo_path}...", flush=True)
     try:
-        from huggingface_hub import hf_hub_download
-        bgm_file = hf_hub_download(repo_id=hf_repo, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=hf_token or None)
-        if bgm_file != "/kaggle/working/bg_music.mp3":
-            shutil.copy(bgm_file, "/kaggle/working/bg_music.mp3")
-        has_bgm = True
+        import urllib.request
+        bgm_url = f"https://epic-yt-gab.web.app/bgm/{bgm_repo_path.replace('inputs/', '')}"
+        bgm_file = "/kaggle/working/bg_music.mp3"
+        urllib.request.urlretrieve(bgm_url, bgm_file)
+        if os.path.exists("/kaggle/working/bg_music.mp3"):
+            has_bgm = True
     except Exception as e:
         pass
 
@@ -1134,13 +1135,13 @@ else:
 # 1.5 SETUP BACKGROUND MUSIC (IF PROVIDED)
 bgm_repo_path = ___BGM_REPO_PATH___
 has_bgm = False
-if bgm_repo_path and hf_repo:
-    print(f"Fetching background music from HF dataset {hf_repo}...", flush=True)
+if bgm_repo_path:
+    print(f"Fetching background music {bgm_repo_path}...", flush=True)
     try:
-        from huggingface_hub import hf_hub_download
-        bgm_file = hf_hub_download(repo_id=hf_repo, filename=bgm_repo_path, repo_type="dataset", local_dir="/kaggle/working", token=hf_token or None)
-        if bgm_file != "/kaggle/working/bg_music.mp3":
-            shutil.copy(bgm_file, "/kaggle/working/bg_music.mp3")
+        import urllib.request
+        bgm_url = f"https://epic-yt-gab.web.app/bgm/{bgm_repo_path.replace('inputs/', '')}"
+        bgm_file = "/kaggle/working/bg_music.mp3"
+        urllib.request.urlretrieve(bgm_url, bgm_file)
         if os.path.exists("/kaggle/working/bg_music.mp3"):
             has_bgm = True
             print("Successfully downloaded and staged background music!", flush=True)

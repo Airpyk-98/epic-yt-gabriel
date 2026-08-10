@@ -119,8 +119,9 @@ document.getElementById('bgmVolumeInput').addEventListener('input', (e) => {
 
 document.getElementById('bgmSelect').addEventListener('change', (e) => {
     const audio = document.getElementById('bgmPreview');
-    if(e.target.value) {
-        audio.src = `https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/inputs/${e.target.value}?download=true`;
+    if (e.target.value) {
+        audio.src = `/bgm/${e.target.value}`;
+        audio.style.display = 'block';
         audio.volume = document.getElementById('bgmVolumeInput').value / 100.0;
         audio.play();
     } else {
