@@ -837,47 +837,48 @@ if str(add_captions).lower() in ["true", "1", "yes"]:
     if not caption_color_hex or len(caption_color_hex) < 6: caption_color_hex = "#ffffff"
     
     text_clips = []
-    chunk_size = 4
+    text_clips = []
     
-    for i in range(0, len(word_timings), chunk_size):
-        chunk = word_timings[i:i+chunk_size]
-        if not chunk: continue
+    max_text_width = target_w * 0.85
+    chunks = []
+    current_chunk = []
+    current_width = 0
+    
+    for w_info in word_timings:
+        w_text = w_info['word'].upper()
+        tc = TextClip(w_text, font="/kaggle/working/Montserrat.ttf", fontsize=int(___FONT_SIZE___), color=caption_color_hex, stroke_color="black", stroke_width=2)
+        word_w = tc.w
         
-        chunk_start = chunk[0]['start']
-        if i + chunk_size < len(word_timings):
-            chunk_end = word_timings[i+chunk_size]['start']
+        if current_width + word_w + 15 > max_text_width and len(current_chunk) > 0:
+            chunks.append(current_chunk)
+            current_chunk = [w_info]
+            current_width = word_w + 15
         else:
-            chunk_end = chunk[-1]['end'] + 0.5
+            current_chunk.append(w_info)
+            current_width += word_w + 15
             
-        chunk_dur = chunk_end - chunk_start
+    if current_chunk:
+        chunks.append(current_chunk)
         
-        word_clips = []
-        total_width = 0
-        spacing = 15
+    for chunk in chunks:
+        chunk_start = chunk[0]['start']
+        chunk_end = chunk[-1]['end'] + 0.3
+        dur = chunk_end - chunk_start
         
-        for w_info in chunk:
-            w_text = w_info['word'].upper()
-            tc = TextClip(w_text, font="/kaggle/working/Montserrat.ttf", fontsize=int(___FONT_SIZE___), color=caption_color_hex, stroke_color="black", stroke_width=2)
-            word_clips.append({"clip": tc, "info": w_info})
-            total_width += tc.w + spacing
+        chunk_text = " ".join([w['word'] for w in chunk]).upper()
+        tc = TextClip(chunk_text, font="/kaggle/working/Montserrat.ttf", fontsize=int(___FONT_SIZE___), color=caption_color_hex, stroke_color="black", stroke_width=2)
+        
+        if tc.w > max_text_width:
+            tc = tc.resize(width=max_text_width)
             
-        total_width -= spacing
-        start_x = (target_w - total_width) / 2
         base_y = target_h * (float(___FONT_Y_POS___) / 100.0)
         
-        current_x = start_x
-        for w_data in word_clips:
-            tc = w_data['clip']
-            w_info = w_data['info']
+        def zoom_func(t):
+            prog = min(1.0, max(0.0, t / dur))
+            return 1.0 + (0.10 * prog)
             
-            def make_pos(curr_x, by):
-                return lambda t: (curr_x, by + max(0, 50 - 250*t))
-            
-            tc = tc.set_start(w_info['start']).set_duration(chunk_end - w_info['start'])
-            tc = tc.set_position(make_pos(current_x, base_y))
-            text_clips.append(tc)
-            
-            current_x += tc.w + spacing
+        tc = tc.set_start(chunk_start).set_duration(dur).resize(zoom_func).set_position(("center", base_y))
+        text_clips.append(tc)
 
     final_video = CompositeVideoClip([base_video] + text_clips)
 else:
@@ -913,7 +914,8 @@ if os.path.exists(current_video_path):
     if has_bgm and os.path.exists("/kaggle/working/bg_music.mp3"):
         print("Integrating background music...", flush=True)
         bgm_out_path = "/kaggle/working/result_with_bgm.mp4"
-        bgm_filter = "[0:a]volume=1.0[speech];[1:a]volume=0.18[bg];[speech][bg]amix=inputs=2:duration=first[a]"
+        vol = float(___BGM_VOLUME___) / 100.0 if ___BGM_VOLUME___ else 0.15
+        bgm_filter = f"[0:a]volume=1.0[speech];[1:a]volume={vol:.2f}[bg];[speech][bg]amix=inputs=2:duration=first[a]"
         bgm_cmd = f"ffmpeg -y -i {q}{current_video_path}{q} -stream_loop -1 -i /kaggle/working/bg_music.mp3 -filter_complex {q}{bgm_filter}{q} -map 0:v -map {q}[a]{q} -c:v copy -c:a aac -b:a 192k {q}{bgm_out_path}{q}"
         if os.system(bgm_cmd) == 0 and os.path.exists(bgm_out_path):
             os.remove(current_video_path)
@@ -2134,6 +2136,7 @@ async def create_job(
     add_grid: Optional[str] = Form("true"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
+    bgm_volume: Optional[str] = Form("15"),
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),

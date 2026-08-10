@@ -111,6 +111,24 @@ navLinks.forEach(link => {
     });
 });
 
+document.getElementById('bgmVolumeInput').addEventListener('input', (e) => {
+    document.getElementById('bgmVolumeDisplay').innerText = `${e.target.value}%`;
+    const audio = document.getElementById('bgmPreview');
+    if (audio) audio.volume = e.target.value / 100.0;
+});
+
+document.getElementById('bgmSelect').addEventListener('change', (e) => {
+    const audio = document.getElementById('bgmPreview');
+    if(e.target.value) {
+        audio.src = `https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/inputs/${e.target.value}?download=true`;
+        audio.volume = document.getElementById('bgmVolumeInput').value / 100.0;
+        audio.play();
+    } else {
+        audio.pause();
+        audio.src = "";
+    }
+});
+
 // Settings Management
 const settingsForm = document.getElementById('settingsForm');
 const aiBaseUrl = document.getElementById('aiBaseUrl');
