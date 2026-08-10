@@ -104,6 +104,7 @@ def append_log(job_id, message):
         log_line = f"[{timestamp}] {message}"
         jobs[job_id]["logs"].append(log_line)
         save_jobs(jobs)
+        update_firebase_job(job_id, jobs[job_id])
         print(f"[EpicSync - {job_id}] {message}", flush=True)
 
 def setup_kaggle_auth(username, key):
@@ -1856,6 +1857,7 @@ def monitor_job(job_id, slug, env, hf_repo, hf_token):
                     jobs[job_id]["progress"] = new_prog
                     jobs[job_id]["step_text"] = f"Synthesizing audio & lip sync on GPU ({new_prog}%)..."
                     save_jobs(jobs)
+                    update_firebase_job(job_id, jobs[job_id])
                 consecutive_errors = 0
         except Exception as e:
             consecutive_errors += 1
@@ -1883,7 +1885,8 @@ def prepare_and_launch_standard_job(
     kaggle_key: str,
     hf_repo: str,
     hf_token: str,
-    kernel_id: str
+    kernel_id: str,
+    bgm_volume: str = "15"
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
@@ -1909,7 +1912,7 @@ def prepare_and_launch_standard_job(
             append_log(job_id, f"Uploading source video to Hugging Face Dataset {hf_repo}...")
             upload_to_hf_hub(video_path, hf_repo, f"inputs/{job_id}.mp4", hf_token)
 
-        script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+        script_content = KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(script_text)).replace("___VOICE___", repr(voice)).replace("___VIDEO_B64___", repr(vb64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed)).replace("___BGM_VOLUME___", str(bgm_volume))
 
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
@@ -1980,7 +1983,8 @@ def prepare_and_launch_premium_job(
     caption_color: str = "#ffffff",
     font_size: str = "60",
     font_y_pos: str = "83",
-    uid: str = None
+    uid: str = None,
+    bgm_volume: str = "15"
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
@@ -2074,9 +2078,9 @@ def prepare_and_launch_premium_job(
             script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
         elif video_model == "pexels":
             pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K").strip().strip('"').strip("'")
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___ADD_GRID___", repr(str(add_grid))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos))
+            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___ADD_GRID___", repr(str(add_grid))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos)).replace("___BGM_VOLUME___", str(bgm_volume))
         else:
-            script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
+            script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed)).replace("___BGM_VOLUME___", str(bgm_volume))
             
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
@@ -2209,7 +2213,7 @@ async def create_job(
     background_tasks.add_task(
         prepare_and_launch_standard_job,
         job_id, staging, video_path, bgm_path, bgm_repo_path, script_text, voice, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, str(bgm_volume)
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -2226,6 +2230,7 @@ async def create_premium_job(
     add_grid: Optional[str] = Form("true"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
+    bgm_volume: Optional[str] = Form("15"),
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
@@ -2319,7 +2324,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(add_grid), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid, str(bgm_volume)
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -2416,12 +2421,38 @@ def clear_logs():
     save_jobs(jobs)
     return {"status": "CLEARED"}
 
+from fastapi.responses import FileResponse, StreamingResponse
+import httpx
+import asyncio
+
 @app.get("/api/video/{job_id}")
-def get_video(job_id: str):
+async def get_video(job_id: str):
     path = os.path.join(OUTPUTS_DIR, f"{job_id}.mp4")
     if os.path.exists(path):
         return FileResponse(path, media_type="video/mp4")
-    raise HTTPException(status_code=404, detail="Video file not found")
+    
+    # Fallback to streaming from Hugging Face if ephemeral disk lost the file
+    hf_repo = os.environ.get("HF_REPO", "epic-gab/EpicSync-Dataset")
+    hf_token = os.environ.get("HF_TOKEN", "")
+    
+    url = f"https://huggingface.co/datasets/{hf_repo}/resolve/main/outputs/{job_id}.mp4"
+    headers = {}
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+        
+    client = httpx.AsyncClient()
+    req = client.build_request("GET", url, headers=headers)
+    res = await client.send(req, stream=True)
+    
+    if res.status_code == 200:
+        async def stream_generator():
+            async for chunk in res.aiter_raw():
+                yield chunk
+            await res.aclose()
+        return StreamingResponse(stream_generator(), media_type="video/mp4")
+    
+    await res.aclose()
+    raise HTTPException(status_code=404, detail="Video file not found locally or remotely.")
 
 @app.get("/api/bgm_list")
 def list_bgm_files(hf_repo: str = "epic-gab/EpicSync-Dataset", hf_token: str = ""):
