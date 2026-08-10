@@ -528,14 +528,25 @@ if os.path.exists(current_video_path):
                     for idx, (st, et, txt) in enumerate(sub_cues, 1):
                         sf.write(f"{idx}{nl}{format_srt_time(st)} --> {format_srt_time(et)}{nl}{txt}{nl}{nl}")
                 sub_out_path = "/kaggle/working/result_retalking_subtitled.mp4"
-                sub_filter = "subtitles=/kaggle/working/captions.srt:force_style='FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV=25'"
+                
+                # Dynamic subtitles styling: 5/6 of screen from top = 1/6 from bottom.
+                # SRT uses 288p script resolution default in ffmpeg.
+                margin_v = 48 # 288 / 6
+                if aspect_ratio_mode == "16:9":
+                    font_size = 37
+                elif aspect_ratio_mode == "1:1":
+                    font_size = 23
+                else: # 9:16
+                    font_size = 12
+
+                sub_filter = f"subtitles=/kaggle/working/captions.srt:force_style='FontName=DejaVu Sans,FontSize={font_size},PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV={margin_v}'"
                 sub_cmd = f"ffmpeg -y -i {q}{current_video_path}{q} -vf {q}{sub_filter}{q} -c:a copy {q}{sub_out_path}{q}"
                 if os.system(sub_cmd) == 0 and os.path.exists(sub_out_path) and os.path.getsize(sub_out_path) > 0:
                     os.remove(current_video_path)
                     os.rename(sub_out_path, current_video_path)
                     print("Successfully burned 4-word subtitles onto video!", flush=True)
                 else:
-                    sub_filter_fb = "subtitles=/kaggle/working/captions.srt:force_style='FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV=25'"
+                    sub_filter_fb = f"subtitles=/kaggle/working/captions.srt:force_style='FontSize={font_size},PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV={margin_v}'"
                     sub_cmd_fb = f"ffmpeg -y -i {q}{current_video_path}{q} -vf {q}{sub_filter_fb}{q} -c:a copy {q}{sub_out_path}{q}"
                     if os.system(sub_cmd_fb) == 0 and os.path.exists(sub_out_path) and os.path.getsize(sub_out_path) > 0:
                         os.remove(current_video_path)
@@ -1619,14 +1630,25 @@ if os.path.exists(current_video_path):
                     for idx, (st, et, txt) in enumerate(sub_cues, 1):
                         sf.write(f"{idx}{nl}{format_srt_time(st)} --> {format_srt_time(et)}{nl}{txt}{nl}{nl}")
                 sub_out_path = "/kaggle/working/result_retalking_subtitled.mp4"
-                sub_filter = "subtitles=/kaggle/working/captions.srt:force_style='FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV=25'"
+                
+                # Dynamic subtitles styling: 5/6 of screen from top = 1/6 from bottom.
+                # SRT uses 288p script resolution default in ffmpeg.
+                margin_v = 48 # 288 / 6
+                if aspect_ratio_mode == "16:9":
+                    font_size = 37
+                elif aspect_ratio_mode == "1:1":
+                    font_size = 23
+                else: # 9:16
+                    font_size = 12
+
+                sub_filter = f"subtitles=/kaggle/working/captions.srt:force_style='FontName=DejaVu Sans,FontSize={font_size},PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV={margin_v}'"
                 sub_cmd = f"ffmpeg -y -i {q}{current_video_path}{q} -vf {q}{sub_filter}{q} -c:a copy {q}{sub_out_path}{q}"
                 if os.system(sub_cmd) == 0 and os.path.exists(sub_out_path) and os.path.getsize(sub_out_path) > 0:
                     os.remove(current_video_path)
                     os.rename(sub_out_path, current_video_path)
                     print("Successfully burned 4-word subtitles onto video!", flush=True)
                 else:
-                    sub_filter_fb = "subtitles=/kaggle/working/captions.srt:force_style='FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV=25'"
+                    sub_filter_fb = f"subtitles=/kaggle/working/captions.srt:force_style='FontSize={font_size},PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV={margin_v}'"
                     sub_cmd_fb = f"ffmpeg -y -i {q}{current_video_path}{q} -vf {q}{sub_filter_fb}{q} -c:a copy {q}{sub_out_path}{q}"
                     if os.system(sub_cmd_fb) == 0 and os.path.exists(sub_out_path) and os.path.getsize(sub_out_path) > 0:
                         os.remove(current_video_path)
