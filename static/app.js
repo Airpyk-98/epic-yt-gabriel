@@ -497,6 +497,12 @@ createContentForm.addEventListener('submit', async (e) => {
             formData.append('target_duration', document.getElementById('targetDurationSelect').value);
             formData.append('aspect_ratio', aspectRatio);
             
+            const gridColorEl = document.getElementById('gridColorInput');
+            if (gridColorEl) formData.append('grid_color', gridColorEl.value);
+            
+            const captionColorEl = document.getElementById('captionColorInput');
+            if (captionColorEl) formData.append('caption_color', captionColorEl.value);
+            
             // Fetch Kaggle credentials for the project
             const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
             if (projDoc.exists()) {

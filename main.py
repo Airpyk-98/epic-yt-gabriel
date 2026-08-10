@@ -690,45 +690,90 @@ orientation = "portrait" if aspect == "9:16" else "landscape" if aspect == "16:9
 
 for i, seg in enumerate(segments):
     kw = seg['keyword']
-    dur = seg['duration']
-    print(f"Searching Pexels for: '{kw}' (Duration: {dur:.2f}s)", flush=True)
+    total_dur = seg['duration']
+    print(f"Searching Pexels for: '{kw}' (Duration: {total_dur:.2f}s)", flush=True)
     
-    url = f"https://api.pexels.com/videos/search?query={kw}&per_page=5&orientation={orientation}&size=medium"
+    url = f"https://api.pexels.com/videos/search?query={kw}&per_page=10&orientation={orientation}&size=medium"
     try:
         resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         if not data.get("videos"):
-            resp = requests.get(f"https://api.pexels.com/videos/search?query=nature&per_page=1&orientation={orientation}", headers=headers)
+            resp = requests.get(f"https://api.pexels.com/videos/search?query=nature&per_page=10&orientation={orientation}", headers=headers)
             data = resp.json()
             
-        video_url = None
-        for v in data.get("videos", []):
-            if v["duration"] >= dur:
-                for file_obj in v["video_files"]:
-                    if file_obj["quality"] == "hd":
-                        video_url = file_obj["link"]
-                        break
-                if video_url: break
+        videos_found = data.get("videos", [])
+        if not videos_found: continue
+        
+        # We need up to 4 videos.
+        selected_videos = videos_found[:4]
+        
+        rem_dur = total_dur
+        for j, v in enumerate(selected_videos):
+            if rem_dur <= 0.1: break
+            
+            video_url = None
+            for file_obj in v["video_files"]:
+                if file_obj["quality"] == "hd":
+                    video_url = file_obj["link"]
+                    break
+            if not video_url:
+                video_url = v["video_files"][0]["link"]
                 
-        if not video_url and data.get("videos"):
-            video_url = data["videos"][0]["video_files"][0]["link"]
+            if j < len(selected_videos) - 1:
+                clip_dur = min(3.0, rem_dur)
+            else:
+                clip_dur = rem_dur
+                
+            out_name = f"/kaggle/working/clip_{i}_{j}.mp4"
+            v_data = requests.get(video_url).content
+            with open(out_name, "wb") as f:
+                f.write(v_data)
+                
+            video_files.append((out_name, clip_dur))
+            rem_dur -= clip_dur
             
-        out_name = f"/kaggle/working/clip_{i}.mp4"
-        v_data = requests.get(video_url).content
-        with open(out_name, "wb") as f:
-            f.write(v_data)
-            
-        video_files.append((out_name, dur))
     except Exception as e:
         print(f"Failed to fetch video for '{kw}': {e}", flush=True)
 
 # 4. ASSEMBLE WITH MOVIEPY
 print("Assembling timeline with MoviePy...", flush=True)
-from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, vfx
+from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, TextClip, CompositeVideoClip, vfx
+from moviepy.video.VideoClip import ImageClip as MpImageClip
+import math
+from PIL import Image, ImageDraw
+import numpy as np
+import cv2
 
 clips = []
 target_w, target_h = (1080, 1920) if orientation == "portrait" else (1920, 1080)
+
+# Calculate 80% grid padding
+a = 4
+b = -2 * (target_w + target_h)
+c = 0.2 * target_w * target_h
+P = int((-b - math.sqrt(b**2 - 4*a*c)) / (2*a))
+
+# Create grid border image
+grid_color_hex = ___GRID_COLOR___
+if not grid_color_hex or len(grid_color_hex) < 6: grid_color_hex = "#ffffff"
+h_grid = grid_color_hex.lstrip('#')
+rgb_grid = tuple(int(h_grid[i:i+2], 16) for i in (0, 2, 4)) if len(h_grid)==6 else (255,255,255)
+
+border_img = Image.new('RGBA', (target_w, target_h), (0,0,0,0))
+b_draw = ImageDraw.Draw(border_img)
+b_draw.rounded_rectangle([P, P, target_w - P, target_h - P], radius=60, outline=rgb_grid, width=12)
+border_arr = np.array(border_img)
+
+# Create foreground mask
+mask_img = Image.new('L', (target_w, target_h), 0)
+m_draw = ImageDraw.Draw(mask_img)
+m_draw.rounded_rectangle([P, P, target_w - P, target_h - P], radius=60, fill=255)
+mask_arr = np.array(mask_img) / 255.0
+
+def blur_vignette(frame):
+    b_frame = cv2.GaussianBlur(frame, (51, 51), 0)
+    return (b_frame * 0.4).astype(np.uint8)
 
 for fpath, dur in video_files:
     if not os.path.exists(fpath): continue
@@ -745,13 +790,76 @@ for fpath, dur in video_files:
     x_center = clip.w / 2
     y_center = clip.h / 2
     clip = clip.crop(x1=x_center - target_w/2, y1=y_center - target_h/2, x2=x_center + target_w/2, y2=y_center + target_h/2)
-    clips.append(clip)
+    
+    bg_clip = clip.fl_image(blur_vignette)
+    mask_clip = MpImageClip(mask_arr, ismask=True).set_duration(clip.duration)
+    fg_clip = clip.set_mask(mask_clip)
+    border_clip = MpImageClip(border_arr).set_duration(clip.duration)
+    
+    comp = CompositeVideoClip([bg_clip, fg_clip, border_clip])
+    clips.append(comp)
 
 if not clips:
     print("ERROR: No clips were successfully generated.", flush=True)
     sys.exit(1)
 
-final_video = concatenate_videoclips(clips, method="compose")
+base_video = concatenate_videoclips(clips, method="compose")
+
+add_captions = ___ADD_CAPTIONS___
+if str(add_captions).lower() in ["true", "1", "yes"]:
+    print("Generating typography overlay...", flush=True)
+    run_cmd("wget -qO /kaggle/working/Montserrat.ttf https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Bold.ttf")
+    
+    caption_color_hex = ___CAPTION_COLOR___
+    if not caption_color_hex or len(caption_color_hex) < 6: caption_color_hex = "#ffffff"
+    
+    text_clips = []
+    chunk_size = 4
+    
+    for i in range(0, len(word_timings), chunk_size):
+        chunk = word_timings[i:i+chunk_size]
+        if not chunk: continue
+        
+        chunk_start = chunk[0]['start']
+        if i + chunk_size < len(word_timings):
+            chunk_end = word_timings[i+chunk_size]['start']
+        else:
+            chunk_end = chunk[-1]['end'] + 0.5
+            
+        chunk_dur = chunk_end - chunk_start
+        
+        word_clips = []
+        total_width = 0
+        spacing = 15
+        
+        for w_info in chunk:
+            w_text = w_info['word'].upper()
+            tc = TextClip(w_text, font="/kaggle/working/Montserrat.ttf", fontsize=60, color=caption_color_hex, stroke_color="black", stroke_width=2)
+            word_clips.append({"clip": tc, "info": w_info})
+            total_width += tc.w + spacing
+            
+        total_width -= spacing
+        start_x = (target_w - total_width) / 2
+        base_y = target_h * (5/6)
+        
+        current_x = start_x
+        for w_data in word_clips:
+            tc = w_data['clip']
+            w_info = w_data['info']
+            
+            def make_pos(curr_x, by):
+                return lambda t: (curr_x, by + max(0, 50 - 250*t))
+            
+            tc = tc.set_start(w_info['start']).set_duration(chunk_end - w_info['start'])
+            tc = tc.set_position(make_pos(current_x, base_y))
+            text_clips.append(tc)
+            
+            current_x += tc.w + spacing
+
+    final_video = CompositeVideoClip([base_video] + text_clips)
+else:
+    final_video = base_video
+
 audio_clip = AudioFileClip("/kaggle/working/input.wav")
 final_video = final_video.set_audio(audio_clip)
 
@@ -762,7 +870,7 @@ for c in clips: c.close()
 final_video.close()
 audio_clip.close()
 
-# 5. POST-PROCESSING (Subtitles, BGM)
+# 5. POST-PROCESSING (BGM)
 current_video_path = final_output
 has_bgm = False
 bgm_repo_path = ___BGM_REPO_PATH___
@@ -788,46 +896,7 @@ if os.path.exists(current_video_path):
             os.remove(current_video_path)
             os.rename(bgm_out_path, current_video_path)
 
-    add_captions = ___ADD_CAPTIONS___
-    if str(add_captions).lower() in ["true", "1", "yes"]:
-        print("Adding Subtitles...", flush=True)
-        try:
-            sub_cues = []
-            cur_time = 0.0
-            for seg in segments:
-                words = seg['text'].split()
-                chunk_size = 4
-                chunks = [words[j:j + chunk_size] for j in range(0, len(words), chunk_size)]
-                total_chars = sum(len(" ".join(c)) for c in chunks) or 1
-                cur_time = seg['start']
-                dur_sec = seg['duration']
-                for c in chunks:
-                    chunk_text = " ".join(c)
-                    c_dur = dur_sec * (len(chunk_text) / total_chars)
-                    c_end = cur_time + c_dur
-                    sub_cues.append((cur_time, c_end, chunk_text))
-                    cur_time = c_end
-
-            if sub_cues:
-                def format_srt_time(sec):
-                    hrs = int(sec // 3600)
-                    mins = int((sec % 3600) // 60)
-                    secs = int(sec % 60)
-                    msecs = int(round((sec - int(sec)) * 1000))
-                    return f"{hrs:02d}:{mins:02d}:{secs:02d},{msecs:03d}"
-                nl = chr(10)
-                with open("/kaggle/working/captions.srt", "w", encoding="utf-8") as sf:
-                    for idx, (st, et, txt) in enumerate(sub_cues, 1):
-                        sf.write(f"{idx}{nl}{format_srt_time(st)} --> {format_srt_time(et)}{nl}{txt}{nl}{nl}")
-                sub_out_path = "/kaggle/working/result_subtitled.mp4"
-                sub_filter = "subtitles=/kaggle/working/captions.srt:force_style='FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=2,BorderStyle=1,Alignment=2,MarginV=25'"
-                sub_cmd = f"ffmpeg -y -i {q}{current_video_path}{q} -vf {q}{sub_filter}{q} -c:a copy {q}{sub_out_path}{q}"
-                if os.system(sub_cmd) == 0 and os.path.exists(sub_out_path):
-                    os.remove(current_video_path)
-                    os.rename(sub_out_path, current_video_path)
-        except Exception as e:
-            pass
-
+# 6. UPLOAD TO HF
 # 6. UPLOAD TO HF
 print("Uploading to Hugging Face dataset...", flush=True)
 try:
@@ -1880,6 +1949,8 @@ def prepare_and_launch_premium_job(
     hf_token: str,
     kernel_id: str,
     video_model: str,
+    grid_color: str = "#ffffff",
+    caption_color: str = "#ffffff",
     uid: str = None
 ):
     try:
@@ -1974,7 +2045,7 @@ def prepare_and_launch_premium_job(
             script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
         elif video_model == "pexels":
             pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K").strip().strip('"').strip("'")
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key))
+            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color))
         else:
             script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
             
@@ -2130,6 +2201,8 @@ async def create_premium_job(
     hf_token: str = Form(""),
     video_model: str = Form("ltx-video"),
     target_duration: str = Form("60 seconds"),
+    grid_color: str = Form("#ffffff"),
+    caption_color: str = Form("#ffffff"),
     image: Optional[UploadFile] = File(None),
     bg_music: Optional[UploadFile] = File(None)
 ):
@@ -2212,7 +2285,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, uid
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, uid
     )
         
     return {"job_id": job_id, "status": "STAGING"}
