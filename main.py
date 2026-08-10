@@ -843,13 +843,13 @@ if str(add_captions).lower() in ["true", "1", "yes"]:
         
         for w_info in chunk:
             w_text = w_info['word'].upper()
-            tc = TextClip(w_text, font="/kaggle/working/Montserrat.ttf", fontsize=___FONT_SIZE___, color=caption_color_hex, stroke_color="black", stroke_width=2)
+            tc = TextClip(w_text, font="/kaggle/working/Montserrat.ttf", fontsize=int(___FONT_SIZE___), color=caption_color_hex, stroke_color="black", stroke_width=2)
             word_clips.append({"clip": tc, "info": w_info})
             total_width += tc.w + spacing
             
         total_width -= spacing
         start_x = (target_w - total_width) / 2
-        base_y = target_h * (___FONT_Y_POS___ / 100.0)
+        base_y = target_h * (float(___FONT_Y_POS___) / 100.0)
         
         current_x = start_x
         for w_data in word_clips:
