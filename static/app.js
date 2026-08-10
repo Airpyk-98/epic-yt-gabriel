@@ -551,6 +551,12 @@ createContentForm.addEventListener('submit', async (e) => {
             const fontYPosEl = document.getElementById('fontYPosInput');
             if (fontYPosEl) formData.append('font_y_pos', fontYPosEl.value);
             
+            const bgmSelectEl = document.getElementById('bgmSelect');
+            if (bgmSelectEl) formData.append('bgm_select', bgmSelectEl.value);
+            
+            const bgmVolumeEl = document.getElementById('bgmVolumeInput');
+            if (bgmVolumeEl) formData.append('bgm_volume', bgmVolumeEl.value);
+            
             const addCaptionsEl = document.getElementById('addCaptionsToggle');
             if (addCaptionsEl) formData.append('add_captions', addCaptionsEl.checked ? 'true' : 'false');
 
