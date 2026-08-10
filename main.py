@@ -605,28 +605,38 @@ segments_json = ___PEXELS_SEGMENTS_JSON___
 PEXELS_API_KEY = ___PEXELS_API_KEY___
 
 # 1. SETUP AUDIO AND CAPTURE WORD TIMINGS
-run_cmd("pip install -q edge-tts moviepy")
-print(f"Generating studio voiceover and extracting word boundaries...", flush=True)
+run_cmd("apt-get update && apt-get install -y imagemagick")
+run_cmd("sed -i 's/none/read,write/g' /etc/ImageMagick-6/policy.xml || true")
+os.environ["IMAGEMAGICK_BINARY"] = "/usr/bin/convert"
+
+run_cmd("pip install -q edge-tts moviepy openai-whisper")
+print(f"Generating studio voiceover...", flush=True)
 
 with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
     f.write(script_text)
 
 import asyncio, edge_tts
-word_timings = []
-
-async def generate_audio_and_timings():
+async def generate_audio():
     comm = edge_tts.Communicate(script_text, voice)
     await comm.save("/kaggle/working/input.wav")
-    
-    comm_events = edge_tts.Communicate(script_text, voice)
-    async for event in comm_events.stream():
-        if event["type"] == "WordBoundary":
-            start_sec = event["offset"] / 10000000.0
-            word_dur = event["duration"] / 10000000.0
-            word_timings.append({"word": event["text"], "start": start_sec, "end": start_sec + word_dur})
-            
-asyncio.run(generate_audio_and_timings())
-print(f"Captured {len(word_timings)} word timings.", flush=True)
+asyncio.run(generate_audio())
+
+print("Running Whisper for accurate word timings...", flush=True)
+import whisper
+import warnings
+warnings.filterwarnings("ignore")
+model = whisper.load_model("base")
+result = model.transcribe("/kaggle/working/input.wav", word_timestamps=True)
+word_timings = []
+for segment in result['segments']:
+    if 'words' in segment:
+        for word in segment['words']:
+            word_timings.append({
+                'word': word['word'].strip(),
+                'start': word['start'],
+                'end': word['end']
+            })
+print(f"Captured {len(word_timings)} word timings from Whisper.", flush=True)
 
 # 2. MATCH SEGMENTS TO AUDIO TIMINGS
 try:
@@ -800,13 +810,17 @@ for fpath, dur in video_files:
     y_center = clip.h / 2
     clip = clip.crop(x1=x_center - target_w/2, y1=y_center - target_h/2, x2=x_center + target_w/2, y2=y_center + target_h/2)
     
-    bg_clip = clip.fl_image(blur_vignette)
-    mask_clip = MpImageClip(mask_arr, ismask=True).set_duration(clip.duration)
-    fg_clip = clip.set_mask(mask_clip)
-    border_clip = MpImageClip(border_arr).set_duration(clip.duration)
-    
-    comp = CompositeVideoClip([bg_clip, fg_clip, border_clip])
-    clips.append(comp)
+    add_grid = ___ADD_GRID___
+    if str(add_grid).lower() in ["true", "1", "yes"]:
+        bg_clip = clip.fl_image(blur_vignette)
+        mask_clip = MpImageClip(mask_arr, ismask=True).set_duration(clip.duration)
+        fg_clip = clip.set_mask(mask_clip)
+        border_clip = MpImageClip(border_arr).set_duration(clip.duration)
+        
+        comp = CompositeVideoClip([bg_clip, fg_clip, border_clip])
+        clips.append(comp)
+    else:
+        clips.append(clip)
 
 if not clips:
     print("ERROR: No clips were successfully generated.", flush=True)
@@ -1951,6 +1965,7 @@ def prepare_and_launch_premium_job(
     aspect_ratio: str,
     resolution: str,
     add_captions: str,
+    add_grid: str,
     video_speed: str,
     kaggle_user: str,
     kaggle_key: str,
@@ -2056,7 +2071,7 @@ def prepare_and_launch_premium_job(
             script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
         elif video_model == "pexels":
             pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K").strip().strip('"').strip("'")
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos))
+            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___ADD_GRID___", repr(str(add_grid))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos))
         else:
             script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
             
@@ -2116,6 +2131,7 @@ async def create_job(
     script_text: str = Form(...),
     voice: str = Form("en-US-AnaNeural"),
     add_captions: Optional[str] = Form("true"),
+    add_grid: Optional[str] = Form("true"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     projectId: str = Form(""),
@@ -2203,6 +2219,7 @@ async def create_premium_job(
     aspect_ratio: str = Form("9:16"),
     resolution: str = Form("720p"),
     add_captions: Optional[str] = Form("true"),
+    add_grid: Optional[str] = Form("true"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     projectId: str = Form(""),
@@ -2297,7 +2314,7 @@ async def create_premium_job(
     
     background_tasks.add_task(
         prepare_and_launch_premium_job,
-        job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(video_speed),
+        job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(add_grid), str(video_speed),
         kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid
     )
         

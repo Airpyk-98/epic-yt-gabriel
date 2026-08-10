@@ -533,6 +533,12 @@ createContentForm.addEventListener('submit', async (e) => {
             const fontYPosEl = document.getElementById('fontYPosInput');
             if (fontYPosEl) formData.append('font_y_pos', fontYPosEl.value);
             
+            const addCaptionsEl = document.getElementById('addCaptionsToggle');
+            if (addCaptionsEl) formData.append('add_captions', addCaptionsEl.checked ? 'true' : 'false');
+
+            const addGridEl = document.getElementById('addGridToggle');
+            if (addGridEl) formData.append('add_grid', addGridEl.checked ? 'true' : 'false');
+            
             // Fetch Kaggle credentials for the project
             const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
             if (projDoc.exists()) {

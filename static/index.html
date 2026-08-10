@@ -247,6 +247,28 @@
                             <input type="datetime-local" id="ytSchedule" style="width: 100%; padding: 0.8rem; background: var(--bg-card); border: 1px solid var(--border-color); color: #fff; border-radius: 8px;">
                         </div>
 
+                        <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label>Enable Video Captions</label>
+                                <p class="text-sm text-muted">Burn subtitles into the final video.</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="addCaptionsToggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+
+                        <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label>Enable Focus Grid</label>
+                                <p class="text-sm text-muted">Draw a center rectangle for 9:16 layout focus.</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="addGridToggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+
                         <div class="form-group toggle-group mt-4" id="previewScriptGroup" style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <label for="previewScriptToggle" style="margin-bottom: 0;">Preview script before generation</label>
