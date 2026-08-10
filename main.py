@@ -2440,7 +2440,7 @@ async def get_video(job_id: str):
     if hf_token:
         headers["Authorization"] = f"Bearer {hf_token}"
         
-    client = httpx.AsyncClient()
+    client = httpx.AsyncClient(follow_redirects=True)
     req = client.build_request("GET", url, headers=headers)
     res = await client.send(req, stream=True)
     
