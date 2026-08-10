@@ -90,6 +90,8 @@ def update_firebase_job(job_id, job_info):
         }
         if "error" in job_info:
             data_to_sync["error"] = job_info["error"]
+        if "output_file" in job_info:
+            data_to_sync["output_file"] = job_info["output_file"]
             
         db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set(data_to_sync, merge=True)
     except Exception as e:
@@ -2113,7 +2115,7 @@ async def create_job(
     background_tasks: BackgroundTasks,
     script_text: str = Form(...),
     voice: str = Form("en-US-AnaNeural"),
-    add_captions: Optional[str] = Form("false"),
+    add_captions: Optional[str] = Form("true"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     projectId: str = Form(""),
@@ -2200,7 +2202,7 @@ async def create_premium_job(
     voice: str = Form("en-US-AnaNeural"),
     aspect_ratio: str = Form("9:16"),
     resolution: str = Form("720p"),
-    add_captions: Optional[str] = Form("false"),
+    add_captions: Optional[str] = Form("true"),
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     projectId: str = Form(""),
