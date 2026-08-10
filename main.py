@@ -653,11 +653,18 @@ if not word_timings:
     total_words = sum(len(seg['text'].split()) for seg in segments)
     current_time = 0
     for seg in segments:
-        seg_dur = (len(seg['text'].split()) / max(total_words, 1)) * total_dur
+        words = seg['text'].split()
+        if not words: continue
+        seg_dur = (len(words) / max(total_words, 1)) * total_dur
         seg['start'] = current_time
         seg['end'] = current_time + seg_dur
         seg['duration'] = max(0.5, seg_dur)
-        current_time += seg_dur
+        
+        # Synthesize word_timings for typography
+        word_dur = seg_dur / len(words)
+        for w in words:
+            word_timings.append({"word": w, "start": current_time, "end": current_time + word_dur})
+            current_time += word_dur
 else:
     current_word_idx = 0
     for i, seg in enumerate(segments):
@@ -834,13 +841,13 @@ if str(add_captions).lower() in ["true", "1", "yes"]:
         
         for w_info in chunk:
             w_text = w_info['word'].upper()
-            tc = TextClip(w_text, font="/kaggle/working/Montserrat.ttf", fontsize=60, color=caption_color_hex, stroke_color="black", stroke_width=2)
+            tc = TextClip(w_text, font="/kaggle/working/Montserrat.ttf", fontsize=___FONT_SIZE___, color=caption_color_hex, stroke_color="black", stroke_width=2)
             word_clips.append({"clip": tc, "info": w_info})
             total_width += tc.w + spacing
             
         total_width -= spacing
         start_x = (target_w - total_width) / 2
-        base_y = target_h * (5/6)
+        base_y = target_h * (___FONT_Y_POS___ / 100.0)
         
         current_x = start_x
         for w_data in word_clips:
@@ -863,7 +870,7 @@ else:
 audio_clip = AudioFileClip("/kaggle/working/input.wav")
 final_video = final_video.set_audio(audio_clip)
 
-final_output = "/kaggle/working/raw_pexels.mp4"
+final_output = f"/kaggle/working/result_{___JOB_ID___}.mp4"
 final_video.write_videofile(final_output, fps=24, codec="libx264", audio_codec="aac")
 
 for c in clips: c.close()
@@ -1951,6 +1958,8 @@ def prepare_and_launch_premium_job(
     video_model: str,
     grid_color: str = "#ffffff",
     caption_color: str = "#ffffff",
+    font_size: str = "60",
+    font_y_pos: str = "83",
     uid: str = None
 ):
     try:
@@ -2045,7 +2054,7 @@ def prepare_and_launch_premium_job(
             script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
         elif video_model == "pexels":
             pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K").strip().strip('"').strip("'")
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color))
+            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos))
         else:
             script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed))
             
@@ -2203,6 +2212,8 @@ async def create_premium_job(
     target_duration: str = Form("60 seconds"),
     grid_color: str = Form("#ffffff"),
     caption_color: str = Form("#ffffff"),
+    font_size: str = Form("60"),
+    font_y_pos: str = Form("83"),
     image: Optional[UploadFile] = File(None),
     bg_music: Optional[UploadFile] = File(None)
 ):
@@ -2285,7 +2296,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, uid
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid
     )
         
     return {"job_id": job_id, "status": "STAGING"}

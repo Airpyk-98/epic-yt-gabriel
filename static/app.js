@@ -350,6 +350,30 @@ document.getElementById('videoModelSelect').addEventListener('change', (e) => {
 generatedScriptText.addEventListener('input', checkVideoSubmitState);
 mediaFileInput.addEventListener('change', checkVideoSubmitState);
 
+const fontYPosInput = document.getElementById('fontYPosInput');
+if (fontYPosInput) {
+    fontYPosInput.addEventListener('input', (e) => {
+        document.getElementById('fontYPosDisplay').innerText = e.target.value + '%';
+    });
+}
+
+const clearLogsBtn = document.getElementById('clearLogsBtn');
+if (clearLogsBtn) {
+    clearLogsBtn.addEventListener('click', async () => {
+        if (!confirm("Are you sure you want to clear the execution logs?")) return;
+        try {
+            const token = await auth.currentUser.getIdToken();
+            await fetch(`${BACKEND_URL}/api/clear_logs`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            document.getElementById('executionLogsList').innerHTML = '<div class="empty-state">No videos generated yet in this project.</div>';
+        } catch (e) {
+            console.error("Failed to clear logs", e);
+        }
+    });
+}
+
 // Main submission loop
 // Helper to wait for a job to complete by listening to Firestore
 function waitForJobCompletion(uid, projectId, jobId, uiStatusElement) {
@@ -502,6 +526,12 @@ createContentForm.addEventListener('submit', async (e) => {
             
             const captionColorEl = document.getElementById('captionColorInput');
             if (captionColorEl) formData.append('caption_color', captionColorEl.value);
+            
+            const fontSizeEl = document.getElementById('fontSizeInput');
+            if (fontSizeEl) formData.append('font_size', fontSizeEl.value);
+            
+            const fontYPosEl = document.getElementById('fontYPosInput');
+            if (fontYPosEl) formData.append('font_y_pos', fontYPosEl.value);
             
             // Fetch Kaggle credentials for the project
             const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
