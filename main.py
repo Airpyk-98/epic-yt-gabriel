@@ -2655,10 +2655,16 @@ def clear_logs(req: ClearLogsRequest, request: Request):
 
     try:
         docs = db.collection("users").document(uid).collection("projects").document(req.projectId).collection("executions").stream()
+        deleted_count = 0
         for doc in docs:
             doc_data = doc.to_dict()
-            if doc_data.get("status") != "RUNNING" and doc_data.get("status") != "QUEUED":
+            status = doc_data.get("status", "")
+            print(f"[DEBUG clear_logs] Found doc {doc.id} with status {status}")
+            if status not in ["RUNNING", "QUEUED", "STAGING", "GENERATING SCRIPT"]:
                 doc.reference.delete()
+                deleted_count += 1
+                print(f"[DEBUG clear_logs] Deleted doc {doc.id}")
+        print(f"[DEBUG clear_logs] Successfully deleted {deleted_count} logs for {uid} / {req.projectId}")
     except Exception as e:
         print(f"Failed to clear firestore logs: {e}")
 
