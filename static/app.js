@@ -384,7 +384,11 @@ if (clearLogsBtn) {
             const token = await auth.currentUser.getIdToken();
             await fetch(`${BACKEND_URL}/api/clear_logs`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ projectId: currentProject })
             });
             document.getElementById('executionLogsList').innerHTML = '<div class="empty-state">No videos generated yet in this project.</div>';
         } catch (e) {

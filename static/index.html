@@ -125,14 +125,6 @@
             if (tab === 'ai') {
                 btns[0].classList.add('active');
                 btns[0].style.background = 'rgba(255,255,255,0.1)';
-                btns[0].style.color = '#fff';
-                btns[0].style.borderColor = 'rgba(255,255,255,0.2)';
-                
-                btns[1].classList.remove('active');
-                btns[1].style.background = 'transparent';
-                btns[1].style.color = '#888';
-                btns[1].style.borderColor = 'rgba(255,255,255,0.1)';
-                
                 aiSec.style.display = 'block';
                 manualSec.style.display = 'none';
                 window.currentPromptMode = 'ai';
@@ -141,15 +133,6 @@
                 document.getElementById('previewScriptGroup').style.display = 'flex';
             } else {
                 btns[1].classList.add('active');
-                btns[1].style.background = 'rgba(255,255,255,0.1)';
-                btns[1].style.color = '#fff';
-                btns[1].style.borderColor = 'rgba(255,255,255,0.2)';
-                
-                btns[0].classList.remove('active');
-                btns[0].style.background = 'transparent';
-                btns[0].style.color = '#888';
-                btns[0].style.borderColor = 'rgba(255,255,255,0.1)';
-                
                 aiSec.style.display = 'none';
                 manualSec.style.display = 'block';
                 window.currentPromptMode = 'manual';
@@ -160,13 +143,7 @@
         }
         window.currentPromptMode = 'ai';
                         </script>
-                          <div class="form-group" id="sourceImageGroup">
-                              <label>Source Image</label>
-                              <div class="file-upload" onclick="document.getElementById('mediaFile').click()">
-                                  <span id="fileName">Select Portrait Image File (.png/.jpg)</span>
-                                  <input type="file" id="mediaFile" name="image" accept="image/*" onchange="document.getElementById('fileName').innerText = this.files[0] ? this.files[0].name : 'Select Portrait Image File (.png/.jpg)'; document.getElementById('fileName').style.color = '#fff';">
-                              </div>
-                          </div>
+
                         <div class="form-group">
                             <label>Video Generation Model</label>
                             <select id="videoModelSelect">
@@ -175,6 +152,15 @@
                                 <option value="pexels">Pexels (Stock B-Roll Pipeline)</option>
                             </select>
                         </div>
+
+                          <div class="form-group" id="sourceImageGroup">
+                              <label>Source Image</label>
+                              <div class="file-upload" onclick="document.getElementById('mediaFile').click()">
+                                  <span id="fileName">Select Portrait Image File (.png/.jpg)</span>
+                                  <input type="file" id="mediaFile" name="image" accept="image/*" onchange="document.getElementById('fileName').innerText = this.files[0] ? this.files[0].name : 'Select Portrait Image File (.png/.jpg)'; document.getElementById('fileName').style.color = '#fff';">
+                              </div>
+                          </div>
+                        
                         <div class="form-group">
                             <label>Aspect Ratio</label>
                             <select id="aspectRatioSelect">
@@ -185,66 +171,7 @@
                         </div>
                         <div class="form-group" id="targetDurationGroup">
                             <label>Target Video Duration</label>
-                            <select id="targetDurationSelect">
-                                <option value="30 seconds">~30 Seconds (Shorts)</option>
-                                <option value="45 seconds">~45 Seconds (Reels)</option>
-                                <option value="60 seconds" selected>~60 Seconds (Standard)</option>
-                                <option value="90 seconds">~90 Seconds (Long-form)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Voice Model</label>
-                            <select id="voiceModelSelect">
-                                <option value="en-US-ChristopherNeural">Christopher (en-US, Deep Male)</option>
-                                <option value="en-GB-SoniaNeural">Sonia (en-GB, British Female)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Focus Grid Color (Pexels)</label>
-                            <input type="color" id="gridColorInput" value="#ffffff" style="width: 100%; height: 40px; border: none; border-radius: 4px; padding: 0; cursor: pointer;">
-                        </div>
-                        <div class="form-group">
-                            <label>Caption Color (Pexels)</label>
-                            <input type="color" id="captionColorInput" value="#ffffff" style="width: 100%; height: 40px; border: none; border-radius: 4px; padding: 0; cursor: pointer;">
-                        </div>
-                        <div class="form-group">
-                            <label>Caption Font Size</label>
-                            <input type="number" id="fontSizeInput" value="60" min="20" max="150" style="width: 100%; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(255,255,255,0.05); color: #fff;">
-                        </div>
-                        <div class="form-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                            <label>Caption Y-Position (%)</label>
-                            <div style="display: flex; align-items: center; gap: 1rem;">
-                                <input type="range" id="fontYPosInput" min="10" max="95" value="83" style="flex: 1; cursor: pointer;">
-                                <span id="fontYPosDisplay" style="font-size: 0.9rem; color: #aaa; width: 40px;">83%</span>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Output Resolution</label>
-                            <select id="resolutionSelect">
-                                <option value="480p">480p — Fast & Reliable (480×864)</option>
-                                <option value="540p">540p — Balanced (540×960)</option>
-                                <option value="720p" selected>720p — HD Quality (720×1280)</option>
-                                <option value="960p">960p — Ultra HD (960×1728, slower)</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group mt-3">
-                            <label>Thumbnail Idea (Optional)</label>
-                            <input type="text" id="thumbnailPrompt" placeholder="e.g. dramatic dark background with neon red text">
-                        </div>
-                        
-                        <div class="form-group mt-3">
-                            <label>YouTube Privacy Status</label>
-                            <select id="ytPrivacy">
-                                <option value="private">Private</option>
-                                <option value="unlisted">Unlisted</option>
-                                <option value="public">Public</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group mt-3">
-                            <label>Publish Schedule (Optional)</label>
-                            <input type="datetime-local" id="ytSchedule" style="width: 100%; padding: 0.8rem; background: var(--bg-card); border: 1px solid var(--border-color); color: #fff; border-radius: 8px;">
+                            <input type="text" id="targetDurationSelect" value="60 seconds" placeholder="e.g. 60 seconds" style="width: 100%; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(255,255,255,0.05); color: #fff;">
                         </div>
 
                         <div class="form-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
@@ -263,14 +190,6 @@
                             <audio id="bgmPreview" controls style="width: 100%; height: 35px; border-radius: 8px;"></audio>
                         </div>
                         
-                        <div class="form-group mt-2" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                            <label>BGM Volume (%)</label>
-                            <div style="display: flex; align-items: center; gap: 1rem;">
-                                <input type="range" id="bgmVolumeInput" min="0" max="100" value="15" style="flex: 1; cursor: pointer;">
-                                <span id="bgmVolumeDisplay" style="font-size: 0.9rem; color: #aaa; width: 40px;">15%</span>
-                            </div>
-                        </div>
-
                         <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <label>Enable Video Captions</label>
@@ -282,16 +201,79 @@
                             </label>
                         </div>
 
-                        <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <label>Enable Focus Grid</label>
-                                <p class="text-sm text-muted">Draw a center rectangle for 9:16 layout focus.</p>
+                        <details class="form-group mt-4" style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                            <summary style="cursor: pointer; font-weight: bold; color: #e5b300; margin-bottom: 1rem;">Advanced Options</summary>
+                            
+                            <div class="form-group mt-3">
+                                <label>Voice Model</label>
+                                <select id="voiceModelSelect">
+                                    <option value="en-US-ChristopherNeural">Christopher (en-US, Deep Male)</option>
+                                    <option value="en-GB-SoniaNeural">Sonia (en-GB, British Female)</option>
+                                </select>
                             </div>
-                            <label class="switch">
-                                <input type="checkbox" id="addGridToggle" checked>
-                                <span class="slider round"></span>
-                            </label>
-                        </div>
+                            <div class="form-group">
+                                <label>Focus Grid Color (Pexels)</label>
+                                <input type="color" id="gridColorInput" value="#ffffff" style="width: 100%; height: 40px; border: none; border-radius: 4px; padding: 0; cursor: pointer;">
+                            </div>
+                            <div class="form-group">
+                                <label>Caption Color (Pexels)</label>
+                                <input type="color" id="captionColorInput" value="#ffffff" style="width: 100%; height: 40px; border: none; border-radius: 4px; padding: 0; cursor: pointer;">
+                            </div>
+                            <div class="form-group">
+                                <label>Caption Font Size</label>
+                                <input type="number" id="fontSizeInput" value="60" min="20" max="150" style="width: 100%; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(255,255,255,0.05); color: #fff;">
+                            </div>
+                            <div class="form-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <label>Caption Y-Position (%)</label>
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    <input type="range" id="fontYPosInput" min="10" max="95" value="83" style="flex: 1; cursor: pointer;">
+                                    <span id="fontYPosDisplay" style="font-size: 0.9rem; color: #aaa; width: 40px;">83%</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Output Resolution</label>
+                                <select id="resolutionSelect">
+                                    <option value="480p">480p — Fast & Reliable (480×864)</option>
+                                    <option value="540p">540p — Balanced (540×960)</option>
+                                    <option value="720p" selected>720p — HD Quality (720×1280)</option>
+                                    <option value="960p">960p — Ultra HD (960×1728, slower)</option>
+                                </select>
+                            </div>
+                            <div class="form-group mt-3">
+                                <label>Thumbnail Idea (Optional)</label>
+                                <input type="text" id="thumbnailPrompt" placeholder="e.g. dramatic dark background with neon red text">
+                            </div>
+                            <div class="form-group mt-3">
+                                <label>YouTube Privacy Status</label>
+                                <select id="ytPrivacy">
+                                    <option value="private">Private</option>
+                                    <option value="unlisted">Unlisted</option>
+                                    <option value="public">Public</option>
+                                </select>
+                            </div>
+                            <div class="form-group mt-3">
+                                <label>Publish Schedule (Optional)</label>
+                                <input type="datetime-local" id="ytSchedule" style="width: 100%; padding: 0.8rem; background: var(--bg-card); border: 1px solid var(--border-color); color: #fff; border-radius: 8px;">
+                            </div>
+                            
+                            <div class="form-group mt-2" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <label>BGM Volume (%)</label>
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    <input type="range" id="bgmVolumeInput" min="0" max="100" value="15" style="flex: 1; cursor: pointer;">
+                                    <span id="bgmVolumeDisplay" style="font-size: 0.9rem; color: #aaa; width: 40px;">15%</span>
+                                </div>
+                            </div>
+                            <div class="form-group toggle-group mt-4" style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <label>Enable Focus Grid</label>
+                                    <p class="text-sm text-muted">Draw a center rectangle for 9:16 layout focus.</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="addGridToggle" checked>
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                        </details>
 
                         <div class="form-group toggle-group mt-4" id="previewScriptGroup" style="display: flex; justify-content: space-between; align-items: center;">
                             <div>

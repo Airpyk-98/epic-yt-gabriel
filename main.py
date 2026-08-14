@@ -1839,7 +1839,7 @@ def monitor_job(job_id, slug, env, hf_repo, hf_token):
                     jobs[job_id]["status"] = "SUCCESS"
                     jobs[job_id]["progress"] = 100
                     jobs[job_id]["step_text"] = "Video lip-sync generated successfully!"
-                    jobs[job_id]["output_file"] = f"/api/video/{job_id}"
+                    jobs[job_id]["output_file"] = f"/api/video/{job_id}?repo={hf_repo}"
                     save_jobs(jobs)
                     update_firebase_job(job_id, jobs[job_id])
                     
@@ -2351,7 +2351,205 @@ async def create_premium_job(
         
     return {"job_id": job_id, "status": "STAGING"}
 
-@app.get("/api/jobs")
+
+@app.post("/api/queue_batch")
+async def queue_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    titles_json: str = Form(...),
+    voice: str = Form("en-US-AnaNeural"),
+    aspect_ratio: str = Form("9:16"),
+    resolution: str = Form("720p"),
+    add_captions: Optional[str] = Form("true"),
+    add_grid: Optional[str] = Form("true"),
+    video_speed: Optional[str] = Form("1.0"),
+    bgm_select: Optional[str] = Form(""),
+    bgm_volume: Optional[str] = Form("15"),
+    projectId: str = Form(""),
+    kaggle_user: str = Form("gabrielnjoku"),
+    kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
+    hf_repo: str = Form("epic-gab/EpicSync-Dataset"),
+    hf_token: str = Form(""),
+    video_model: str = Form("ltx-video"),
+    target_duration: str = Form("60 seconds"),
+    grid_color: str = Form("#ffffff"),
+    caption_color: str = Form("#ffffff"),
+    font_size: str = Form("60"),
+    font_y_pos: str = Form("83"),
+    image: Optional[UploadFile] = File(None),
+    bg_music: Optional[UploadFile] = File(None)
+):
+    import json
+    uid = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            token = auth_header.split(" ")[1]
+            decoded_token = auth.verify_id_token(token)
+            uid = decoded_token['uid']
+        except:
+            pass
+            
+    if not uid:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        titles_list = json.loads(titles_json)
+    except:
+        titles_list = [titles_json]
+        
+    batch_id = f"epicsync_batch_{int(time.time())}"
+    staging = os.path.join(STAGING_DIR, batch_id)
+    os.makedirs(staging, exist_ok=True)
+    
+    image_path = os.path.join(staging, "input.png")
+    if image and image.filename:
+        with open(image_path, "wb") as f:
+            f.write(await image.read())
+        
+    bgm_path = ""
+    bgm_repo_path = ""
+    if bgm_select and bgm_select.strip() != "":
+        bgm_repo_path = bgm_select.strip()
+    elif bg_music and bg_music.filename:
+        bgm_path = os.path.join(staging, "bg_music.mp3")
+        with open(bgm_path, "wb") as f:
+            f.write(await bg_music.read())
+            
+    form_data = {
+        "voice": voice, "aspect_ratio": aspect_ratio, "resolution": resolution,
+        "add_captions": str(add_captions), "add_grid": str(add_grid),
+        "video_speed": str(video_speed), "bgm_select": bgm_repo_path,
+        "bgm_volume": str(bgm_volume), "projectId": projectId,
+        "kaggle_user": kaggle_user, "kaggle_key": kaggle_key,
+        "hf_repo": hf_repo, "hf_token": hf_token, "video_model": video_model,
+        "target_duration": target_duration, "grid_color": grid_color,
+        "caption_color": caption_color, "font_size": font_size, "font_y_pos": font_y_pos
+    }
+    
+    # Save jobs sequentially in background
+    background_tasks.add_task(process_batch_queue, batch_id, titles_list, form_data, image_path, bgm_path, uid)
+    return {"status": "Batch Queued", "batch_id": batch_id, "count": len(titles_list)}
+
+async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_path, uid):
+    import json
+    import httpx
+    import uuid
+    import threading
+    
+    user_doc = db.collection('users').document(uid).get()
+    if not user_doc.exists:
+        return
+    user_data = user_doc.to_dict()
+    base_url = user_data.get("aiBaseUrl", "https://api.openai.com/v1")
+    api_key = user_data.get("aiApiKey", "")
+    model = user_data.get("aiModel", "gpt-4")
+    sys_prompt = user_data.get("aiSystemPrompt", "You are a creative YouTube script writer. Write scripts that are exactly 60 seconds long.")
+    
+    for index, title in enumerate(titles_list):
+        job_id = f"epicsync_premium_{int(time.time())}_{uuid.uuid4().hex[:4]}"
+        project_id = form_data.get("projectId")
+        
+        # Determine if we need AI script generation or if this is manual mode
+        if len(titles_list) == 1 and "\n" in title and len(title) > 50:
+            # Manual script mode (frontend sends script as single title)
+            script_text = title
+            video_title = "Manual Script Video"
+        else:
+            video_title = title
+            # GENERATE SCRIPT
+            db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
+                "title": video_title[:30] + "...",
+                "status": "GENERATING SCRIPT",
+                "job_id": job_id,
+                "createdAt": firestore.SERVER_TIMESTAMP
+            })
+            
+            try:
+                client = httpx.AsyncClient(timeout=60.0)
+                target_duration = form_data.get("target_duration", "60 seconds")
+                final_prompt = f"{sys_prompt}\n\nThe video is about: {video_title}\nThe video length should be approximately: {target_duration}.\nPlease return ONLY the raw script text without any pleasantries."
+                response = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": final_prompt}],
+                        "temperature": 0.7
+                    }
+                )
+                response.raise_for_status()
+                res_json = response.json()
+                script_text = res_json['choices'][0]['message']['content'].strip()
+            except Exception as e:
+                db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).update({
+                    "status": "FAILED", "error": f"Script Generation Failed: {str(e)}"
+                })
+                continue
+                
+        # 2. RUN PREMIUM JOB
+        staging = os.path.join(STAGING_DIR, job_id)
+        os.makedirs(staging, exist_ok=True)
+        
+        job_image_path = os.path.join(staging, "input.png")
+        if os.path.exists(image_path):
+             shutil.copy(image_path, job_image_path)
+             
+        job_bgm_path = os.path.join(staging, "bg_music.mp3")
+        if os.path.exists(bgm_path):
+             shutil.copy(bgm_path, job_bgm_path)
+             
+        kaggle_user = form_data.get("kaggle_user", "")
+        kaggle_key = form_data.get("kaggle_key", "")
+        if not kaggle_key or "0f12d3a4" in kaggle_key:
+            kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
+            
+        proj_slug = "".join([c for c in project_id if c.isalnum()]).lower()[:15]
+        kernel_id = f"{kaggle_user}/epicsync-proj-{proj_slug}"
+        video_model = form_data.get("video_model", "ltx-video")
+        
+        jobs = load_jobs()
+        if video_model == "aptavatar":
+            job_step_text = f"Packaging input & provisioning AptAvatar engine..."
+        elif video_model == "pexels":
+            job_step_text = f"Packaging segments & provisioning Pexels assembly engine..."
+        else:
+            job_step_text = f"Packaging input & provisioning LTX-2.3 3D compute engine..."
+            
+        jobs[job_id] = {
+            "id": job_id, "title": video_title, "status": "STAGING", "progress": 15,
+            "step_text": job_step_text,
+            "script": script_text, "voice": form_data.get("voice", ""),
+            "aspect_ratio": form_data.get("aspect_ratio", "9:16"),
+            "slug": kernel_id, "kaggle_user": kaggle_user, "kaggle_key": kaggle_key,
+            "mode": "premium", "uid": uid, "projectId": project_id,
+            "created_at": time.time(), "logs": [f"[{time.strftime('%H:%M:%S')}] Job started from Queue."]
+        }
+        save_jobs(jobs)
+        update_firebase_job(job_id, jobs[job_id])
+        
+        # Prepare launch
+        t = threading.Thread(target=prepare_and_launch_premium_job, args=(
+            job_id, staging, job_image_path if os.path.exists(job_image_path) else "", 
+            job_bgm_path if os.path.exists(job_bgm_path) else "",
+            form_data.get("bgm_select", ""), script_text, form_data.get("voice", ""),
+            form_data.get("aspect_ratio", "9:16"), form_data.get("resolution", "720p"),
+            form_data.get("add_captions", "true"), form_data.get("add_grid", "true"),
+            form_data.get("video_speed", "1.0"), kaggle_user, kaggle_key, 
+            form_data.get("hf_repo", "epic-gab/EpicSync-Dataset"), form_data.get("hf_token", ""),
+            kernel_id, video_model, form_data.get("grid_color", "#ffffff"),
+            form_data.get("caption_color", "#ffffff"), form_data.get("font_size", "60"),
+            form_data.get("font_y_pos", "83"), uid, form_data.get("bgm_volume", "15")
+        ))
+        t.start()
+        
+        # Wait for job to finish before starting next
+        while True:
+            await asyncio.sleep(5)
+            j = load_jobs().get(job_id)
+            if j and j.get("status") in ["SUCCESS", "FAILED", "POSTED_TO_YOUTUBE", "CANCELLED"]:
+                break
+\n@app.get("/api/jobs")
 def get_jobs():
     return load_jobs()
 
@@ -2435,12 +2633,35 @@ def kaggle_log(req: KaggleLogRequest):
         return {"status": "success"}
     raise HTTPException(status_code=404, detail="Job not found")
 
+class ClearLogsRequest(BaseModel):
+    projectId: str
+
 @app.post("/api/clear_logs")
-def clear_logs():
+def clear_logs(req: ClearLogsRequest, request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth_header.split(" ")[1]
+    try:
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token['uid']
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     jobs = load_jobs()
     # Keep successful runs or clear all logs per user preference
     jobs = {k: v for k, v in jobs.items() if v.get("status") == "RUNNING"}
     save_jobs(jobs)
+
+    try:
+        docs = db.collection("users").document(uid).collection("projects").document(req.projectId).collection("executions").stream()
+        for doc in docs:
+            doc_data = doc.to_dict()
+            if doc_data.get("status") != "RUNNING" and doc_data.get("status") != "QUEUED":
+                doc.reference.delete()
+    except Exception as e:
+        print(f"Failed to clear firestore logs: {e}")
+
     return {"status": "CLEARED"}
 
 from fastapi.responses import FileResponse, StreamingResponse
@@ -2448,13 +2669,13 @@ import httpx
 import asyncio
 
 @app.get("/api/video/{job_id}")
-async def get_video(job_id: str):
+async def get_video(job_id: str, repo: str = None):
     path = os.path.join(OUTPUTS_DIR, f"{job_id}.mp4")
     if os.path.exists(path):
         return FileResponse(path, media_type="video/mp4")
     
     # Fallback to streaming from Hugging Face if ephemeral disk lost the file
-    hf_repo = os.environ.get("HF_REPO", "epic-gab/EpicSync-Dataset")
+    hf_repo = repo if repo else os.environ.get("HF_REPO", "epic-gab/EpicSync-Dataset")
     hf_token = os.environ.get("HF_TOKEN", "")
     
     url = f"https://huggingface.co/datasets/{hf_repo}/resolve/main/outputs/{job_id}.mp4"
