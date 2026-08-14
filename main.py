@@ -2549,7 +2549,7 @@ async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_
             j = load_jobs().get(job_id)
             if j and j.get("status") in ["SUCCESS", "FAILED", "POSTED_TO_YOUTUBE", "CANCELLED"]:
                 break
-\n@app.get("/api/jobs")
+@app.get("/api/jobs")
 def get_jobs():
     return load_jobs()
 
