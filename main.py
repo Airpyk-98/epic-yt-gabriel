@@ -76,6 +76,56 @@ def save_jobs(jobs):
         with open(JOBS_FILE, "w", encoding="utf-8") as f:
             json.dump(jobs, f, indent=2)
 
+
+def parse_target_duration_to_seconds(duration_str: str) -> int:
+    import re
+    if not duration_str:
+        return 60
+    s = str(duration_str).lower().strip()
+    m_and_s = re.search(r'(\d+(?:\.\d+)?)\s*(?:min|minute|m)\s*(?:and\s*)?(\d+(?:\.\d+)?)\s*(?:sec|second|s)?', s)
+    if m_and_s:
+        try:
+            mins = float(m_and_s.group(1))
+            secs = float(m_and_s.group(2))
+            return max(5, int(mins * 60 + secs))
+        except:
+            pass
+    m_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:min|minute|m)', s)
+    if m_match:
+        try:
+            return max(5, int(float(m_match.group(1)) * 60))
+        except:
+            pass
+    s_match = re.search(r'(\d+(?:\.\d+)?)', s)
+    if s_match:
+        try:
+            return max(5, int(float(s_match.group(1))))
+        except:
+            pass
+    return 60
+
+def build_duration_enforcement(target_duration_str: str) -> str:
+    total_seconds = parse_target_duration_to_seconds(target_duration_str)
+    target_words = max(10, int(total_seconds * 2.3))
+    min_words = max(10, int(total_seconds * 2.0))
+    max_words = max(15, int(total_seconds * 2.5))
+    return f"""
+
+======================================================================
+CRITICAL DURATION & WORD-COUNT DIRECTIVE (MANDATORY & NON-NEGOTIABLE):
+- Target Duration Requested: {target_duration_str} ({total_seconds} seconds total).
+- Target Spoken Word Count: EXACTLY {target_words} words.
+- Strict Acceptable Word Count Window: {min_words} to {max_words} words.
+- Average Natural Voiceover Pace: ~2.3 words per second (~138 words per minute).
+
+RULES:
+1. You MUST generate a complete, high-retention script whose word count strictly falls between {min_words} and {max_words} words.
+2. DO NOT output fewer than {min_words} words.
+3. DO NOT output more than {max_words} words.
+4. Count every single word you generate and strictly verify it is within {min_words}-{max_words} words before outputting.
+======================================================================
+"""
+
 def update_firebase_job(job_id, job_info):
     if not db: return
     uid = job_info.get("uid")
@@ -621,17 +671,69 @@ run_cmd("apt-get update && apt-get install -y imagemagick")
 run_cmd("sed -i 's/none/read,write/g' /etc/ImageMagick-6/policy.xml || true")
 os.environ["IMAGEMAGICK_BINARY"] = "/usr/bin/convert"
 
-run_cmd("pip install -q edge-tts moviepy openai-whisper")
-print(f"Generating studio voiceover...", flush=True)
+run_cmd("pip install -q moviepy soundfile edge-tts openai-whisper")
+run_cmd("pip install -q omnivoice || true")
 
 with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
     f.write(script_text)
 
-import asyncio, edge_tts
-async def generate_audio():
-    comm = edge_tts.Communicate(script_text, voice)
-    await comm.save("/kaggle/working/input.wav")
-asyncio.run(generate_audio())
+voice_instruct_map = {
+    "relationship-male": "male, young adult, moderate pitch, american accent",
+    "relationship-female": "female, young adult, low pitch, american accent",
+    "finance-male": "male, middle-aged, low pitch, american accent",
+    "finance-female": "female, young adult, moderate pitch, british accent",
+    "health-male": "male, middle-aged, moderate pitch, american accent",
+    "health-female": "female, young adult, moderate pitch, american accent",
+    "narrative-male": "male, middle-aged, very low pitch, american accent",
+    "narrative-female": "female, young adult, moderate pitch, american accent",
+    "en-US-ChristopherNeural": "male, middle-aged, low pitch, american accent",
+    "en-GB-SoniaNeural": "female, young adult, moderate pitch, british accent",
+    "en-US-JennyNeural": "female, young adult, moderate pitch, american accent",
+    "en-US-GuyNeural": "male, young adult, moderate pitch, american accent",
+}
+
+edge_fallback_map = {
+    "relationship-male": "en-US-GuyNeural",
+    "relationship-female": "en-US-JennyNeural",
+    "finance-male": "en-US-ChristopherNeural",
+    "finance-female": "en-GB-SoniaNeural",
+    "health-male": "en-US-EricNeural",
+    "health-female": "en-US-AriaNeural",
+    "narrative-male": "en-US-ChristopherNeural",
+    "narrative-female": "en-US-JennyNeural",
+}
+
+def generate_voiceover(script_text, voice_key, output_path="/kaggle/working/input.wav"):
+    generated = False
+    try:
+        print(f"Synthesizing voiceover with OmniVoice TTS (voice='{voice_key}')...", flush=True)
+        import torch, soundfile as sf
+        from omnivoice import OmniVoice
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        instruct = voice_instruct_map.get(voice_key, voice_key if ("," in voice_key or " " in voice_key) else "male, young adult, moderate pitch, american accent")
+        print(f"Loading OmniVoice on {device} (instruct='{instruct}')...", flush=True)
+        model = OmniVoice.from_pretrained("k2-fsa/OmniVoice", device_map=device, dtype=dtype)
+        audio = model.generate(text=script_text, instruct=instruct)
+        wav = audio[0].cpu().numpy() if hasattr(audio[0], 'cpu') else audio[0]
+        sf.write(output_path, wav, 24000)
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            print("OmniVoice voiceover synthesis complete!", flush=True)
+            generated = True
+    except Exception as e:
+        print(f"OmniVoice synthesis notice: {e}. Utilizing Edge-TTS fallback...", flush=True)
+
+    if not generated or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        import asyncio, edge_tts
+        fallback_voice = edge_fallback_map.get(voice_key, voice_key if "Neural" in voice_key else "en-US-ChristopherNeural")
+        print(f"Synthesizing voiceover with Edge-TTS (voice='{fallback_voice}')...", flush=True)
+        async def run_edge():
+            comm = edge_tts.Communicate(script_text, fallback_voice)
+            await comm.save(output_path)
+        asyncio.run(run_edge())
+        print(f"Edge-TTS voiceover created at {output_path}", flush=True)
+
+generate_voiceover(script_text, voice, "/kaggle/working/input.wav")
 
 print("Running Whisper for accurate word timings...", flush=True)
 import whisper
@@ -896,7 +998,11 @@ if str(add_captions).lower() in ["true", "1", "yes"]:
 else:
     final_video = base_video
 
+voice_boost = float(___VOICE_BOOST___) if "___VOICE_BOOST___" else 1.0
 audio_clip = AudioFileClip("/kaggle/working/input.wav")
+if voice_boost != 1.0:
+    print(f"Applying voice audio boost: {voice_boost}x", flush=True)
+    audio_clip = audio_clip.volumex(voice_boost)
 final_video = final_video.set_audio(audio_clip)
 
 final_output = f"/kaggle/working/result_{___JOB_ID___}.mp4"
@@ -928,7 +1034,8 @@ if os.path.exists(current_video_path):
         print("Integrating background music...", flush=True)
         bgm_out_path = "/kaggle/working/result_with_bgm.mp4"
         vol = float(___BGM_VOLUME___) / 100.0 if ___BGM_VOLUME___ else 0.15
-        bgm_filter = f"[0:a]volume=1.0[speech];[1:a]volume={vol:.2f}[bg];[speech][bg]amix=inputs=2:duration=first[a]"
+        voice_boost_val = float(___VOICE_BOOST___) if "___VOICE_BOOST___" else 1.0
+        bgm_filter = f"[0:a]volume={voice_boost_val:.2f}[speech];[1:a]volume={vol:.2f}[bg];[speech][bg]amix=inputs=2:duration=first[a]"
         bgm_cmd = f"ffmpeg -y -i {q}{current_video_path}{q} -stream_loop -1 -i /kaggle/working/bg_music.mp3 -filter_complex {q}{bgm_filter}{q} -map 0:v -map {q}[a]{q} -c:v copy -c:a aac -b:a 192k {q}{bgm_out_path}{q}"
         if os.system(bgm_cmd) == 0 and os.path.exists(bgm_out_path):
             os.remove(current_video_path)
@@ -979,13 +1086,71 @@ os.environ["HF_TOKEN"] = hf_token
 run_cmd("pip install -q huggingface_hub edge-tts soundfile ffmpeg-python")
 run_cmd("pip install ninja")
 
-# 4. GENERATE AUDIO VOICEOVER VIA TTS
+# 4. GENERATE AUDIO VOICEOVER VIA TTS (OMNIVOICE WITH EDGE-TTS FALLBACK)
+run_cmd("pip install -q soundfile edge-tts")
+run_cmd("pip install -q omnivoice || true")
 script_text = ___SCRIPT_TEXT___
 voice = ___VOICE___
-print(f"Generating studio voiceover with voice: {voice}...", flush=True)
 with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
     f.write(script_text)
-run_cmd(f'edge-tts --voice "{voice}" -f /kaggle/working/tts_script.txt --write-media /kaggle/working/input.wav')
+
+voice_instruct_map = {
+    "relationship-male": "male, young adult, moderate pitch, american accent",
+    "relationship-female": "female, young adult, low pitch, american accent",
+    "finance-male": "male, middle-aged, low pitch, american accent",
+    "finance-female": "female, young adult, moderate pitch, british accent",
+    "health-male": "male, middle-aged, moderate pitch, american accent",
+    "health-female": "female, young adult, moderate pitch, american accent",
+    "narrative-male": "male, middle-aged, very low pitch, american accent",
+    "narrative-female": "female, young adult, moderate pitch, american accent",
+    "en-US-ChristopherNeural": "male, middle-aged, low pitch, american accent",
+    "en-GB-SoniaNeural": "female, young adult, moderate pitch, british accent",
+    "en-US-JennyNeural": "female, young adult, moderate pitch, american accent",
+    "en-US-GuyNeural": "male, young adult, moderate pitch, american accent",
+}
+
+edge_fallback_map = {
+    "relationship-male": "en-US-GuyNeural",
+    "relationship-female": "en-US-JennyNeural",
+    "finance-male": "en-US-ChristopherNeural",
+    "finance-female": "en-GB-SoniaNeural",
+    "health-male": "en-US-EricNeural",
+    "health-female": "en-US-AriaNeural",
+    "narrative-male": "en-US-ChristopherNeural",
+    "narrative-female": "en-US-JennyNeural",
+}
+
+def generate_voiceover(script_text, voice_key, output_path="/kaggle/working/input.wav"):
+    generated = False
+    try:
+        print(f"Synthesizing voiceover with OmniVoice TTS (voice='{voice_key}')...", flush=True)
+        import torch, soundfile as sf
+        from omnivoice import OmniVoice
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        instruct = voice_instruct_map.get(voice_key, voice_key if ("," in voice_key or " " in voice_key) else "male, young adult, moderate pitch, american accent")
+        print(f"Loading OmniVoice on {device} (instruct='{instruct}')...", flush=True)
+        model = OmniVoice.from_pretrained("k2-fsa/OmniVoice", device_map=device, dtype=dtype)
+        audio = model.generate(text=script_text, instruct=instruct)
+        wav = audio[0].cpu().numpy() if hasattr(audio[0], 'cpu') else audio[0]
+        sf.write(output_path, wav, 24000)
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            print("OmniVoice voiceover synthesis complete!", flush=True)
+            generated = True
+    except Exception as e:
+        print(f"OmniVoice synthesis notice: {e}. Utilizing Edge-TTS fallback...", flush=True)
+
+    if not generated or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        import asyncio, edge_tts
+        fallback_voice = edge_fallback_map.get(voice_key, voice_key if "Neural" in voice_key else "en-US-ChristopherNeural")
+        print(f"Synthesizing voiceover with Edge-TTS (voice='{fallback_voice}')...", flush=True)
+        async def run_edge():
+            comm = edge_tts.Communicate(script_text, fallback_voice)
+            await comm.save(output_path)
+        asyncio.run(run_edge())
+        print(f"Edge-TTS voiceover created at {output_path}", flush=True)
+
+generate_voiceover(script_text, voice, "/kaggle/working/input.wav")
 
 # 5. DECODE INPUT IMAGE
 ib64 = ___IMAGE_B64___
@@ -1160,14 +1325,71 @@ if bgm_repo_path:
     except Exception as e:
         print(f"Warning: Could not download background music: {e}", flush=True)
 
-# 2. GENERATE AUDIO VOICEOVER VIA TTS
-run_cmd("pip install -q edge-tts soundfile pillow psutil")
+# 2. GENERATE AUDIO VOICEOVER VIA TTS (OMNIVOICE WITH EDGE-TTS FALLBACK)
+run_cmd("pip install -q soundfile edge-tts pillow psutil")
+run_cmd("pip install -q omnivoice || true")
 script_text = ___SCRIPT_TEXT___
 voice = ___VOICE___
-print(f"Generating studio voiceover with voice: {voice}...", flush=True)
 with open("/kaggle/working/tts_script.txt", "w", encoding="utf-8") as f:
     f.write(script_text)
-run_cmd(f'edge-tts --voice "{voice}" -f /kaggle/working/tts_script.txt --write-media /kaggle/working/input.wav')
+
+voice_instruct_map = {
+    "relationship-male": "male, young adult, moderate pitch, american accent",
+    "relationship-female": "female, young adult, low pitch, american accent",
+    "finance-male": "male, middle-aged, low pitch, american accent",
+    "finance-female": "female, young adult, moderate pitch, british accent",
+    "health-male": "male, middle-aged, moderate pitch, american accent",
+    "health-female": "female, young adult, moderate pitch, american accent",
+    "narrative-male": "male, middle-aged, very low pitch, american accent",
+    "narrative-female": "female, young adult, moderate pitch, american accent",
+    "en-US-ChristopherNeural": "male, middle-aged, low pitch, american accent",
+    "en-GB-SoniaNeural": "female, young adult, moderate pitch, british accent",
+    "en-US-JennyNeural": "female, young adult, moderate pitch, american accent",
+    "en-US-GuyNeural": "male, young adult, moderate pitch, american accent",
+}
+
+edge_fallback_map = {
+    "relationship-male": "en-US-GuyNeural",
+    "relationship-female": "en-US-JennyNeural",
+    "finance-male": "en-US-ChristopherNeural",
+    "finance-female": "en-GB-SoniaNeural",
+    "health-male": "en-US-EricNeural",
+    "health-female": "en-US-AriaNeural",
+    "narrative-male": "en-US-ChristopherNeural",
+    "narrative-female": "en-US-JennyNeural",
+}
+
+def generate_voiceover(script_text, voice_key, output_path="/kaggle/working/input.wav"):
+    generated = False
+    try:
+        print(f"Synthesizing voiceover with OmniVoice TTS (voice='{voice_key}')...", flush=True)
+        import torch, soundfile as sf
+        from omnivoice import OmniVoice
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        instruct = voice_instruct_map.get(voice_key, voice_key if ("," in voice_key or " " in voice_key) else "male, young adult, moderate pitch, american accent")
+        print(f"Loading OmniVoice on {device} (instruct='{instruct}')...", flush=True)
+        model = OmniVoice.from_pretrained("k2-fsa/OmniVoice", device_map=device, dtype=dtype)
+        audio = model.generate(text=script_text, instruct=instruct)
+        wav = audio[0].cpu().numpy() if hasattr(audio[0], 'cpu') else audio[0]
+        sf.write(output_path, wav, 24000)
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            print("OmniVoice voiceover synthesis complete!", flush=True)
+            generated = True
+    except Exception as e:
+        print(f"OmniVoice synthesis notice: {e}. Utilizing Edge-TTS fallback...", flush=True)
+
+    if not generated or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        import asyncio, edge_tts
+        fallback_voice = edge_fallback_map.get(voice_key, voice_key if "Neural" in voice_key else "en-US-ChristopherNeural")
+        print(f"Synthesizing voiceover with Edge-TTS (voice='{fallback_voice}')...", flush=True)
+        async def run_edge():
+            comm = edge_tts.Communicate(script_text, fallback_voice)
+            await comm.save(output_path)
+        asyncio.run(run_edge())
+        print(f"Edge-TTS voiceover created at {output_path}", flush=True)
+
+generate_voiceover(script_text, voice, "/kaggle/working/input.wav")
 
 # 3. INSTALL COMPATIBLE PYTORCH & WAN2GP
 print("Installing PyTorch 2.3.1 (CUDA 12.1 compatible)...", flush=True)
@@ -1550,7 +1772,8 @@ elif len(chunk_video_files) > 1:
 
 if os.path.exists("/kaggle/working/result_retalking_silent.mp4"):
     print("Muxing studio voiceover audio onto final video...", flush=True)
-    os.system("ffmpeg -y -i /kaggle/working/result_retalking_silent.mp4 -i /kaggle/working/input.wav -c:v copy -c:a aac -b:a 192k -pix_fmt yuv420p -shortest /kaggle/working/result_retalking.mp4")
+    voice_boost_val = float(___VOICE_BOOST___) if "___VOICE_BOOST___" else 1.0
+    os.system(f"ffmpeg -y -i /kaggle/working/result_retalking_silent.mp4 -i /kaggle/working/input.wav -filter_complex \"[1:a]volume={voice_boost_val:.2f}[a]\" -map 0:v -map \"[a]\" -c:v copy -c:a aac -b:a 192k -pix_fmt yuv420p -shortest /kaggle/working/result_retalking.mp4")
 
 # Resolution scaling
 output_resolution = "___RESOLUTION___"
@@ -2006,7 +2229,8 @@ def prepare_and_launch_premium_job(
     font_size: str = "60",
     font_y_pos: str = "83",
     uid: str = None,
-    bgm_volume: str = "15"
+    bgm_volume: str = "15",
+    voice_boost: str = "100"
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
@@ -2096,37 +2320,78 @@ def prepare_and_launch_premium_job(
                 except Exception as e:
                     append_log(job_id, f"AI segment generation failed: {str(e)}. Using heuristic fallback.")
 
+        voice_boost_val = float(voice_boost) / 100.0 if voice_boost else 1.0
+        voice_boost_str = f"{voice_boost_val:.2f}"
+
         if video_model == "aptavatar":
-            script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio))
+            script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___VOICE_BOOST___", voice_boost_str)
         elif video_model == "pexels":
             pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K").strip().strip('"').strip("'")
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___ADD_GRID___", repr(str(add_grid))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos)).replace("___BGM_VOLUME___", str(bgm_volume))
+            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___ADD_GRID___", repr(str(add_grid))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos)).replace("___BGM_VOLUME___", str(bgm_volume)).replace("___VOICE_BOOST___", voice_boost_str)
         else:
-            script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed)).replace("___BGM_VOLUME___", str(bgm_volume))
+            script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed)).replace("___BGM_VOLUME___", str(bgm_volume)).replace("___VOICE_BOOST___", voice_boost_str)
             
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
 
-        meta = {
-            "id": kernel_id,
-            "title": kernel_id.split("/")[-1],
-            "code_file": "run_epicsync.py",
-            "language": "python",
-            "kernel_type": "script",
-            "is_private": True,
-            "enable_gpu": True,
-            "enable_tpu": False,
-            "enable_internet": True,
-            "keywords": ["gpu", "diffusion", "ltx"],
-            "dataset_sources": [
-                "mikerozer/wan2gp-shared-models",
-                "trailtalknick/ltx-23-22b-q4-gguf"
-            ],
-            "competition_sources": [],
-            "kernel_sources": [],
-            "model_sources": [],
-            "machine_shape": "NvidiaTeslaT4"
-        }
+        if video_model == "pexels":
+            meta = {
+                "id": kernel_id,
+                "title": kernel_id.split("/")[-1],
+                "code_file": "run_epicsync.py",
+                "language": "python",
+                "kernel_type": "script",
+                "is_private": True,
+                "enable_gpu": False,
+                "enable_tpu": False,
+                "enable_internet": True,
+                "keywords": ["video", "pexels", "cpu"],
+                "dataset_sources": [],
+                "competition_sources": [],
+                "kernel_sources": [],
+                "model_sources": []
+            }
+        elif video_model == "aptavatar":
+            meta = {
+                "id": kernel_id,
+                "title": kernel_id.split("/")[-1],
+                "code_file": "run_epicsync.py",
+                "language": "python",
+                "kernel_type": "script",
+                "is_private": True,
+                "enable_gpu": True,
+                "enable_tpu": False,
+                "enable_internet": True,
+                "keywords": ["gpu", "avatar", "talking-head"],
+                "dataset_sources": [
+                    "mikerozer/wan2gp-shared-models"
+                ],
+                "competition_sources": [],
+                "kernel_sources": [],
+                "model_sources": [],
+                "machine_shape": "NvidiaTeslaT4"
+            }
+        else:
+            meta = {
+                "id": kernel_id,
+                "title": kernel_id.split("/")[-1],
+                "code_file": "run_epicsync.py",
+                "language": "python",
+                "kernel_type": "script",
+                "is_private": True,
+                "enable_gpu": True,
+                "enable_tpu": False,
+                "enable_internet": True,
+                "keywords": ["gpu", "diffusion", "ltx"],
+                "dataset_sources": [
+                    "mikerozer/wan2gp-shared-models",
+                    "trailtalknick/ltx-23-22b-q4-gguf"
+                ],
+                "competition_sources": [],
+                "kernel_sources": [],
+                "model_sources": [],
+                "machine_shape": "NvidiaTeslaT4"
+            }
         with open(os.path.join(staging, "kernel-metadata.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
 
@@ -2245,7 +2510,7 @@ async def create_premium_job(
     request: Request,
     background_tasks: BackgroundTasks,
     script_text: str = Form(...),
-    voice: str = Form("en-US-AnaNeural"),
+    voice: str = Form("relationship-male"),
     aspect_ratio: str = Form("9:16"),
     resolution: str = Form("720p"),
     add_captions: Optional[str] = Form("true"),
@@ -2253,6 +2518,7 @@ async def create_premium_job(
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     bgm_volume: Optional[str] = Form("15"),
+    voice_boost: Optional[str] = Form("100"),
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
@@ -2346,7 +2612,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(add_grid), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid, str(bgm_volume)
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid, str(bgm_volume), str(voice_boost)
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -2357,7 +2623,7 @@ async def queue_batch(
     request: Request,
     background_tasks: BackgroundTasks,
     titles_json: str = Form(...),
-    voice: str = Form("en-US-AnaNeural"),
+    voice: str = Form("relationship-male"),
     aspect_ratio: str = Form("9:16"),
     resolution: str = Form("720p"),
     add_captions: Optional[str] = Form("true"),
@@ -2365,6 +2631,7 @@ async def queue_batch(
     video_speed: Optional[str] = Form("1.0"),
     bgm_select: Optional[str] = Form(""),
     bgm_volume: Optional[str] = Form("15"),
+    voice_boost: Optional[str] = Form("100"),
     projectId: str = Form(""),
     kaggle_user: str = Form("gabrielnjoku"),
     kaggle_key: str = Form("KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"),
@@ -2420,7 +2687,7 @@ async def queue_batch(
         "voice": voice, "aspect_ratio": aspect_ratio, "resolution": resolution,
         "add_captions": str(add_captions), "add_grid": str(add_grid),
         "video_speed": str(video_speed), "bgm_select": bgm_repo_path,
-        "bgm_volume": str(bgm_volume), "projectId": projectId,
+        "bgm_volume": str(bgm_volume), "voice_boost": str(voice_boost), "projectId": projectId,
         "kaggle_user": kaggle_user, "kaggle_key": kaggle_key,
         "hf_repo": hf_repo, "hf_token": hf_token, "video_model": video_model,
         "target_duration": target_duration, "grid_color": grid_color,
@@ -2468,7 +2735,8 @@ async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_
             try:
                 client = httpx.AsyncClient(timeout=60.0)
                 target_duration = form_data.get("target_duration", "60 seconds")
-                final_prompt = f"{sys_prompt}\n\nThe video is about: {video_title}\nThe video length should be approximately: {target_duration}.\nPlease return ONLY the raw script text without any pleasantries."
+                duration_directive = build_duration_enforcement(target_duration)
+                final_prompt = f"{sys_prompt}\n{duration_directive}\n\nWrite a high-retention video script about: {video_title}.\nFormat: Output ONLY the raw plaintext script words that the voice actor should speak. No pleasantries, no markdown."
                 response = await client.post(
                     f"{base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
@@ -2532,14 +2800,14 @@ async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_
         t = threading.Thread(target=prepare_and_launch_premium_job, args=(
             job_id, staging, job_image_path if os.path.exists(job_image_path) else "", 
             job_bgm_path if os.path.exists(job_bgm_path) else "",
-            form_data.get("bgm_select", ""), script_text, form_data.get("voice", ""),
+            form_data.get("bgm_select", ""), script_text, form_data.get("voice", "relationship-male"),
             form_data.get("aspect_ratio", "9:16"), form_data.get("resolution", "720p"),
             form_data.get("add_captions", "true"), form_data.get("add_grid", "true"),
             form_data.get("video_speed", "1.0"), kaggle_user, kaggle_key, 
             form_data.get("hf_repo", "epic-gab/EpicSync-Dataset"), form_data.get("hf_token", ""),
             kernel_id, video_model, form_data.get("grid_color", "#ffffff"),
             form_data.get("caption_color", "#ffffff"), form_data.get("font_size", "60"),
-            form_data.get("font_y_pos", "83"), uid, form_data.get("bgm_volume", "15")
+            form_data.get("font_y_pos", "83"), uid, form_data.get("bgm_volume", "15"), form_data.get("voice_boost", "100")
         ))
         t.start()
         
@@ -2795,7 +3063,7 @@ def generate_script(req: ScriptGenRequest, request: Request):
         
     tts_enforcement = "\n\nCRITICAL FORMAT INSTRUCTION: You are generating a script for a TTS (Text-to-Speech) engine. Your ENTIRE OUTPUT must be the EXACT spoken text only. Do NOT include markdown formatting, bold text (**), italics, headers, or lists. Do NOT include stage directions, visual cues, or brackets like [HOOK] or [BODY]. Output ONLY the raw plaintext words that the voice actor should read. Do not include 'Script:' or 'Narrator:' prefixes."
     
-    duration_enforcement = f"\n\nTARGET DURATION: The user has requested this video to be roughly {req.target_duration} long. Calibrate your word count accordingly (average speaking rate is 150 words per minute). For example, 30 seconds = ~75 words, 60 seconds = ~150 words."
+    duration_enforcement = build_duration_enforcement(req.target_duration)
     
     aptavatar_enforcement = ""
     if req.video_model == "aptavatar":

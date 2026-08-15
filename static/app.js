@@ -117,6 +117,14 @@ document.getElementById('bgmVolumeInput').addEventListener('input', (e) => {
     if (audio) audio.volume = e.target.value / 100.0;
 });
 
+const voiceBoostInput = document.getElementById('voiceBoostInput');
+if (voiceBoostInput) {
+    voiceBoostInput.addEventListener('input', (e) => {
+        const disp = document.getElementById('voiceBoostDisplay');
+        if (disp) disp.innerText = `${e.target.value}%`;
+    });
+}
+
 document.getElementById('bgmSelect').addEventListener('change', (e) => {
     const audio = document.getElementById('bgmPreview');
     if (e.target.value) {
@@ -561,6 +569,9 @@ createContentForm.addEventListener('submit', async (e) => {
             
             const bgmVolumeEl = document.getElementById('bgmVolumeInput');
             if (bgmVolumeEl) formData.append('bgm_volume', bgmVolumeEl.value);
+            
+            const voiceBoostEl = document.getElementById('voiceBoostInput');
+            if (voiceBoostEl) formData.append('voice_boost', voiceBoostEl.value);
             
             const addCaptionsEl = document.getElementById('addCaptionsToggle');
             if (addCaptionsEl) formData.append('add_captions', addCaptionsEl.checked ? 'true' : 'false');
