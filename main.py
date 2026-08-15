@@ -2342,14 +2342,15 @@ def prepare_and_launch_premium_job(
                 "language": "python",
                 "kernel_type": "script",
                 "is_private": True,
-                "enable_gpu": False,
+                "enable_gpu": True,
                 "enable_tpu": False,
                 "enable_internet": True,
-                "keywords": ["video", "pexels", "cpu"],
+                "keywords": ["gpu", "video", "pexels"],
                 "dataset_sources": [],
                 "competition_sources": [],
                 "kernel_sources": [],
-                "model_sources": []
+                "model_sources": [],
+                "machine_shape": "NvidiaTeslaT4"
             }
         elif video_model == "aptavatar":
             meta = {
