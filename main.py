@@ -1044,6 +1044,7 @@ if os.path.exists(current_video_path):
 # 6. UPLOAD TO HF
 # 6. UPLOAD TO HF
 print("Uploading to Hugging Face dataset...", flush=True)
+upload_ok = False
 try:
     from huggingface_hub import HfApi
     api = HfApi(token=hf_token)
@@ -1054,8 +1055,30 @@ try:
         repo_type="dataset"
     )
     print("SUCCESS: Uploaded to HF Hub!")
+    upload_ok = True
 except Exception as e:
     print(f"Failed to upload to HF Hub: {e}", flush=True)
+
+# 7. NOTIFY BACKEND COMPLETION CALLBACK (Wakes up Render & updates Firestore)
+print("Notifying EpicSync backend callback...", flush=True)
+try:
+    import urllib.request, json
+    cb_data = json.dumps({
+        "job_id": job_id,
+        "status": "SUCCESS" if upload_ok or os.path.exists(current_video_path) else "FAILED",
+        "hf_repo": hf_repo,
+        "uid": ___UID___,
+        "projectId": ___PROJECT_ID___
+    }).encode("utf-8")
+    cb_req = urllib.request.Request(
+        "https://epic-yt-gabriel.onrender.com/api/callback/kaggle_complete",
+        data=cb_data,
+        headers={"Content-Type": "application/json"}
+    )
+    cb_resp = urllib.request.urlopen(cb_req, timeout=30)
+    print(f"EpicSync backend notified successfully (HTTP {cb_resp.status})!", flush=True)
+except Exception as e:
+    print(f"Notice: Callback notification failed: {e}", flush=True)
 """
 
 APTAVATAR_KERNEL_TEMPLATE = """import os
@@ -1897,10 +1920,48 @@ if os.path.exists(current_video_path):
             print(f"Warning: Video speed adjustment failed: {e}", flush=True)
 
 # Final Rename
+final_output = f"/kaggle/working/result_{job_id}.mp4"
 if os.path.exists(current_video_path):
-    final_output = f"/kaggle/working/result_{job_id}.mp4"
     os.rename(current_video_path, final_output)
     print(f"Final video renamed to {final_output}", flush=True)
+
+# Upload final generated video directly to Hugging Face Dataset
+print("Uploading final generated video to Hugging Face Dataset...", flush=True)
+upload_ok = False
+try:
+    from huggingface_hub import HfApi
+    api = HfApi(token=hf_token)
+    api.upload_file(
+        path_or_fileobj=final_output,
+        path_in_repo=f"outputs/{job_id}.mp4",
+        repo_id=hf_repo,
+        repo_type="dataset"
+    )
+    print("SUCCESS: Uploaded video directly to Hugging Face Hub!", flush=True)
+    upload_ok = True
+except Exception as e:
+    print(f"HF Hub upload error: {e}", flush=True)
+
+# Notify EpicSync backend callback webhook (Wakes up Render & updates Firestore)
+print("Notifying EpicSync backend callback...", flush=True)
+try:
+    import urllib.request, json
+    cb_data = json.dumps({
+        "job_id": job_id,
+        "status": "SUCCESS" if upload_ok or os.path.exists(final_output) else "FAILED",
+        "hf_repo": hf_repo,
+        "uid": ___UID___,
+        "projectId": ___PROJECT_ID___
+    }).encode("utf-8")
+    cb_req = urllib.request.Request(
+        "https://epic-yt-gabriel.onrender.com/api/callback/kaggle_complete",
+        data=cb_data,
+        headers={"Content-Type": "application/json"}
+    )
+    cb_resp = urllib.request.urlopen(cb_req, timeout=30)
+    print(f"EpicSync backend notified successfully (HTTP {cb_resp.status})!", flush=True)
+except Exception as e:
+    print(f"Notice: Callback notification failed: {e}", flush=True)
 
 # Cleanup massive repo and intermediate chunk videos to ensure clean output packaging
 run_cmd("rm -rf Wan2GP /kaggle/working/result_retalking.mp4 /kaggle/working/chunk_*.mp4 /kaggle/working/result_retalking_silent.mp4 /kaggle/working/concat_list.txt /kaggle/working/input.wav /kaggle/working/input.png /kaggle/working/bg_music.mp3 /kaggle/working/captions.srt /kaggle/working/result_with_bgm.mp4 /kaggle/working/result_retalking_subtitled.mp4 /kaggle/working/result_speed_adjusted.mp4")
@@ -2230,7 +2291,8 @@ def prepare_and_launch_premium_job(
     font_y_pos: str = "83",
     uid: str = None,
     bgm_volume: str = "15",
-    voice_boost: str = "100"
+    voice_boost: str = "100",
+    projectId: str = None
 ):
     try:
         append_log(job_id, f"Preparing files and dataset upload...")
@@ -2324,12 +2386,12 @@ def prepare_and_launch_premium_job(
         voice_boost_str = f"{voice_boost_val:.2f}"
 
         if video_model == "aptavatar":
-            script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___VOICE_BOOST___", voice_boost_str)
+            script_content = APTAVATAR_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___RESOLUTION___", repr(resolution)).replace("___APTAVATAR_PROMPT___", repr(apt_prompt)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___VOICE_BOOST___", voice_boost_str).replace("___UID___", repr(uid or "")).replace("___PROJECT_ID___", repr(projectId or ""))
         elif video_model == "pexels":
             pexels_key = os.environ.get("PEXELS_API_KEY", "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K").strip().strip('"').strip("'")
-            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___ADD_GRID___", repr(str(add_grid))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos)).replace("___BGM_VOLUME___", str(bgm_volume)).replace("___VOICE_BOOST___", voice_boost_str)
+            script_content = PEXELS_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", repr(aspect_ratio)).replace("___RESOLUTION___", repr(resolution)).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___ADD_GRID___", repr(str(add_grid))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", repr(str(video_speed))).replace("___PEXELS_SEGMENTS_JSON___", repr(pexels_segments_json)).replace("___PEXELS_API_KEY___", repr(pexels_key)).replace("___GRID_COLOR___", repr(grid_color)).replace("___CAPTION_COLOR___", repr(caption_color)).replace("___FONT_SIZE___", repr(font_size)).replace("___FONT_Y_POS___", repr(font_y_pos)).replace("___BGM_VOLUME___", str(bgm_volume)).replace("___VOICE_BOOST___", voice_boost_str).replace("___UID___", repr(uid or "")).replace("___PROJECT_ID___", repr(projectId or ""))
         else:
-            script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed)).replace("___BGM_VOLUME___", str(bgm_volume)).replace("___VOICE_BOOST___", voice_boost_str)
+            script_content = PREMIUM_KERNEL_TEMPLATE.replace("___SCRIPT_TEXT___", repr(spoken_script)).replace("___VOICE___", repr(voice)).replace("___IMAGE_B64___", repr(ib64)).replace("___HF_REPO___", repr(hf_repo)).replace("___JOB_ID___", repr(job_id)).replace("___HF_TOKEN___", repr(hf_token)).replace("___ASPECT_RATIO___", aspect_ratio).replace("___RESOLUTION___", resolution).replace("___ADD_CAPTIONS___", repr(str(add_captions))).replace("___BGM_REPO_PATH___", repr(bgm_repo_path)).replace("___VIDEO_SPEED___", str(video_speed)).replace("___BGM_VOLUME___", str(bgm_volume)).replace("___VOICE_BOOST___", voice_boost_str).replace("___UID___", repr(uid or "")).replace("___PROJECT_ID___", repr(projectId or ""))
             
         with open(os.path.join(staging, "run_epicsync.py"), "w", encoding="utf-8") as f:
             f.write(script_content)
@@ -2613,7 +2675,7 @@ async def create_premium_job(
     background_tasks.add_task(
         prepare_and_launch_premium_job,
         job_id, staging, image_path, bgm_path, bgm_repo_path, script_text, voice, aspect_ratio, resolution, str(add_captions), str(add_grid), str(video_speed),
-        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid, str(bgm_volume), str(voice_boost)
+        kaggle_user, kaggle_key, hf_repo, hf_token, kernel_id, video_model, grid_color, caption_color, font_size, font_y_pos, uid, str(bgm_volume), str(voice_boost), projectId
     )
         
     return {"job_id": job_id, "status": "STAGING"}
@@ -2808,7 +2870,7 @@ async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_
             form_data.get("hf_repo", "epic-gab/EpicSync-Dataset"), form_data.get("hf_token", ""),
             kernel_id, video_model, form_data.get("grid_color", "#ffffff"),
             form_data.get("caption_color", "#ffffff"), form_data.get("font_size", "60"),
-            form_data.get("font_y_pos", "83"), uid, form_data.get("bgm_volume", "15"), form_data.get("voice_boost", "100")
+            form_data.get("font_y_pos", "83"), uid, form_data.get("bgm_volume", "15"), form_data.get("voice_boost", "100"), project_id
         ))
         t.start()
         

@@ -682,6 +682,14 @@ function loadLogs() {
                 queueList.appendChild(queueEl);
             }
 
+            if (isActive && currentUser) {
+                currentUser.getIdToken().then(t => {
+                    fetch(`${BACKEND_URL}/api/sync_job/${docSnap.id}?projectId=${currentProject}`, {
+                        headers: { 'Authorization': `Bearer ${t}` }
+                    }).catch(e => console.log('Background sync notice:', e));
+                });
+            }
+
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
@@ -689,7 +697,10 @@ function loadLogs() {
                         <p class="text-sm mt-2 text-muted">Status: ${data.status}</p>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        ${isActive ? `<button class="btn-secondary" style="font-size: 12px; padding: 4px 8px; color: #ff4444;" onclick="cancelJob('${docSnap.id}')">🛑 Cancel</button>` : ''}
+                        ${isActive ? `
+                            <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px; color: #4caf50;" onclick="syncJobStatus('${docSnap.id}')">🔄 Check Status</button>
+                            <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px; color: #ff4444;" onclick="cancelJob('${docSnap.id}')">🛑 Cancel</button>
+                        ` : ''}
                         <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" onclick="openLogModal('${docSnap.id}', '${escapedTitle}')">👁️ View Console</button>
                     </div>
                 </div>
@@ -724,6 +735,24 @@ function loadLogs() {
 }
 
 let logModalUnsubscribe = null;
+
+window.syncJobStatus = async function(jobId) {
+    try {
+        const token = currentUser ? await currentUser.getIdToken() : '';
+        const res = await fetch(`${BACKEND_URL}/api/sync_job/${jobId}?projectId=${currentProject}`, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        const data = await res.json();
+        if (data.status === 'SUCCESS') {
+            alert('🎉 Video generation complete! The video player has been loaded.');
+        } else {
+            alert(`Job status on engine: ${data.status}. If Kaggle is still rendering, it will complete shortly.`);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Failed to connect to status check server.');
+    }
+};
 
 window.cancelJob = async function(jobId) {
     if (!confirm('Are you sure you want to cancel this job?')) return;
