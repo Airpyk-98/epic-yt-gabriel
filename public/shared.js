@@ -367,6 +367,11 @@ for idx, job in enumerate(batch_config["jobs"]):
     vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
     scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
 
+    # Get exact audio duration to guarantee immediate FFmpeg termination (preventing stream_loop hangs)
+    r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_path}"', shell=True, capture_output=True, text=True)
+    audio_dur = float(r_dur.stdout.strip()) if r_dur.stdout.strip() else 10.0
+    print(f"Audio duration: {audio_dur:.3f}s")
+
     # Check if NVIDIA NVENC hardware encoder is supported
     has_nvenc = False
     try:
@@ -378,10 +383,10 @@ for idx, job in enumerate(batch_config["jobs"]):
 
     if has_nvenc:
         print("⚡ Using NVIDIA GPU NVENC hardware acceleration...")
-        ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
+        ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -t {audio_dur:.3f} -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{output_mp4}"'
     else:
         print("🐢 Using multi-threaded CPU acceleration...")
-        ff_cmd = f'ffmpeg -y -threads 0 -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
+        ff_cmd = f'ffmpeg -y -threads 0 -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -t {audio_dur:.3f} -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{output_mp4}"'
 
     subprocess.run(ff_cmd, shell=True)
 
