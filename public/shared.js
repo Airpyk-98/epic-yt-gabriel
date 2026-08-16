@@ -3,7 +3,7 @@
 export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
 export const DEFAULT_HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
-export const DEFAULT_PEXELS_KEY = "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d";
+export const DEFAULT_PEXELS_KEY = "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K";
 
 // 1. Initialize Auth Navigation Pill across all pages
 export function initSharedAuth(auth, db, utils) {
@@ -40,6 +40,7 @@ export async function getUserSettings(db, utils, uid) {
         kaggle_username: localStorage.getItem('epicsync_kaggle_username') || DEFAULT_KAGGLE_USERNAME,
         kaggle_key: localStorage.getItem('epicsync_kaggle_key') || DEFAULT_KAGGLE_KEY,
         hf_token: localStorage.getItem('epicsync_hf_token') || DEFAULT_HF_TOKEN,
+        pexels_key: localStorage.getItem('epicsync_pexels_key') || DEFAULT_PEXELS_KEY,
         webhook_url: localStorage.getItem('epicsync_yt_webhook') || ''
     };
 
@@ -51,6 +52,7 @@ export async function getUserSettings(db, utils, uid) {
                 if (data.kaggle_username) settings.kaggle_username = data.kaggle_username;
                 if (data.kaggle_key) settings.kaggle_key = data.kaggle_key;
                 if (data.hf_token) settings.hf_token = data.hf_token;
+                if (data.pexels_key) settings.pexels_key = data.pexels_key;
                 if (data.webhook_url) settings.webhook_url = data.webhook_url;
             }
         } catch (e) {
@@ -106,9 +108,10 @@ export async function dispatchToWebhook(webhookUrl, videosList) {
 }
 
 // 4. Generate Self-Contained Kaggle Pure CPU Worker Python Code
-export function buildWorkerCode(batchConfig, hfToken) {
+export function buildWorkerCode(batchConfig, hfToken, pexelsKey) {
     const jsonStr = JSON.stringify(batchConfig).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const tokenToUse = hfToken || DEFAULT_HF_TOKEN;
+    const pexKeyToUse = pexelsKey || DEFAULT_PEXELS_KEY;
     
     return `# EpicSync On-Demand Batch Worker (Pure CPU)
 import os
@@ -126,6 +129,7 @@ from huggingface_hub import HfApi
 
 batch_config = json.loads("${jsonStr}")
 HF_TOKEN = "${tokenToUse}"
+DEFAULT_PEXELS_KEY = "${pexKeyToUse}"
 hf_api = HfApi(token=HF_TOKEN)
 
 def update_job(uid, job_id, status, progress, step_text, extra=None):
@@ -169,16 +173,15 @@ for idx, job in enumerate(batch_config["jobs"]):
     target_dur = job.get("target_duration", "45 seconds")
     voice_boost = job.get("voice_boost", "120")
     bgm_volume = job.get("bgm_volume", "15")
-    pexels_key = job.get("pexels_api_key", "${DEFAULT_PEXELS_KEY}")
+    pexels_key = job.get("pexels_api_key") or DEFAULT_PEXELS_KEY
 
     print(f"\\n========================================================")
     print(f" Processing Video {idx+1}/{len(batch_config['jobs'])}: {title} (ID: {job_id})")
     print(f"========================================================")
 
-    # Real-time update step 1: Script Gen
+    # Step 1: Script Gen
     update_job(uid, job_id, "RUNNING", 10, f"Generating AI script for '{title}'...")
 
-    # 1. AI Script Generation
     if not script_text or script_text.strip() == "":
         words_est = 80
         if "min" in target_dur.lower():
@@ -224,14 +227,13 @@ for idx, job in enumerate(batch_config["jobs"]):
         if not script_text:
             script_text = f"Here is what you need to know about {title}. Applying these practical insights will immediately transform your daily outcomes."
 
-    # Real-time update step 2: Audio TTS
+    # Step 2: Audio TTS
     update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS...")
 
     work_dir = f"/kaggle/working/job_{job_id}"
     os.makedirs(work_dir, exist_ok=True)
     audio_path = os.path.join(work_dir, "audio.mp3")
 
-    # 2. TTS Voiceover
     import asyncio, edge_tts
     edge_voice = "en-US-GuyNeural"
     if "female" in voice:
@@ -246,51 +248,81 @@ for idx, job in enumerate(batch_config["jobs"]):
         await comm.save(audio_path)
     asyncio.run(make_audio())
 
-    # Real-time update step 3: Pexels Stock
+    # Step 3: Pexels Stock B-Roll Video Download
     update_job(uid, job_id, "RUNNING", 55, "Searching & downloading Pexels stock B-roll...")
 
-    # 3. Download Pexels B-Roll Video
     video_clip_path = os.path.join(work_dir, "broll.mp4")
     w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
     orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
 
-    search_q = "+".join(re.findall(r'\\w+', title)[:4]) or "cinematic+modern"
+    # Extract meaningful search terms (strip numbers and common stopwords)
+    stopwords = {"a", "an", "the", "in", "on", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "you", "your", "is", "are", "can", "that", "this", "what", "how", "top", "why", "exist", "slowly", "secretly"}
+    words = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in title.split()]
+    filtered = [w for w in words if w and len(w) > 2 and w not in stopwords and not w.isdigit()]
+    search_q = "+".join(filtered[:3]) if filtered else "cinematic+modern"
+
+    print(f"Pexels search query: '{search_q}' (orientation: {orientation})")
+    
     try:
         pex_res = requests.get(
-            f"https://api.pexels.com/videos/search?query={search_q}&per_page=1&orientation={orientation}",
+            f"https://api.pexels.com/videos/search?query={search_q}&per_page=5&orientation={orientation}",
             headers={"Authorization": pexels_key},
             timeout=15
         )
+        if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "cinematic":
+            # Fallback search if specific query returned empty
+            pex_res = requests.get(
+                f"https://api.pexels.com/videos/search?query=cinematic&per_page=5&orientation={orientation}",
+                headers={"Authorization": pexels_key},
+                timeout=15
+            )
+
         if pex_res.ok and pex_res.json().get("videos"):
-            vid_files = pex_res.json()["videos"][0].get("video_files", [])
-            vid_url = vid_files[0]["link"] if vid_files else None
-            if vid_url:
-                r_vid = requests.get(vid_url, stream=True)
+            videos_list = pex_res.json()["videos"]
+            best_vid_url = None
+            
+            for v_entry in videos_list:
+                files = v_entry.get("video_files", [])
+                # Prefer HD 1080p or 720p files
+                for f in files:
+                    if f.get("link") and f.get("quality") == "hd":
+                        best_vid_url = f.get("link")
+                        break
+                if not best_vid_url and files:
+                    best_vid_url = files[0].get("link")
+                if best_vid_url:
+                    break
+                    
+            if best_vid_url:
+                print(f"Downloading Pexels video: {best_vid_url[:80]}...")
+                r_vid = requests.get(best_vid_url, stream=True, timeout=30)
                 with open(video_clip_path, "wb") as f:
                     for chunk in r_vid.iter_content(chunk_size=1024*1024):
                         f.write(chunk)
+                print(f"Pexels video downloaded ({os.path.getsize(video_clip_path)} bytes).")
     except Exception as e:
         print(f"Pexels fetch notice: {e}")
 
-    if not os.path.exists(video_clip_path) or os.path.getsize(video_clip_path) == 0:
-        subprocess.run(f"ffmpeg -y -f lavfi -i color=c=0x0a0a0f:s={w}x{h}:d=30 -c:v libx264 {video_clip_path}", shell=True)
+    # Fallback to dynamic animated background if download failed
+    if not os.path.exists(video_clip_path) or os.path.getsize(video_clip_path) < 1000:
+        print("Using dynamic procedural visualizer fallback...")
+        subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t 30 -c:v libx264 {video_clip_path}", shell=True)
 
-    # Real-time update step 4: FFmpeg Assembly
+    # Step 4: Video Assembly with Pro Scale & Crop
     update_job(uid, job_id, "RUNNING", 75, "Compiling video via FFmpeg...")
 
     output_mp4 = os.path.join(work_dir, f"{job_id}.mp4")
     vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
+    scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
 
-    # 4. FFmpeg Video Assembly
-    ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[1:a]volume={vb_float}[aout]" -map 0:v -map "[aout]" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
+    ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
     subprocess.run(ff_cmd, shell=True)
 
-    # Real-time update step 5: Uploading
+    # Step 5: Direct Hugging Face Upload
     update_job(uid, job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
     remote_path = f"outputs/{job_id}.mp4"
     direct_url = f"https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/{remote_path}"
 
-    # 5. Direct Upload to Hugging Face Dataset
     try:
         hf_api.upload_file(
             path_or_fileobj=output_mp4,
@@ -301,7 +333,7 @@ for idx, job in enumerate(batch_config["jobs"]):
         )
         print(f"Uploaded video to: {direct_url}")
         
-        # Real-time update step 6: SUCCESS (Unlocks video immediately for this row before next video starts)
+        # Step 6: SUCCESS
         update_job(uid, job_id, "SUCCESS", 100, "Generation complete!", {
             "output_file": direct_url,
             "status": "SUCCESS"
@@ -326,6 +358,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     const kaggleUsername = (payload.kaggle_username || userSettings.kaggle_username || DEFAULT_KAGGLE_USERNAME).trim();
     const kaggleKey = (payload.kaggle_key || userSettings.kaggle_key || DEFAULT_KAGGLE_KEY).trim();
     const hfToken = (payload.hf_token || userSettings.hf_token || DEFAULT_HF_TOKEN).trim();
+    const pexelsKey = (payload.pexels_api_key || userSettings.pexels_key || DEFAULT_PEXELS_KEY).trim();
 
     // Initialize execution documents in Firestore
     for (let idx = 0; idx < titles.length; idx++) {
@@ -367,7 +400,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
         jobs: jobs,
         ai_api_key: payload.ai_api_key || ''
     };
-    const workerScript = buildWorkerCode(batchConfig, hfToken);
+    const workerScript = buildWorkerCode(batchConfig, hfToken, pexelsKey);
 
     // Push to Kaggle API using Bearer Token Auth
     const slugName = `epicsync-batch-${ts}`;
