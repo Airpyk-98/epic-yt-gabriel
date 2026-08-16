@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="style.css?v=20260816_v180">
+    <link rel="stylesheet" href="style.css?v=20260816_v210">
 </head>
 <body>
 
@@ -60,14 +60,15 @@
                 <div class="card-header logs-main-header">
                     <div>
                         <h2>📜 All Execution Logs</h2>
-                        <p class="subtitle">Complete generation history for your account. Select multiple to push to YouTube via Webhook.</p>
+                        <p class="subtitle">Complete generation history for your account. Cancel active jobs or push to YouTube via Webhook.</p>
                     </div>
                 </div>
 
                 <!-- Action Bar -->
                 <div class="logs-actions-toolbar">
-                    <div class="left-actions">
+                    <div class="left-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select Multiple</button>
+                        <button id="cancelAllRunningBtn" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35); color: #f87171;">🛑 Cancel All Running</button>
                     </div>
                     <div class="right-actions">
                         <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All Logs</button>
@@ -77,8 +78,9 @@
                 <!-- Batch Selection Bar (Slides in when items are selected) -->
                 <div id="batchSelectionBar" class="batch-selection-bar" style="display: none;">
                     <span id="selectedCountText">0 selected</span>
-                    <div class="batch-btns">
-                        <button id="pushBatchYtBtn" class="btn-push-yt">📺 Push Selected to YouTube</button>
+                    <div class="batch-btns" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button id="pushBatchYtBtn" class="btn-push-yt">📺 Push Selected</button>
+                        <button id="cancelSelectedBtn" class="btn-tool" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fff;">🛑 Cancel Selected</button>
                         <button id="deleteSelectedBtn" class="btn-delete-sel">🗑️ Delete</button>
                     </div>
                 </div>
@@ -93,7 +95,7 @@
         
         <!-- Footer -->
         <footer class="app-footer">
-            <p>EpicSync Studio &bull; Powered by Kaggle CPU &amp; Hugging Face Datasets</p>
+            <p>EpicSync Studio &bull; Powered by Kaggle Cloud &amp; Hugging Face Datasets</p>
         </footer>
 
     </div>
@@ -103,7 +105,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, escapeHtml } from "./shared.js?v=20260816_v180";
+        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, cancelExecutionJob, cancelAllActiveJobs, escapeHtml } from "./shared.js?v=20260816_v210";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -171,7 +173,9 @@
                 const stepText = data.step_text || 'Waiting for runner...';
                 const outputUrl = data.output_file || '';
                 const jobId = data.job_id || data.id;
+                const accelerator = data.accelerator || '';
                 const isSelected = selectedJobs.has(jobId);
+                const isRunningOrQueued = status === 'RUNNING' || status === 'QUEUED';
 
                 const card = document.createElement('div');
                 card.className = `video-card ${isSelected ? 'selected' : ''}`;
@@ -185,10 +189,18 @@
                 card.innerHTML = `
                     <div class="video-card-top">
                         ${checkboxHtml}
-                        <div class="video-info">
+                        <div class="video-info" style="flex: 1;">
                             <span class="video-title">${escapeHtml(data.title || 'Untitled Video')}</span>
-                            <span class="status-badge badge-${status}">${status}</span>
+                            <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
+                                <span class="status-badge badge-${status}">${status}</span>
+                                ${accelerator ? `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.06); color: #cbd5e1; font-weight: 600;">${escapeHtml(accelerator)}</span>` : ''}
+                            </div>
                         </div>
+                        ${isRunningOrQueued ? `
+                            <button class="btn-cancel-single" data-job-id="${jobId}" title="Cancel this video execution" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #f87171; border-radius: 6px; padding: 4px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">
+                                🛑 Cancel
+                            </button>
+                        ` : ''}
                     </div>
                     
                     <div class="progress-bar-wrap">
@@ -222,6 +234,19 @@
                     }
                 }
 
+                // Individual Cancel Button
+                const cancelBtn = card.querySelector('.btn-cancel-single');
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        if (confirm(`Cancel execution for '${data.title || jobId}'?`)) {
+                            cancelBtn.innerText = 'Cancelling...';
+                            cancelBtn.disabled = true;
+                            await cancelExecutionJob(db, utils, currentUser?.uid, jobId);
+                        }
+                    });
+                }
+
                 const singleYtBtn = card.querySelector('.btn-yt-single');
                 if (singleYtBtn) {
                     singleYtBtn.addEventListener('click', async (e) => {
@@ -242,7 +267,9 @@
         const batchSelectionBar = document.getElementById('batchSelectionBar');
         const selectedCountText = document.getElementById('selectedCountText');
         const pushBatchYtBtn = document.getElementById('pushBatchYtBtn');
+        const cancelSelectedBtn = document.getElementById('cancelSelectedBtn');
         const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+        const cancelAllRunningBtn = document.getElementById('cancelAllRunningBtn');
 
         toggleMultiSelectBtn.addEventListener('click', () => {
             multiSelectMode = !multiSelectMode;
@@ -258,6 +285,7 @@
                 selectedJobs.set(jobId, {
                     job_id: jobId,
                     title: data.title || '',
+                    status: data.status || 'QUEUED',
                     video_download_link: data.output_file || '',
                     aspect_ratio: data.aspect_ratio || '9:16'
                 });
@@ -274,6 +302,40 @@
                 batchSelectionBar.style.display = 'none';
             }
         }
+
+        // Cancel Selected Running/Queued Jobs
+        cancelSelectedBtn.addEventListener('click', async () => {
+            const list = Array.from(selectedJobs.values());
+            const runningList = list.filter(j => j.status === 'RUNNING' || j.status === 'QUEUED');
+            if (runningList.length === 0) return alert('None of the selected videos are currently running or queued.');
+
+            if (!confirm(`Cancel ${runningList.length} selected running video(s)?`)) return;
+
+            cancelSelectedBtn.innerText = 'Cancelling...';
+            for (const item of runningList) {
+                await cancelExecutionJob(db, utils, currentUser?.uid, item.job_id);
+            }
+            selectedJobs.clear();
+            updateSelectionBar();
+            cancelSelectedBtn.innerText = '🛑 Cancel Selected';
+            alert(`Cancelled ${runningList.length} video(s).`);
+        });
+
+        // Cancel All Running Jobs
+        cancelAllRunningBtn.addEventListener('click', async () => {
+            const runningList = allLogsList.filter(j => j.status === 'RUNNING' || j.status === 'QUEUED');
+            if (runningList.length === 0) return alert('There are no active running or queued videos at the moment.');
+
+            if (!confirm(`Are you sure you want to cancel ALL ${runningList.length} active running video(s)?`)) return;
+
+            cancelAllRunningBtn.innerText = 'Cancelling all...';
+            cancelAllRunningBtn.disabled = true;
+
+            const count = await cancelAllActiveJobs(db, utils, currentUser?.uid, allLogsList);
+            cancelAllRunningBtn.innerText = '🛑 Cancel All Running';
+            cancelAllRunningBtn.disabled = false;
+            alert(`Successfully cancelled all ${count} active video(s).`);
+        });
 
         // Push Selected Batch to YouTube
         pushBatchYtBtn.addEventListener('click', async () => {

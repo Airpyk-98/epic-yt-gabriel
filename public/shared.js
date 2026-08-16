@@ -107,13 +107,44 @@ export async function dispatchToWebhook(webhookUrl, videosList) {
     }
 }
 
-// 4. Generate Self-Contained Kaggle Pure CPU Worker Python Code
+// 4. Cancel Individual or All Running Execution Jobs in Firestore
+export async function cancelExecutionJob(db, utils, uid, jobId) {
+    const cancelData = {
+        status: 'CANCELLED',
+        step_text: 'Cancelled by user',
+        updatedAt: new Date()
+    };
+
+    try {
+        if (uid) {
+            await utils.setDoc(utils.doc(db, 'users', uid, 'executions', jobId), cancelData, { merge: true });
+        }
+        await utils.setDoc(utils.doc(db, 'executions', jobId), cancelData, { merge: true });
+        return true;
+    } catch (err) {
+        console.error("Error cancelling job:", err);
+        throw err;
+    }
+}
+
+export async function cancelAllActiveJobs(db, utils, uid, jobsList) {
+    const activeJobs = jobsList.filter(j => j.status === 'RUNNING' || j.status === 'QUEUED');
+    if (activeJobs.length === 0) return 0;
+
+    for (const j of activeJobs) {
+        const jobId = j.job_id || j.id;
+        await cancelExecutionJob(db, utils, uid, jobId);
+    }
+    return activeJobs.length;
+}
+
+// 5. Generate Self-Contained Kaggle Worker Python Code
 export function buildWorkerCode(batchConfig, hfToken, pexelsKey) {
     const jsonStr = JSON.stringify(batchConfig).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const tokenToUse = hfToken || DEFAULT_HF_TOKEN;
     const pexKeyToUse = pexelsKey || DEFAULT_PEXELS_KEY;
     
-    return `# EpicSync On-Demand Batch Worker (Pure CPU)
+    return `# EpicSync On-Demand Batch Worker
 import os
 import sys
 import subprocess
@@ -131,6 +162,18 @@ batch_config = json.loads("${jsonStr}")
 HF_TOKEN = "${tokenToUse}"
 DEFAULT_PEXELS_KEY = "${pexKeyToUse}"
 hf_api = HfApi(token=HF_TOKEN)
+
+def is_job_cancelled(uid, job_id):
+    try:
+        url = f"https://firestore.googleapis.com/v1/projects/epic-yt-gab/databases/(default)/documents/executions/{job_id}"
+        r = requests.get(url, timeout=5)
+        if r.ok:
+            data = r.json()
+            status_val = data.get("fields", {}).get("status", {}).get("stringValue", "")
+            return status_val == "CANCELLED"
+    except Exception as e:
+        print(f"Cancel check notice: {e}")
+    return False
 
 def update_job(uid, job_id, status, progress, step_text, extra=None):
     print(f"[JOB {job_id}] {status} ({progress}%) - {step_text}")
@@ -178,6 +221,11 @@ for idx, job in enumerate(batch_config["jobs"]):
     print(f"\\n========================================================")
     print(f" Processing Video {idx+1}/{len(batch_config['jobs'])}: {title} (ID: {job_id})")
     print(f"========================================================")
+
+    # Check for cancellation before processing
+    if is_job_cancelled(uid, job_id):
+        print(f"Job {job_id} was CANCELLED by user. Skipping to next video.")
+        continue
 
     # Step 1: Script Gen
     update_job(uid, job_id, "RUNNING", 10, f"Generating AI script for '{title}'...")
@@ -227,6 +275,11 @@ for idx, job in enumerate(batch_config["jobs"]):
         if not script_text:
             script_text = f"Here is what you need to know about {title}. Applying these practical insights will immediately transform your daily outcomes."
 
+    # Check for cancellation again
+    if is_job_cancelled(uid, job_id):
+        print(f"Job {job_id} was CANCELLED by user. Skipping.")
+        continue
+
     # Step 2: Audio TTS
     update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS...")
 
@@ -255,7 +308,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
     orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
 
-    # Extract meaningful search terms (strip numbers and common stopwords)
+    # Extract meaningful search terms
     stopwords = {"a", "an", "the", "in", "on", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "you", "your", "is", "are", "can", "that", "this", "what", "how", "top", "why", "exist", "slowly", "secretly"}
     words = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in title.split()]
     filtered = [w for w in words if w and len(w) > 2 and w not in stopwords and not w.isdigit()]
@@ -340,16 +393,17 @@ for idx, job in enumerate(batch_config["jobs"]):
         print(f"HF Upload error: {e}")
         update_job(uid, job_id, "FAILED", 100, f"Upload error: {e}")
 
-print("\\n[BATCH COMPLETED] All videos generated and uploaded successfully. Worker exiting.")
+print("\\n[BATCH COMPLETED] All videos processed. Worker exiting.")
 `;
 }
 
-// 5. Direct Kaggle Batch Dispatcher (Using User's Configured Credentials)
+// 6. Direct Kaggle Batch Dispatcher (Supporting GPU & CPU modes)
 export async function launchKaggleBatchDirectly(db, utils, payload) {
     const ts = Math.floor(Date.now() / 1000);
     const batch_id = `batch_${ts}`;
     const titles = payload.titles || [];
     const jobs = [];
+    const enableGpu = payload.enable_gpu === true || payload.enable_gpu === 'true';
 
     // Get user configured credentials
     const userSettings = await getUserSettings(db, utils, payload.uid);
@@ -373,9 +427,10 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
             voice: payload.voice || 'relationship-male',
             voice_boost: payload.voice_boost || '120',
             bgm_volume: payload.bgm_volume || '15',
+            accelerator: enableGpu ? 'GPU (Turbo)' : 'CPU (Saver)',
             status: 'QUEUED',
             progress: 0,
-            step_text: 'Queued for Kaggle CPU Worker...',
+            step_text: `Queued for Kaggle ${enableGpu ? 'Turbo GPU' : 'CPU'} Worker...`,
             createdAt: new Date(),
             updatedAt: new Date()
         };
@@ -392,7 +447,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
         }
     }
 
-    // Build the Kaggle CPU script
+    // Build the Kaggle worker script
     const batchConfig = {
         batch_id: batch_id,
         jobs: jobs,
@@ -400,17 +455,17 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     };
     const workerScript = buildWorkerCode(batchConfig, hfToken, pexelsKey);
 
-    // Push to Kaggle API using Bearer Token Auth
+    // Push to Kaggle API using Bearer Token Auth with dynamic GPU/CPU setting
     const slugName = `epicsync-batch-${ts}`;
 
     const kagglePayload = {
         slug: `${kaggleUsername}/${slugName}`,
-        newTitle: `EpicSync Batch ${ts}`,
+        newTitle: `EpicSync Batch ${ts} (${enableGpu ? 'GPU' : 'CPU'})`,
         text: workerScript,
         language: "python",
         kernelType: "script",
         isPrivate: true,
-        enableGpu: false,
+        enableGpu: enableGpu,
         enableTpu: false,
         enableInternet: true,
         datasetDataSources: [],
@@ -438,6 +493,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     return {
         success: true,
         batch_id: batch_id,
+        enable_gpu: enableGpu,
         count: jobs.length,
         jobs: jobs,
         kaggle_ref: resData.ref || slugName
