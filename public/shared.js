@@ -123,37 +123,39 @@ import re
 import time
 import requests
 from huggingface_hub import HfApi
-import firebase_admin
-from firebase_admin import credentials, firestore
 
 batch_config = json.loads("${jsonStr}")
 HF_TOKEN = "${tokenToUse}"
 hf_api = HfApi(token=HF_TOKEN)
 
-# Initialize Firebase via REST or App
-try:
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app()
-    db = firestore.client()
-except Exception:
-    db = None
-
 def update_job(uid, job_id, status, progress, step_text, extra=None):
     print(f"[JOB {job_id}] {status} ({progress}%) - {step_text}")
+    
+    fields = {
+        "status": {"stringValue": status},
+        "progress": {"integerValue": str(progress)},
+        "step_text": {"stringValue": step_text}
+    }
+    mask_params = "updateMask.fieldPaths=status&updateMask.fieldPaths=progress&updateMask.fieldPaths=step_text"
+    
+    if extra and "output_file" in extra:
+        mask_params += "&updateMask.fieldPaths=output_file"
+        fields["output_file"] = {"stringValue": extra["output_file"]}
+    
+    # 1. Update user-scoped path (for logged in user)
+    if uid and uid.strip():
+        try:
+            url_user = f"https://firestore.googleapis.com/v1/projects/epic-yt-gab/databases/(default)/documents/users/{uid}/executions/{job_id}?{mask_params}"
+            requests.patch(url_user, json={"fields": fields}, timeout=10)
+        except Exception as e:
+            print(f"User doc update notice: {e}")
+            
+    # 2. Update root executions path
     try:
-        # Direct REST update to Firestore
-        url = f"https://firestore.googleapis.com/v1/projects/epic-yt-gab/databases/(default)/documents/executions/{job_id}?updateMask.fieldPaths=status&updateMask.fieldPaths=progress&updateMask.fieldPaths=step_text"
-        fields = {
-            "status": {"stringValue": status},
-            "progress": {"integerValue": str(progress)},
-            "step_text": {"stringValue": step_text}
-        }
-        if extra and "output_file" in extra:
-            url += "&updateMask.fieldPaths=output_file"
-            fields["output_file"] = {"stringValue": extra["output_file"]}
-        requests.patch(url, json={"fields": fields}, timeout=10)
+        url_root = f"https://firestore.googleapis.com/v1/projects/epic-yt-gab/databases/(default)/documents/executions/{job_id}?{mask_params}"
+        requests.patch(url_root, json={"fields": fields}, timeout=10)
     except Exception as e:
-        print(f"Update notice: {e}")
+        print(f"Root doc update notice: {e}")
 
 print(f"Starting batch of {len(batch_config['jobs'])} video(s)...")
 
@@ -173,6 +175,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     print(f" Processing Video {idx+1}/{len(batch_config['jobs'])}: {title} (ID: {job_id})")
     print(f"========================================================")
 
+    # Real-time update step 1: Script Gen
     update_job(uid, job_id, "RUNNING", 10, f"Generating AI script for '{title}'...")
 
     # 1. AI Script Generation
@@ -221,6 +224,7 @@ for idx, job in enumerate(batch_config["jobs"]):
         if not script_text:
             script_text = f"Here is what you need to know about {title}. Applying these practical insights will immediately transform your daily outcomes."
 
+    # Real-time update step 2: Audio TTS
     update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS...")
 
     work_dir = f"/kaggle/working/job_{job_id}"
@@ -242,6 +246,7 @@ for idx, job in enumerate(batch_config["jobs"]):
         await comm.save(audio_path)
     asyncio.run(make_audio())
 
+    # Real-time update step 3: Pexels Stock
     update_job(uid, job_id, "RUNNING", 55, "Searching & downloading Pexels stock B-roll...")
 
     # 3. Download Pexels B-Roll Video
@@ -270,6 +275,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     if not os.path.exists(video_clip_path) or os.path.getsize(video_clip_path) == 0:
         subprocess.run(f"ffmpeg -y -f lavfi -i color=c=0x0a0a0f:s={w}x{h}:d=30 -c:v libx264 {video_clip_path}", shell=True)
 
+    # Real-time update step 4: FFmpeg Assembly
     update_job(uid, job_id, "RUNNING", 75, "Compiling video via FFmpeg...")
 
     output_mp4 = os.path.join(work_dir, f"{job_id}.mp4")
@@ -279,6 +285,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[1:a]volume={vb_float}[aout]" -map 0:v -map "[aout]" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
     subprocess.run(ff_cmd, shell=True)
 
+    # Real-time update step 5: Uploading
     update_job(uid, job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
     remote_path = f"outputs/{job_id}.mp4"
     direct_url = f"https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/{remote_path}"
@@ -293,6 +300,8 @@ for idx, job in enumerate(batch_config["jobs"]):
             token=HF_TOKEN
         )
         print(f"Uploaded video to: {direct_url}")
+        
+        # Real-time update step 6: SUCCESS (Unlocks video immediately for this row before next video starts)
         update_job(uid, job_id, "SUCCESS", 100, "Generation complete!", {
             "output_file": direct_url,
             "status": "SUCCESS"
