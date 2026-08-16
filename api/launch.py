@@ -66,11 +66,10 @@ batch_config = json.loads("""{json.dumps(batch_config)}""")
 HF_TOKEN = "{HF_TOKEN}"
 hf_api = HfApi(token=HF_TOKEN)
 
-def update_job(job_id, status, progress, step_text, extra=None):
+def update_job(uid, job_id, status, progress, step_text, extra=None):
     print(f"[JOB {{job_id}}] Status: {{status}} ({{progress}}%) - {{step_text}}")
     if db:
         try:
-            doc_ref = db.collection("executions").document(job_id)
             data = {{
                 "status": status,
                 "progress": progress,
@@ -79,7 +78,11 @@ def update_job(job_id, status, progress, step_text, extra=None):
             }}
             if extra:
                 data.update(extra)
-            doc_ref.set(data, merge=True)
+            # Update user scoped doc
+            if uid:
+                db.collection("users").document(uid).collection("executions").document(job_id).set(data, merge=True)
+            # Also update root executions for quick lookup
+            db.collection("executions").document(job_id).set(data, merge=True)
         except Exception as e:
             print(f"Firestore update warning: {{e}}")
 
@@ -87,6 +90,7 @@ print(f"Starting batch of {{len(batch_config['jobs'])}} video(s)...")
 
 for idx, job in enumerate(batch_config["jobs"]):
     job_id = job["job_id"]
+    uid = job.get("uid", "")
     batch_id = job.get("batch_id", "")
     title = job["title"]
     script_text = job.get("script", "")
@@ -107,11 +111,10 @@ for idx, job in enumerate(batch_config["jobs"]):
     print(f" Processing Video {{idx+1}}/{{len(batch_config['jobs'])}}: {{title}} (ID: {{job_id}})")
     print(f"========================================================")
     
-    update_job(job_id, "RUNNING", 10, f"Generating AI script for '{{title}}'...")
+    update_job(uid, job_id, "RUNNING", 10, f"Generating AI script for '{{title}}'...")
     
     # 1. AI Script Generation (Nemotron Super / Default)
     if not script_text or script_text.strip() == "":
-        # Calculate dynamic word count based on natural seconds / minutes
         words_est = 80
         if "min" in target_dur.lower():
             m_match = re.findall(r'[\\d.]+', target_dur)
@@ -156,7 +159,7 @@ for idx, job in enumerate(batch_config["jobs"]):
         if not script_text:
             script_text = f"Here is what you need to know about {{title}}. Applying these practical insights will immediately transform your daily outcomes."
 
-    update_job(job_id, "RUNNING", 25, "Synthesizing voiceover with Edge-TTS...", {{"script": script_text}})
+    update_job(uid, job_id, "RUNNING", 25, "Synthesizing voiceover with Edge-TTS...", {{"script": script_text}})
     
     work_dir = f"/kaggle/working/job_{{job_id}}"
     os.makedirs(work_dir, exist_ok=True)
@@ -177,7 +180,7 @@ for idx, job in enumerate(batch_config["jobs"]):
         await comm.save(audio_path)
     asyncio.run(make_audio())
     
-    update_job(job_id, "RUNNING", 50, "Searching & downloading Pexels stock B-roll...")
+    update_job(uid, job_id, "RUNNING", 50, "Searching & downloading Pexels stock B-roll...")
     
     # 3. Download Pexels B-Roll Video
     video_clip_path = os.path.join(work_dir, "broll.mp4")
@@ -205,7 +208,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     if not os.path.exists(video_clip_path) or os.path.getsize(video_clip_path) == 0:
         subprocess.run(f"ffmpeg -y -f lavfi -i color=c=0x0a0a0f:s={{w}}x{{h}}:d=30 -c:v libx264 {{video_clip_path}}", shell=True)
 
-    update_job(job_id, "RUNNING", 75, "Compiling final video via FFmpeg...")
+    update_job(uid, job_id, "RUNNING", 75, "Compiling final video via FFmpeg...")
     
     output_mp4 = os.path.join(work_dir, f"{{job_id}}.mp4")
     vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
@@ -214,7 +217,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{{video_clip_path}}" -i "{{audio_path}}" -filter_complex "[1:a]volume={{vb_float}}[aout]" -map 0:v -map "[aout]" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{{output_mp4}}"'
     subprocess.run(ff_cmd, shell=True)
     
-    update_job(job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
+    update_job(uid, job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
     remote_path = f"outputs/{{job_id}}.mp4"
     direct_url = f"https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/{{remote_path}}"
     
@@ -228,13 +231,13 @@ for idx, job in enumerate(batch_config["jobs"]):
             token=HF_TOKEN
         )
         print(f"Successfully uploaded video to: {{direct_url}}")
-        update_job(job_id, "SUCCESS", 100, "Generation complete!", {{
+        update_job(uid, job_id, "SUCCESS", 100, "Generation complete!", {{
             "output_file": direct_url,
             "status": "SUCCESS"
         }})
     except Exception as e:
         print(f"HF Upload error: {{e}}")
-        update_job(job_id, "FAILED", 100, f"Upload error: {{e}}")
+        update_job(uid, job_id, "FAILED", 100, f"Upload error: {{e}}")
 
 print("\\n[BATCH COMPLETED] All videos generated and uploaded successfully. Worker exiting.")
 '''
@@ -280,6 +283,7 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Please provide at least one title."}).encode('utf-8'))
             return
 
+        uid = req_data.get("uid", "")
         ts = int(time.time())
         batch_id = f"batch_{ts}"
         jobs = []
@@ -288,6 +292,7 @@ class handler(BaseHTTPRequestHandler):
             job_id = f"epicsync_{ts}_{idx}"
             jobs.append({
                 "job_id": job_id,
+                "uid": uid,
                 "batch_id": batch_id,
                 "batch_index": idx,
                 "title": t,
@@ -306,14 +311,15 @@ class handler(BaseHTTPRequestHandler):
                 "pexels_api_key": req_data.get("pexels_api_key", PEXELS_API_KEY)
             })
 
-        # 1. Initialize Firestore documents
+        # 1. Initialize Firestore documents (both user-scoped and root executions)
         db = init_firebase_admin()
         if db:
             from firebase_admin import firestore
             for job in jobs:
                 try:
-                    db.collection("executions").document(job["job_id"]).set({
+                    job_doc_data = {
                         "job_id": job["job_id"],
+                        "uid": uid,
                         "batch_id": batch_id,
                         "batch_index": job["batch_index"],
                         "title": job["title"],
@@ -325,7 +331,10 @@ class handler(BaseHTTPRequestHandler):
                         "logs": [f"[{time.strftime('%H:%M:%S')}] Batch queued for execution."],
                         "createdAt": firestore.SERVER_TIMESTAMP,
                         "updatedAt": firestore.SERVER_TIMESTAMP
-                    })
+                    }
+                    if uid:
+                        db.collection("users").document(uid).collection("executions").document(job["job_id"]).set(job_doc_data)
+                    db.collection("executions").document(job["job_id"]).set(job_doc_data)
                 except Exception as e:
                     print(f"Firestore init warning: {e}")
 

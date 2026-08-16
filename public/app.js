@@ -1,74 +1,103 @@
-// EpicSync Complete Application Logic
+// EpicSync Production-Grade Application Logic
 
-// Global state
-let currentUnit = 'seconds';
+let currentUser = null;
+let currentDurationUnit = 'seconds';
 let multiSelectMode = false;
 const selectedJobs = new Map(); // jobId -> { title, output_file, aspect_ratio }
-let allExecutionsList = [];
+let allUserExecutions = [];
 
-// 1. Tab Navigation
-const tabStudioBtn = document.getElementById('tabStudioBtn');
-const tabLogsBtn = document.getElementById('tabLogsBtn');
+// 1. Navigation & Page View Switching
+const navStudioBtn = document.getElementById('navStudioBtn');
+const navLogsBtn = document.getElementById('navLogsBtn');
+const navSettingsBtn = document.getElementById('navSettingsBtn');
+
 const studioView = document.getElementById('studioView');
 const logsView = document.getElementById('logsView');
+const settingsView = document.getElementById('settingsView');
 
-function switchView(target) {
-    if (target === 'studioView') {
-        tabStudioBtn?.classList.add('active');
-        tabLogsBtn?.classList.remove('active');
+function switchPage(target) {
+    [navStudioBtn, navLogsBtn, navSettingsBtn].forEach(btn => btn?.classList.remove('active'));
+    [studioView, logsView, settingsView].forEach(view => view?.classList.remove('active'));
+
+    if (target === 'studio') {
+        navStudioBtn?.classList.add('active');
         studioView?.classList.add('active');
-        logsView?.classList.remove('active');
-    } else {
-        tabLogsBtn?.classList.add('active');
-        tabStudioBtn?.classList.remove('active');
+    } else if (target === 'logs') {
+        navLogsBtn?.classList.add('active');
         logsView?.classList.add('active');
-        studioView?.classList.remove('active');
+    } else if (target === 'settings') {
+        navSettingsBtn?.classList.add('active');
+        settingsView?.classList.add('active');
     }
 }
 
-tabStudioBtn?.addEventListener('click', () => switchView('studioView'));
-tabLogsBtn?.addEventListener('click', () => switchView('logsView'));
+navStudioBtn?.addEventListener('click', () => switchPage('studio'));
+navLogsBtn?.addEventListener('click', () => switchPage('logs'));
+navSettingsBtn?.addEventListener('click', () => switchPage('settings'));
 
-// 2. Duration Unit Toggle & Dynamic Word Estimate
-const unitSecBtn = document.getElementById('unitSecBtn');
-const unitMinBtn = document.getElementById('unitMinBtn');
-const durationNumberInput = document.getElementById('durationNumberInput');
-const durationHint = document.getElementById('durationHint');
+// 2. Aspect Ratio Selector (Card UI)
+const aspectCards = document.querySelectorAll('.aspect-card');
+aspectCards.forEach(card => {
+    card.addEventListener('click', () => {
+        aspectCards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        const radio = card.querySelector('input[type="radio"]');
+        if (radio) radio.checked = true;
+    });
+});
 
-function updateDurationEstimate() {
-    const val = parseFloat(durationNumberInput.value) || 0;
-    if (currentUnit === 'seconds') {
-        const words = Math.max(20, Math.round(val * 2.2));
-        durationHint.innerText = `≈ ${words} spoken words (${val}s duration)`;
+// 3. Duration Selector (Seconds vs Minutes + Stepper + Dynamic Calculation)
+const unitSecondsBtn = document.getElementById('unitSecondsBtn');
+const unitMinutesBtn = document.getElementById('unitMinutesBtn');
+const durationValueInput = document.getElementById('durationValueInput');
+const durationCalcBadge = document.getElementById('durationCalcBadge');
+const stepDownBtn = document.getElementById('stepDownBtn');
+const stepUpBtn = document.getElementById('stepUpBtn');
+
+function calculateDurationWords() {
+    const val = parseFloat(durationValueInput.value) || 0;
+    if (currentDurationUnit === 'seconds') {
+        const words = Math.max(25, Math.round(val * 2.2));
+        durationCalcBadge.innerText = `🎯 ~${words} words (Viral ${val}s Shorts)`;
     } else {
         const words = Math.max(50, Math.round(val * 135));
-        durationHint.innerText = `≈ ${words} spoken words (${val} min duration)`;
+        durationCalcBadge.innerText = `🎯 ~${words} words (${val} min Explainer)`;
     }
 }
 
-unitSecBtn?.addEventListener('click', () => {
-    currentUnit = 'seconds';
-    unitSecBtn.classList.add('active');
-    unitMinBtn.classList.remove('active');
-    if (parseFloat(durationNumberInput.value) <= 10) {
-        durationNumberInput.value = 45;
-    }
-    updateDurationEstimate();
+unitSecondsBtn?.addEventListener('click', () => {
+    currentDurationUnit = 'seconds';
+    unitSecondsBtn.classList.add('active');
+    unitMinutesBtn.classList.remove('active');
+    if (parseFloat(durationValueInput.value) <= 10) durationValueInput.value = 45;
+    calculateDurationWords();
 });
 
-unitMinBtn?.addEventListener('click', () => {
-    currentUnit = 'minutes';
-    unitMinBtn.classList.add('active');
-    unitSecBtn.classList.remove('active');
-    if (parseFloat(durationNumberInput.value) > 10) {
-        durationNumberInput.value = 3;
-    }
-    updateDurationEstimate();
+unitMinutesBtn?.addEventListener('click', () => {
+    currentDurationUnit = 'minutes';
+    unitMinutesBtn.classList.add('active');
+    unitSecondsBtn.classList.remove('active');
+    if (parseFloat(durationValueInput.value) > 10) durationValueInput.value = 3;
+    calculateDurationWords();
 });
 
-durationNumberInput?.addEventListener('input', updateDurationEstimate);
+stepDownBtn?.addEventListener('click', () => {
+    const current = parseFloat(durationValueInput.value) || 1;
+    const step = currentDurationUnit === 'seconds' ? 5 : 1;
+    durationValueInput.value = Math.max(1, current - step);
+    calculateDurationWords();
+});
 
-// 3. UI Sliders & Manual Script Toggle
+stepUpBtn?.addEventListener('click', () => {
+    const current = parseFloat(durationValueInput.value) || 1;
+    const step = currentDurationUnit === 'seconds' ? 5 : 1;
+    durationValueInput.value = current + step;
+    calculateDurationWords();
+});
+
+durationValueInput?.addEventListener('input', calculateDurationWords);
+
+// 4. Visual Presets Sliders & Script Toggle
 const fontYPosInput = document.getElementById('fontYPosInput');
 const fontYPosVal = document.getElementById('fontYPosVal');
 if (fontYPosInput && fontYPosVal) {
@@ -95,95 +124,187 @@ if (manualScriptToggle && manualScriptArea) {
     });
 }
 
-// 4. Firestore Realtime Feeds (Current Batch Feed & All Logs Feed)
-function initRealtimeFeeds() {
-    if (!window.db || !window.FirebaseUtils) {
-        setTimeout(initRealtimeFeeds, 200);
+// 5. Firebase Auth State & Modal Handlers
+const openAuthModalBtn = document.getElementById('openAuthModalBtn');
+const signOutBtn = document.getElementById('signOutBtn');
+const authModal = document.getElementById('authModal');
+const closeAuthModalBtn = document.getElementById('closeAuthModalBtn');
+const tabSignIn = document.getElementById('tabSignIn');
+const tabSignUp = document.getElementById('tabSignUp');
+const authForm = document.getElementById('authForm');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authErrorMsg = document.getElementById('authErrorMsg');
+const userEmailDisplay = document.getElementById('userEmailDisplay');
+
+let isSignUpMode = false;
+
+tabSignIn?.addEventListener('click', () => {
+    isSignUpMode = false;
+    tabSignIn.classList.add('active');
+    tabSignUp.classList.remove('active');
+    authSubmitBtn.innerText = 'Sign In';
+});
+
+tabSignUp?.addEventListener('click', () => {
+    isSignUpMode = true;
+    tabSignUp.classList.add('active');
+    tabSignIn.classList.remove('active');
+    authSubmitBtn.innerText = 'Create Account';
+});
+
+openAuthModalBtn?.addEventListener('click', () => {
+    if (!currentUser && authModal) {
+        authModal.style.display = 'flex';
+        authErrorMsg.style.display = 'none';
+    }
+});
+
+closeAuthModalBtn?.addEventListener('click', () => {
+    if (authModal) authModal.style.display = 'none';
+});
+
+authForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = authEmail.value.trim();
+    const pass = authPassword.value.trim();
+    if (!email || !pass) return;
+
+    authSubmitBtn.disabled = true;
+    authErrorMsg.style.display = 'none';
+
+    try {
+        if (isSignUpMode) {
+            await window.FirebaseAuth.createUserWithEmailAndPassword(window.auth, email, pass);
+        } else {
+            await window.FirebaseAuth.signInWithEmailAndPassword(window.auth, email, pass);
+        }
+        if (authModal) authModal.style.display = 'none';
+    } catch (err) {
+        authErrorMsg.innerText = err.message;
+        authErrorMsg.style.display = 'block';
+    } finally {
+        authSubmitBtn.disabled = false;
+    }
+});
+
+signOutBtn?.addEventListener('click', async () => {
+    if (confirm('Are you sure you want to sign out?')) {
+        await window.FirebaseAuth.signOut(window.auth);
+    }
+});
+
+function initAuthObserver() {
+    if (!window.auth || !window.FirebaseAuth) {
+        setTimeout(initAuthObserver, 200);
         return;
+    }
+
+    window.FirebaseAuth.onAuthStateChanged(window.auth, (user) => {
+        currentUser = user;
+        if (user) {
+            userEmailDisplay.innerText = user.email || 'User Account';
+            signOutBtn.style.display = 'block';
+            loadUserSettings(user.uid);
+            listenToUserExecutions(user.uid);
+        } else {
+            userEmailDisplay.innerText = 'Sign In / Register';
+            signOutBtn.style.display = 'none';
+            // Listen to public executions if logged out
+            listenToUserExecutions(null);
+        }
+    });
+}
+
+// 6. Real-time Firestore Listeners
+let activeUnsubscribe = null;
+
+function listenToUserExecutions(uid) {
+    if (!window.db || !window.FirebaseUtils) {
+        setTimeout(() => listenToUserExecutions(uid), 200);
+        return;
+    }
+
+    if (activeUnsubscribe) {
+        activeUnsubscribe();
+        activeUnsubscribe = null;
     }
 
     const { collection, onSnapshot, query, limit } = window.FirebaseUtils;
     const currentContainer = document.getElementById('currentBatchLogsContainer');
     const allContainer = document.getElementById('allLogsContainer');
-    const totalLogsBadge = document.getElementById('totalLogsCount');
-    
-    // Listen to executions collection
-    const q = query(collection(window.db, 'executions'), limit(100));
-    
-    onSnapshot(q, (snapshot) => {
+    const totalLogsBadge = document.getElementById('totalLogsBadge');
+
+    const colRef = uid 
+        ? collection(window.db, 'users', uid, 'executions')
+        : collection(window.db, 'executions');
+
+    const q = query(colRef, limit(100));
+
+    activeUnsubscribe = onSnapshot(q, (snapshot) => {
         const docs = [];
         snapshot.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
-        
-        // Sort by timestamp desc
+
         docs.sort((a, b) => {
             const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0);
             const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0);
             return timeB - timeA;
         });
 
-        allExecutionsList = docs;
+        allUserExecutions = docs;
         if (totalLogsBadge) totalLogsBadge.innerText = docs.length;
 
         // Render All Execution Logs
         renderAllLogs(docs, allContainer);
 
-        // Determine Active Batch ID for Studio Live Feed
-        let activeBatchId = localStorage.getItem('epicsync_active_batch_id');
+        // Get Active Batch ID from LocalStorage
+        const storageKey = uid ? `epicsync_batch_${uid}` : 'epicsync_active_batch_id';
+        let activeBatchId = localStorage.getItem(storageKey);
         if (!activeBatchId && docs.length > 0) {
-            // Default to most recent batch
             activeBatchId = docs[0].batch_id || '';
-            if (activeBatchId) localStorage.setItem('epicsync_active_batch_id', activeBatchId);
+            if (activeBatchId) localStorage.setItem(storageKey, activeBatchId);
         }
 
-        // Filter and Render Current Batch Feed
         const currentBatchDocs = activeBatchId ? docs.filter(d => d.batch_id === activeBatchId) : [];
         renderCurrentBatch(currentBatchDocs, currentContainer, activeBatchId);
-
-    }, (error) => {
-        console.error("Firestore feed listener error:", error);
+    }, (err) => {
+        console.error("Executions listener error:", err);
     });
 }
 
-// Render Current Batch Live Feed
 function renderCurrentBatch(docs, container, batchId) {
     if (!container) return;
-    
     const subtitle = document.getElementById('currentBatchSubtitle');
     if (subtitle && batchId) {
-        subtitle.innerText = `Showing Batch: ${batchId}`;
+        subtitle.innerText = `Active Batch: ${batchId}`;
     }
 
     if (docs.length === 0) {
-        container.innerHTML = '<div class="empty-state">No batch currently active. Launch a new batch above!</div>';
+        container.innerHTML = '<div class="empty-state">No batch currently active. Launch a batch above!</div>';
         return;
     }
 
     container.innerHTML = '';
     docs.forEach(data => {
-        const card = createVideoCard(data, false);
-        container.appendChild(card);
+        container.appendChild(createVideoCard(data, false));
     });
 }
 
-// Render All Execution Logs
 function renderAllLogs(docs, container) {
     if (!container) return;
-    
     if (docs.length === 0) {
-        container.innerHTML = '<div class="empty-state">No execution logs found.</div>';
+        container.innerHTML = '<div class="empty-state">No execution logs found for this account.</div>';
         return;
     }
 
     container.innerHTML = '';
     docs.forEach(data => {
-        const card = createVideoCard(data, true);
-        container.appendChild(card);
+        container.appendChild(createVideoCard(data, true));
     });
-    
     updateSelectionBar();
 }
 
-// Create Card DOM Element
 function createVideoCard(data, isAllLogsView) {
     const status = data.status || 'QUEUED';
     const progress = data.progress !== undefined ? data.progress : (status === 'SUCCESS' ? 100 : 0);
@@ -227,13 +348,11 @@ function createVideoCard(data, isAllLogsView) {
         ` : ''}
     `;
 
-    // Card selection event in multi-select mode
     if (isAllLogsView && multiSelectMode) {
         card.addEventListener('click', (e) => {
             if (e.target.tagName === 'VIDEO' || e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
             toggleJobSelection(jobId, data);
         });
-        
         const chk = card.querySelector('.card-checkbox');
         if (chk) {
             chk.addEventListener('change', (e) => {
@@ -243,7 +362,6 @@ function createVideoCard(data, isAllLogsView) {
         }
     }
 
-    // Individual Push to YouTube handler
     const singleYtBtn = card.querySelector('.btn-yt-single');
     if (singleYtBtn) {
         singleYtBtn.addEventListener('click', (e) => {
@@ -255,7 +373,7 @@ function createVideoCard(data, isAllLogsView) {
     return card;
 }
 
-// 5. Multi-Select & Batch Actions
+// 7. Multi-Select & Batch Actions
 const toggleMultiSelectBtn = document.getElementById('toggleMultiSelectBtn');
 const batchSelectionBar = document.getElementById('batchSelectionBar');
 const selectedCountText = document.getElementById('selectedCountText');
@@ -265,10 +383,8 @@ const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
 toggleMultiSelectBtn?.addEventListener('click', () => {
     multiSelectMode = !multiSelectMode;
     toggleMultiSelectBtn.classList.toggle('active', multiSelectMode);
-    if (!multiSelectMode) {
-        selectedJobs.clear();
-    }
-    renderAllLogs(allExecutionsList, document.getElementById('allLogsContainer'));
+    if (!multiSelectMode) selectedJobs.clear();
+    renderAllLogs(allUserExecutions, document.getElementById('allLogsContainer'));
 });
 
 function toggleJobSelection(jobId, data) {
@@ -282,7 +398,7 @@ function toggleJobSelection(jobId, data) {
             aspect_ratio: data.aspect_ratio || '9:16'
         });
     }
-    renderAllLogs(allExecutionsList, document.getElementById('allLogsContainer'));
+    renderAllLogs(allUserExecutions, document.getElementById('allLogsContainer'));
 }
 
 function updateSelectionBar() {
@@ -296,22 +412,85 @@ function updateSelectionBar() {
     }
 }
 
-// 6. Push to YouTube Webhook Handler
-function getWebhookUrl() {
-    return localStorage.getItem('epicsync_yt_webhook') || '';
+// 8. YouTube Webhook Dispatch & Settings
+let userSavedWebhookUrl = '';
+
+async function loadUserSettings(uid) {
+    if (!uid || !window.db || !window.FirebaseUtils) return;
+    try {
+        const { doc, getDoc } = window.FirebaseUtils;
+        const snap = await getDoc(doc(window.db, 'users', uid, 'settings', 'config'));
+        if (snap.exists()) {
+            userSavedWebhookUrl = snap.data().webhook_url || '';
+            const input = document.getElementById('webhookUrlSetting');
+            if (input) input.value = userSavedWebhookUrl;
+        }
+    } catch (e) {
+        console.error("Load settings error:", e);
+    }
 }
 
+const settingsForm = document.getElementById('settingsForm');
+const settingsStatusMsg = document.getElementById('settingsStatusMsg');
+
+settingsForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = document.getElementById('webhookUrlSetting').value.trim();
+    userSavedWebhookUrl = url;
+
+    if (currentUser) {
+        try {
+            const { doc, setDoc } = window.FirebaseUtils;
+            await setDoc(doc(window.db, 'users', currentUser.uid, 'settings', 'config'), {
+                webhook_url: url,
+                updatedAt: new Date()
+            }, { merge: true });
+            
+            settingsStatusMsg.innerText = '✅ Settings saved successfully!';
+            settingsStatusMsg.style.color = 'var(--accent)';
+            settingsStatusMsg.style.display = 'block';
+            setTimeout(() => settingsStatusMsg.style.display = 'none', 3000);
+        } catch (err) {
+            alert('Failed to save settings: ' + err.message);
+        }
+    } else {
+        localStorage.setItem('epicsync_yt_webhook', url);
+        alert('Settings saved locally. Sign in to sync across devices!');
+    }
+});
+
+const testWebhookBtn = document.getElementById('testWebhookBtn');
+testWebhookBtn?.addEventListener('click', async () => {
+    const url = document.getElementById('webhookUrlSetting').value.trim() || userSavedWebhookUrl;
+    if (!url) return alert('Please enter a Webhook URL first.');
+
+    testWebhookBtn.innerText = '🧪 Testing...';
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                event: 'test_connection',
+                source: 'EpicSync Studio',
+                timestamp: Date.now()
+            })
+        });
+        alert(`✅ Webhook test sent! Status: ${res.status}`);
+    } catch (err) {
+        alert(`Webhook test notice: ${err.message}\n(Ensure your n8n / server supports CORS or is active)`);
+    } finally {
+        testWebhookBtn.innerText = '🧪 Test Webhook';
+    }
+});
+
 async function dispatchVideosToWebhook(videosList) {
-    const webhookUrl = getWebhookUrl();
+    const webhookUrl = userSavedWebhookUrl || document.getElementById('webhookUrlSetting')?.value?.trim() || localStorage.getItem('epicsync_yt_webhook');
     
     if (!webhookUrl) {
-        const input = prompt('Please enter your YouTube Dispatch Webhook URL:', 'https://');
-        if (input && input.trim()) {
-            localStorage.setItem('epicsync_yt_webhook', input.trim());
-            return dispatchVideosToWebhook(videosList);
-        } else {
-            return;
+        if (confirm('No YouTube Webhook URL configured! Would you like to open Settings to add it now?')) {
+            switchPage('settings');
         }
+        return;
     }
 
     const payload = {
@@ -337,11 +516,10 @@ async function dispatchVideosToWebhook(videosList) {
             selectedJobs.clear();
             updateSelectionBar();
         } else {
-            alert(`Webhook returned status ${res.status}: ${await res.text()}`);
+            alert(`Webhook returned status ${res.status}`);
         }
     } catch (err) {
         console.error("Webhook push error:", err);
-        // Fallback display if webhook is offline
         alert(`Payload generated for ${videosList.length} video(s):\n\n` + JSON.stringify(payload, null, 2));
     }
 }
@@ -357,155 +535,132 @@ pushBatchYtBtn?.addEventListener('click', () => {
     dispatchVideosToWebhook(list);
 });
 
-// Delete Selected from Firestore
+// Delete Selected
 deleteSelectedBtn?.addEventListener('click', async () => {
     if (!confirm(`Are you sure you want to delete ${selectedJobs.size} selected execution(s)?`)) return;
-    
     const { doc, deleteDoc, writeBatch } = window.FirebaseUtils;
     try {
         const batch = writeBatch(window.db);
         selectedJobs.forEach((_, jobId) => {
+            if (currentUser) {
+                batch.delete(doc(window.db, 'users', currentUser.uid, 'executions', jobId));
+            }
             batch.delete(doc(window.db, 'executions', jobId));
         });
         await batch.commit();
         selectedJobs.clear();
-        alert('Selected logs deleted successfully.');
+        alert('Selected logs deleted.');
     } catch (e) {
-        console.error("Error deleting selected logs:", e);
-        alert('Failed to delete: ' + e.message);
+        alert('Error deleting: ' + e.message);
     }
 });
 
-// Clear Current Feed Only
+// Clear Current Feed
 const clearCurrentFeedBtn = document.getElementById('clearCurrentFeedBtn');
-if (clearCurrentFeedBtn) {
-    clearCurrentFeedBtn.addEventListener('click', () => {
-        localStorage.removeItem('epicsync_active_batch_id');
-        document.getElementById('currentBatchLogsContainer').innerHTML = '<div class="empty-state">Current feed cleared. Launch a new batch above!</div>';
-        const subtitle = document.getElementById('currentBatchSubtitle');
-        if (subtitle) subtitle.innerText = 'Feed cleared.';
-    });
-}
+clearCurrentFeedBtn?.addEventListener('click', () => {
+    const storageKey = currentUser ? `epicsync_batch_${currentUser.uid}` : 'epicsync_active_batch_id';
+    localStorage.removeItem(storageKey);
+    document.getElementById('currentBatchLogsContainer').innerHTML = '<div class="empty-state">Current feed cleared. Launch a batch above!</div>';
+    const subtitle = document.getElementById('currentBatchSubtitle');
+    if (subtitle) subtitle.innerText = 'Feed cleared.';
+});
 
-// Clear All Execution Logs
+// Clear All Logs
 const clearAllLogsBtn = document.getElementById('clearAllLogsBtn');
-if (clearAllLogsBtn) {
-    clearAllLogsBtn.addEventListener('click', async () => {
-        if (!confirm('Are you sure you want to permanently clear ALL historical execution logs?')) return;
-        
-        const { collection, getDocs, writeBatch } = window.FirebaseUtils;
-        try {
-            const snap = await getDocs(collection(window.db, 'executions'));
-            const batch = writeBatch(window.db);
-            snap.forEach(d => batch.delete(d.ref));
-            await batch.commit();
-            selectedJobs.clear();
-            localStorage.removeItem('epicsync_active_batch_id');
-            alert('All logs cleared successfully.');
-        } catch (e) {
-            console.error("Error clearing all logs:", e);
-            alert('Failed to clear logs: ' + e.message);
-        }
-    });
-}
-
-// 7. Webhook Modal Handlers
-const webhookSettingsBtn = document.getElementById('webhookSettingsBtn');
-const webhookModal = document.getElementById('webhookModal');
-const webhookUrlInput = document.getElementById('webhookUrlInput');
-const saveWebhookBtn = document.getElementById('saveWebhookBtn');
-const closeWebhookBtn = document.getElementById('closeWebhookBtn');
-
-webhookSettingsBtn?.addEventListener('click', () => {
-    if (webhookUrlInput) webhookUrlInput.value = getWebhookUrl();
-    if (webhookModal) webhookModal.style.display = 'flex';
+clearAllLogsBtn?.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to delete ALL execution history for this account?')) return;
+    const { doc, writeBatch } = window.FirebaseUtils;
+    try {
+        const batch = writeBatch(window.db);
+        allUserExecutions.forEach(d => {
+            if (currentUser) {
+                batch.delete(doc(window.db, 'users', currentUser.uid, 'executions', d.id));
+            }
+            batch.delete(doc(window.db, 'executions', d.id));
+        });
+        await batch.commit();
+        selectedJobs.clear();
+        const storageKey = currentUser ? `epicsync_batch_${currentUser.uid}` : 'epicsync_active_batch_id';
+        localStorage.removeItem(storageKey);
+        alert('All execution logs cleared.');
+    } catch (e) {
+        alert('Failed to clear logs: ' + e.message);
+    }
 });
 
-closeWebhookBtn?.addEventListener('click', () => {
-    if (webhookModal) webhookModal.style.display = 'none';
-});
-
-saveWebhookBtn?.addEventListener('click', () => {
-    const val = webhookUrlInput?.value?.trim() || '';
-    localStorage.setItem('epicsync_yt_webhook', val);
-    alert('Webhook URL saved successfully!');
-    if (webhookModal) webhookModal.style.display = 'none';
-});
-
-// 8. Form Submission (Launch Batch)
+// 9. Batch Creation Submit
 const createBatchForm = document.getElementById('createBatchForm');
 const submitBatchBtn = document.getElementById('submitBatchBtn');
 
-if (createBatchForm) {
-    createBatchForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const titlesRaw = document.getElementById('videoTitles').value.trim();
-        if (!titlesRaw) return alert('Please enter at least one title.');
-        
-        const titles = titlesRaw.split('\n').map(t => t.trim()).filter(t => t.length > 0);
-        if (titles.length === 0) return alert('Please enter valid titles.');
-        
-        const isManual = manualScriptToggle?.checked;
-        const manualScript = document.getElementById('manualScriptText')?.value?.trim() || '';
-        if (isManual && !manualScript) return alert('Please enter your manual script.');
-        
-        const durVal = document.getElementById('durationNumberInput').value || '45';
-        const formattedDuration = `${durVal} ${currentUnit}`;
-        
-        const payload = {
-            titles: titles,
-            script: isManual ? manualScript : '',
-            aspect_ratio: document.getElementById('aspectRatioSelect').value,
-            target_duration: formattedDuration,
-            voice: document.getElementById('voiceSelect').value,
-            grid_color: document.getElementById('gridColorInput').value,
-            caption_color: document.getElementById('captionColorInput').value,
-            font_size: document.getElementById('fontSizeInput').value,
-            font_y_pos: document.getElementById('fontYPosInput').value,
-            voice_boost: document.getElementById('voiceBoostInput').value,
-            bgm_volume: document.getElementById('bgmVolumeInput').value,
-            add_grid: document.getElementById('addGridToggle').checked ? 'true' : 'false',
-            add_captions: 'true'
-        };
-        
-        submitBatchBtn.innerText = `🚀 Launching ${titles.length} Video(s)...`;
-        submitBatchBtn.disabled = true;
-        
-        try {
-            const res = await fetch('/api/launch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            
-            const data = await res.json();
-            
-            if (res.ok && data.success) {
-                // Save new active batch ID to lock the Current Batch Live Feed
-                localStorage.setItem('epicsync_active_batch_id', data.batch_id);
-                
-                // Clear feed container and display loading state
-                const currentContainer = document.getElementById('currentBatchLogsContainer');
-                if (currentContainer) {
-                    currentContainer.innerHTML = '<div class="empty-state">🚀 Batch queued! Kaggle CPU worker is initializing...</div>';
-                }
-                
-                alert(`🚀 Successfully launched batch of ${titles.length} video(s)! Watching real-time progress below.`);
-                document.getElementById('videoTitles').value = '';
-                if (manualScriptArea) document.getElementById('manualScriptText').value = '';
-            } else {
-                alert(`Failed to launch batch: ${data.error || 'Unknown error'}`);
+createBatchForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const titlesRaw = document.getElementById('videoTitles').value.trim();
+    if (!titlesRaw) return alert('Please enter at least one title.');
+
+    const titles = titlesRaw.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+    if (titles.length === 0) return alert('Please enter valid titles.');
+
+    const isManual = manualScriptToggle?.checked;
+    const manualScript = document.getElementById('manualScriptText')?.value?.trim() || '';
+    if (isManual && !manualScript) return alert('Please enter your manual script.');
+
+    const durationVal = document.getElementById('durationValueInput').value || '45';
+    const formattedDuration = `${durationVal} ${currentDurationUnit}`;
+    const selectedAspect = document.querySelector('input[name="aspectRatio"]:checked')?.value || '9:16';
+
+    const payload = {
+        uid: currentUser?.uid || '',
+        titles: titles,
+        script: isManual ? manualScript : '',
+        aspect_ratio: selectedAspect,
+        target_duration: formattedDuration,
+        voice: document.getElementById('voiceSelect').value,
+        grid_color: document.getElementById('gridColorInput').value,
+        caption_color: document.getElementById('captionColorInput').value,
+        font_size: document.getElementById('fontSizeInput').value,
+        font_y_pos: document.getElementById('fontYPosInput').value,
+        voice_boost: document.getElementById('voiceBoostInput').value,
+        bgm_volume: document.getElementById('bgmVolumeInput').value,
+        add_grid: document.getElementById('addGridToggle').checked ? 'true' : 'false',
+        add_captions: 'true'
+    };
+
+    submitBatchBtn.innerText = `🚀 Launching ${titles.length} Video(s)...`;
+    submitBatchBtn.disabled = true;
+
+    try {
+        const res = await fetch('/api/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            const storageKey = currentUser ? `epicsync_batch_${currentUser.uid}` : 'epicsync_active_batch_id';
+            localStorage.setItem(storageKey, data.batch_id);
+
+            const currentContainer = document.getElementById('currentBatchLogsContainer');
+            if (currentContainer) {
+                currentContainer.innerHTML = '<div class="empty-state">🚀 Batch queued! Kaggle CPU worker is running...</div>';
             }
-        } catch (err) {
-            console.error("Batch launch error:", err);
-            alert(`Network error launching batch: ${err.message}`);
-        } finally {
-            submitBatchBtn.innerText = '🚀 Launch EpicSync Pexels Run';
-            submitBatchBtn.disabled = false;
+
+            alert(`🚀 Successfully launched batch of ${titles.length} video(s)! Watching real-time stream.`);
+            document.getElementById('videoTitles').value = '';
+            if (manualScriptArea) document.getElementById('manualScriptText').value = '';
+        } else {
+            alert(`Failed to launch: ${data.error || 'Unknown error'}`);
         }
-    });
-}
+    } catch (err) {
+        console.error("Batch launch error:", err);
+        alert(`Network error launching batch: ${err.message}`);
+    } finally {
+        submitBatchBtn.innerText = '🚀 Launch EpicSync Pexels Run';
+        submitBatchBtn.disabled = false;
+    }
+});
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -513,6 +668,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Initial calls
-updateDurationEstimate();
-initRealtimeFeeds();
+// Initial setup
+calculateDurationWords();
+initAuthObserver();

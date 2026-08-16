@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EpicSync Studio — Pexels Cloud Engine</title>
+    <title>EpicSync Studio — Viral Video Automation</title>
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="style.css">
     
     <!-- Firebase SDK (Modular) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, orderBy, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         
         const firebaseConfig = {
@@ -27,9 +28,12 @@
         };
         
         const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
         const db = getFirestore(app);
         
+        window.auth = auth;
         window.db = db;
+        window.FirebaseAuth = { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut };
         window.FirebaseUtils = { collection, doc, setDoc, getDoc, getDocs, onSnapshot, query, orderBy, limit, writeBatch, deleteDoc };
     </script>
 </head>
@@ -40,37 +44,53 @@
         
         <!-- Header -->
         <header class="app-header">
-            <div class="brand">
-                <span class="brand-badge">⚡ PEXELS CPU</span>
-                <h1>Epic<span class="accent-text">Sync</span></h1>
+            <div class="header-left">
+                <div class="brand">
+                    <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                    <h1>Epic<span class="accent-text">Sync</span></h1>
+                </div>
             </div>
-            <div class="header-status">
-                <span class="pulse-dot"></span>
-                <span class="status-text">Cloud Engine Ready</span>
+            
+            <div class="header-right">
+                <!-- User Account Profile / Auth Pill -->
+                <div id="userAccountSection">
+                    <button id="openAuthModalBtn" class="btn-auth-pill">
+                        <span class="auth-icon">👤</span>
+                        <span id="userEmailDisplay">Sign In / Register</span>
+                    </button>
+                    <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">🚪</button>
+                </div>
             </div>
         </header>
 
-        <!-- Navigation Tabs -->
-        <nav class="nav-tabs">
-            <button class="nav-tab active" id="tabStudioBtn" data-target="studioView">
-                🎬 Creator Studio
+        <!-- Navigation Bar (3 Distinct Pages) -->
+        <nav class="nav-bar">
+            <button class="nav-btn active" id="navStudioBtn" data-target="studioView">
+                <span class="nav-icon">🎬</span>
+                <span class="nav-label">Studio</span>
             </button>
-            <button class="nav-tab" id="tabLogsBtn" data-target="logsView">
-                📜 Execution Logs <span class="tab-badge" id="totalLogsCount">0</span>
+            <button class="nav-btn" id="navLogsBtn" data-target="logsView">
+                <span class="nav-icon">📜</span>
+                <span class="nav-label">Execution Logs</span>
+                <span class="nav-badge" id="totalLogsBadge">0</span>
+            </button>
+            <button class="nav-btn" id="navSettingsBtn" data-target="settingsView">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">Settings</span>
             </button>
         </nav>
 
-        <!-- Main Content -->
+        <!-- Main Content Area -->
         <main class="main-content">
             
-            <!-- VIEW 1: CREATOR STUDIO -->
+            <!-- PAGE 1: CREATOR STUDIO -->
             <div id="studioView" class="view-panel active">
                 
-                <!-- Video Creation Card -->
+                <!-- Batch Creator Card -->
                 <section class="card creator-card">
                     <div class="card-header">
                         <h2>🎬 Create Video Batch</h2>
-                        <p class="subtitle">Enter one title per line. Runs on-demand on Kaggle CPU (0 GPU quota).</p>
+                        <p class="subtitle">Enter one title per line. Videos are generated on-demand on Kaggle CPU (0 GPU quota).</p>
                     </div>
 
                     <form id="createBatchForm">
@@ -78,11 +98,11 @@
                         <!-- Titles Input -->
                         <div class="form-group">
                             <label for="videoTitles">Video Titles <span class="required">*</span></label>
-                            <textarea id="videoTitles" rows="4" placeholder="Top 5 AI Secrets You Never Knew&#10;How to Master Deep Focus in 2026&#10;The Science of Habit Formation" required></textarea>
-                            <span class="input-hint">Each line will be processed sequentially as a full video.</span>
+                            <textarea id="videoTitles" rows="4" placeholder="Top 5 Productivity Secrets in 2026&#10;How to Master Deep Focus Fast&#10;The Science of Viral Habits" required></textarea>
+                            <span class="input-hint">Each line will be compiled as a separate full video.</span>
                         </div>
 
-                        <!-- Script Option -->
+                        <!-- Manual Script Override -->
                         <div class="form-group">
                             <div class="toggle-row">
                                 <label for="manualScriptToggle">Manual Script Override</label>
@@ -96,25 +116,54 @@
                             </div>
                         </div>
 
-                        <!-- Aspect Ratio & Duration -->
-                        <div class="form-row">
-                            <div class="form-group flex-1">
-                                <label for="aspectRatioSelect">Aspect Ratio</label>
-                                <select id="aspectRatioSelect">
-                                    <option value="9:16" selected>📱 9:16 (Shorts / Reels / TikTok)</option>
-                                    <option value="16:9">🖥️ 16:9 (Landscape YouTube)</option>
-                                </select>
+                        <!-- Aspect Ratio -->
+                        <div class="form-group">
+                            <label>Aspect Ratio</label>
+                            <div class="aspect-ratio-grid">
+                                <label class="aspect-card active" id="aspectPortraitLabel">
+                                    <input type="radio" name="aspectRatio" value="9:16" checked>
+                                    <div class="aspect-visual aspect-9-16"></div>
+                                    <div class="aspect-details">
+                                        <strong>📱 9:16 Shorts</strong>
+                                        <span>Reels, TikTok, YouTube Shorts (1080×1920)</span>
+                                    </div>
+                                </label>
+                                <label class="aspect-card" id="aspectLandscapeLabel">
+                                    <input type="radio" name="aspectRatio" value="16:9">
+                                    <div class="aspect-visual aspect-16-9"></div>
+                                    <div class="aspect-details">
+                                        <strong>🖥️ 16:9 Landscape</strong>
+                                        <span>Full YouTube Video (1920×1080)</span>
+                                    </div>
+                                </label>
                             </div>
-                            <div class="form-group flex-1">
-                                <label>Target Duration</label>
-                                <div class="duration-control-box">
-                                    <input type="number" id="durationNumberInput" min="5" max="3600" value="45" required>
-                                    <div class="duration-unit-switch">
-                                        <button type="button" class="unit-toggle-btn active" id="unitSecBtn">Sec</button>
-                                        <button type="button" class="unit-toggle-btn" id="unitMinBtn">Min</button>
+                        </div>
+
+                        <!-- Target Duration (Prominent & Clear Unit Controls) -->
+                        <div class="form-group">
+                            <label>Target Video Duration</label>
+                            <div class="duration-panel">
+                                <div class="unit-selector-pills">
+                                    <button type="button" class="unit-pill active" id="unitSecondsBtn">
+                                        <span class="pill-icon">⚡</span>
+                                        <span>Seconds</span>
+                                    </button>
+                                    <button type="button" class="unit-pill" id="unitMinutesBtn">
+                                        <span class="pill-icon">⏱️</span>
+                                        <span>Minutes</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="duration-input-row">
+                                    <div class="number-stepper">
+                                        <button type="button" class="stepper-btn" id="stepDownBtn">-</button>
+                                        <input type="number" id="durationValueInput" min="5" max="3600" value="45" required>
+                                        <button type="button" class="stepper-btn" id="stepUpBtn">+</button>
+                                    </div>
+                                    <div class="duration-calc-badge" id="durationCalcBadge">
+                                        🎯 ~80 words (Viral Shorts)
                                     </div>
                                 </div>
-                                <span class="input-hint" id="durationHint">≈ 80 words spoken</span>
                             </div>
                         </div>
 
@@ -196,31 +245,31 @@
                     </form>
                 </section>
 
-                <!-- Current Batch Live Feed -->
+                <!-- Current Batch Live Feed (Isolated to Active Batch) -->
                 <section class="card feed-card">
                     <div class="card-header feed-header">
                         <div>
                             <h2>📊 Current Batch Live Feed</h2>
-                            <p class="subtitle" id="currentBatchSubtitle">Showing latest triggered batch.</p>
+                            <p class="subtitle" id="currentBatchSubtitle">Live execution stream for your active batch.</p>
                         </div>
-                        <button id="clearCurrentFeedBtn" class="btn-clear">🧹 Clear Feed</button>
+                        <button id="clearCurrentFeedBtn" class="btn-tool-sm">🧹 Clear Feed</button>
                     </div>
 
                     <div id="currentBatchLogsContainer" class="logs-list">
-                        <div class="empty-state">No batch currently active. Launch a new batch above!</div>
+                        <div class="empty-state">No batch currently active. Launch a batch above!</div>
                     </div>
                 </section>
 
             </div>
 
-            <!-- VIEW 2: ALL EXECUTION LOGS (HISTORY) -->
+            <!-- PAGE 2: EXECUTION LOGS (HISTORY & BATCH ACTIONS) -->
             <div id="logsView" class="view-panel">
                 
                 <section class="card feed-card">
                     <div class="card-header logs-main-header">
                         <div>
                             <h2>📜 All Execution Logs</h2>
-                            <p class="subtitle">Complete history across all batches. Select and push to YouTube.</p>
+                            <p class="subtitle">Complete generation history for your account. Select multiple to push to YouTube.</p>
                         </div>
                     </div>
 
@@ -228,14 +277,13 @@
                     <div class="logs-actions-toolbar">
                         <div class="left-actions">
                             <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select Multiple</button>
-                            <button id="webhookSettingsBtn" class="btn-tool">⚙️ Webhook URL</button>
                         </div>
                         <div class="right-actions">
-                            <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All</button>
+                            <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All Logs</button>
                         </div>
                     </div>
 
-                    <!-- Batch Selection Bar (Appears when items are selected) -->
+                    <!-- Batch Selection Bar (Slides in when videos are selected) -->
                     <div id="batchSelectionBar" class="batch-selection-bar" style="display: none;">
                         <span id="selectedCountText">0 selected</span>
                         <div class="batch-btns">
@@ -245,8 +293,51 @@
                     </div>
 
                     <div id="allLogsContainer" class="logs-list">
-                        <div class="empty-state">Loading all historical executions...</div>
+                        <div class="empty-state">Loading executions...</div>
                     </div>
+                </section>
+
+            </div>
+
+            <!-- PAGE 3: SETTINGS -->
+            <div id="settingsView" class="view-panel">
+                
+                <section class="card settings-card">
+                    <div class="card-header">
+                        <h2>⚙️ Account & Webhook Settings</h2>
+                        <p class="subtitle">Configure your YouTube Dispatch Webhook (n8n, Make, or Custom API).</p>
+                    </div>
+
+                    <form id="settingsForm">
+                        <div class="form-group">
+                            <label for="webhookUrlSetting">YouTube Dispatch Webhook URL</label>
+                            <input type="url" id="webhookUrlSetting" placeholder="https://your-n8n.com/webhook/youtube-publish">
+                            <span class="input-hint">When you click "Push to YouTube", the video title and direct download link are dispatched to this endpoint.</span>
+                        </div>
+
+                        <div class="webhook-test-box">
+                            <div class="payload-preview-header">
+                                <strong>Payload Format Dispatched:</strong>
+                            </div>
+                            <pre class="code-preview"><code>{
+  "event": "youtube_publish_request",
+  "videos": [
+    {
+      "title": "Top 5 AI Secrets",
+      "video_download_link": "https://huggingface.co/.../output.mp4",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}</code></pre>
+                        </div>
+
+                        <div class="form-actions-row">
+                            <button type="button" id="testWebhookBtn" class="btn-tool">🧪 Test Webhook</button>
+                            <button type="submit" id="saveSettingsBtn" class="btn-launch" style="width: auto; padding: 10px 24px;">💾 Save Settings</button>
+                        </div>
+                        
+                        <div id="settingsStatusMsg" class="status-msg" style="display: none;"></div>
+                    </form>
                 </section>
 
             </div>
@@ -260,22 +351,35 @@
 
     </div>
 
-    <!-- Webhook Modal -->
-    <div id="webhookModal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <h3>⚙️ YouTube Dispatch Webhook</h3>
-            <p class="subtitle">Enter the webhook URL where selected videos ({ title, video_url }) will be dispatched.</p>
-            <div class="form-group">
-                <input type="url" id="webhookUrlInput" placeholder="https://your-server.com/api/youtube_webhook">
+    <!-- Authentication Modal (Sign In / Register) -->
+    <div id="authModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content auth-modal-box">
+            <div class="auth-tabs">
+                <button type="button" class="auth-tab active" id="tabSignIn">Sign In</button>
+                <button type="button" class="auth-tab" id="tabSignUp">Create Account</button>
             </div>
-            <div class="modal-actions">
-                <button id="saveWebhookBtn" class="btn-launch" style="padding: 10px 16px; font-size: 0.9rem;">Save Webhook</button>
-                <button id="closeWebhookBtn" class="btn-tool" style="padding: 10px 16px;">Cancel</button>
-            </div>
+            
+            <form id="authForm">
+                <div class="form-group">
+                    <label for="authEmail">Email Address</label>
+                    <input type="email" id="authEmail" required placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="authPassword">Password</label>
+                    <input type="password" id="authPassword" required placeholder="••••••••">
+                </div>
+                
+                <div id="authErrorMsg" class="error-msg" style="display: none;"></div>
+                
+                <div class="modal-actions mt-3">
+                    <button type="submit" id="authSubmitBtn" class="btn-launch">Sign In</button>
+                    <button type="button" id="closeAuthModalBtn" class="btn-tool">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 
     <!-- App JavaScript -->
-    <script src="app.js?v=20260816_v5" type="module"></script>
+    <script src="app.js?v=20260816_v6" type="module"></script>
 </body>
 </html>
