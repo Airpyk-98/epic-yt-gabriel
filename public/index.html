@@ -50,151 +50,206 @@
             </div>
         </header>
 
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" id="tabStudioBtn" data-target="studioView">
+                🎬 Creator Studio
+            </button>
+            <button class="nav-tab" id="tabLogsBtn" data-target="logsView">
+                📜 Execution Logs <span class="tab-badge" id="totalLogsCount">0</span>
+            </button>
+        </nav>
+
         <!-- Main Content -->
         <main class="main-content">
             
-            <!-- Video Creation Card -->
-            <section class="card creator-card">
-                <div class="card-header">
-                    <h2>🎬 Create Video Batch</h2>
-                    <p class="subtitle">Enter one title per line. Videos are generated sequentially on Kaggle CPU.</p>
-                </div>
-
-                <form id="createBatchForm">
-                    
-                    <!-- Titles Input -->
-                    <div class="form-group">
-                        <label for="videoTitles">Video Titles <span class="required">*</span></label>
-                        <textarea id="videoTitles" rows="4" placeholder="Top 5 AI Secrets You Never Knew&#10;How to Master Deep Focus in 2026&#10;The Science of Habit Formation" required></textarea>
-                        <span class="input-hint">Each line will be processed as a separate full video.</span>
+            <!-- VIEW 1: CREATOR STUDIO -->
+            <div id="studioView" class="view-panel active">
+                
+                <!-- Video Creation Card -->
+                <section class="card creator-card">
+                    <div class="card-header">
+                        <h2>🎬 Create Video Batch</h2>
+                        <p class="subtitle">Enter one title per line. Runs on-demand on Kaggle CPU (0 GPU quota).</p>
                     </div>
 
-                    <!-- Script Option -->
-                    <div class="form-group">
-                        <div class="toggle-row">
-                            <label for="manualScriptToggle">Manual Script Override</label>
-                            <label class="switch">
-                                <input type="checkbox" id="manualScriptToggle">
-                                <span class="slider round"></span>
-                            </label>
+                    <form id="createBatchForm">
+                        
+                        <!-- Titles Input -->
+                        <div class="form-group">
+                            <label for="videoTitles">Video Titles <span class="required">*</span></label>
+                            <textarea id="videoTitles" rows="4" placeholder="Top 5 AI Secrets You Never Knew&#10;How to Master Deep Focus in 2026&#10;The Science of Habit Formation" required></textarea>
+                            <span class="input-hint">Each line will be processed sequentially as a full video.</span>
                         </div>
-                        <div id="manualScriptArea" style="display: none; margin-top: 10px;">
-                            <textarea id="manualScriptText" rows="4" placeholder="Type or paste your exact voiceover script here..."></textarea>
-                        </div>
-                    </div>
 
-                    <!-- Aspect Ratio & Duration -->
-                    <div class="form-row">
-                        <div class="form-group flex-1">
-                            <label for="aspectRatioSelect">Aspect Ratio</label>
-                            <select id="aspectRatioSelect">
-                                <option value="9:16" selected>📱 9:16 (Shorts / Reels / TikTok)</option>
-                                <option value="16:9">🖥️ 16:9 (Landscape YouTube)</option>
+                        <!-- Script Option -->
+                        <div class="form-group">
+                            <div class="toggle-row">
+                                <label for="manualScriptToggle">Manual Script Override</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="manualScriptToggle">
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                            <div id="manualScriptArea" style="display: none; margin-top: 10px;">
+                                <textarea id="manualScriptText" rows="4" placeholder="Type or paste your exact voiceover script here..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Aspect Ratio & Duration -->
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label for="aspectRatioSelect">Aspect Ratio</label>
+                                <select id="aspectRatioSelect">
+                                    <option value="9:16" selected>📱 9:16 (Shorts / Reels / TikTok)</option>
+                                    <option value="16:9">🖥️ 16:9 (Landscape YouTube)</option>
+                                </select>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label>Target Duration</label>
+                                <div class="duration-control-box">
+                                    <input type="number" id="durationNumberInput" min="5" max="3600" value="45" required>
+                                    <div class="duration-unit-switch">
+                                        <button type="button" class="unit-toggle-btn active" id="unitSecBtn">Sec</button>
+                                        <button type="button" class="unit-toggle-btn" id="unitMinBtn">Min</button>
+                                    </div>
+                                </div>
+                                <span class="input-hint" id="durationHint">≈ 80 words spoken</span>
+                            </div>
+                        </div>
+
+                        <!-- Voice Model -->
+                        <div class="form-group">
+                            <label for="voiceSelect">Narrator Voice</label>
+                            <select id="voiceSelect">
+                                <option value="relationship-male" selected>🎙️ Guy (Confident & Storyteller)</option>
+                                <option value="energetic-male">🔥 Christopher (Energetic & Dynamic)</option>
+                                <option value="soft-female">🌸 Jenny (Warm & Narrative Female)</option>
+                                <option value="professional-female">✨ Aria (Professional & Clean Female)</option>
                             </select>
                         </div>
-                        <div class="form-group flex-1">
-                            <label for="targetDurationSelect">Target Duration</label>
-                            <select id="targetDurationSelect">
-                                <option value="30-45s (Shorts)" selected>⚡ 30-45s (Shorts)</option>
-                                <option value="60 seconds">⏱️ 60 Seconds</option>
-                                <option value="3 minutes">📖 3 Minutes</option>
-                                <option value="5 minutes">🎬 5 Minutes</option>
-                            </select>
+
+                        <!-- Presets & Styling Accordion -->
+                        <details class="advanced-accordion">
+                            <summary>🎨 Visual Styling & Audio Presets</summary>
+                            <div class="accordion-content">
+                                
+                                <div class="form-row">
+                                    <div class="form-group flex-1">
+                                        <label for="gridColorInput">Focus Grid Color</label>
+                                        <input type="color" id="gridColorInput" value="#ffffff">
+                                    </div>
+                                    <div class="form-group flex-1">
+                                        <label for="captionColorInput">Caption Color</label>
+                                        <input type="color" id="captionColorInput" value="#ffffff">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group flex-1">
+                                        <label for="fontSizeInput">Caption Font Size</label>
+                                        <input type="number" id="fontSizeInput" value="60" min="20" max="120">
+                                    </div>
+                                    <div class="form-group flex-1">
+                                        <label for="fontYPosInput">Caption Y-Position (%)</label>
+                                        <div class="slider-val-row">
+                                            <input type="range" id="fontYPosInput" min="10" max="95" value="83">
+                                            <span id="fontYPosVal">83%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group flex-1">
+                                        <label for="voiceBoostInput">Voice Boost (%)</label>
+                                        <div class="slider-val-row">
+                                            <input type="range" id="voiceBoostInput" min="50" max="250" value="120">
+                                            <span id="voiceBoostVal">120%</span>
+                                        </div>
+                                    </div>
+                                    <div class="form-group flex-1">
+                                        <label for="bgmVolumeInput">BGM Volume (%)</label>
+                                        <div class="slider-val-row">
+                                            <input type="range" id="bgmVolumeInput" min="0" max="100" value="15">
+                                            <span id="bgmVolumeVal">15%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <div class="toggle-row">
+                                        <label for="addGridToggle">Enable 9:16 Focus Grid Rectangle</label>
+                                        <label class="switch">
+                                            <input type="checkbox" id="addGridToggle" checked>
+                                            <span class="slider round"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </details>
+
+                        <!-- Launch Button -->
+                        <button type="submit" id="submitBatchBtn" class="btn-launch">
+                            🚀 Launch EpicSync Pexels Run
+                        </button>
+                    </form>
+                </section>
+
+                <!-- Current Batch Live Feed -->
+                <section class="card feed-card">
+                    <div class="card-header feed-header">
+                        <div>
+                            <h2>📊 Current Batch Live Feed</h2>
+                            <p class="subtitle" id="currentBatchSubtitle">Showing latest triggered batch.</p>
+                        </div>
+                        <button id="clearCurrentFeedBtn" class="btn-clear">🧹 Clear Feed</button>
+                    </div>
+
+                    <div id="currentBatchLogsContainer" class="logs-list">
+                        <div class="empty-state">No batch currently active. Launch a new batch above!</div>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- VIEW 2: ALL EXECUTION LOGS (HISTORY) -->
+            <div id="logsView" class="view-panel">
+                
+                <section class="card feed-card">
+                    <div class="card-header logs-main-header">
+                        <div>
+                            <h2>📜 All Execution Logs</h2>
+                            <p class="subtitle">Complete history across all batches. Select and push to YouTube.</p>
                         </div>
                     </div>
 
-                    <!-- Voice Model -->
-                    <div class="form-group">
-                        <label for="voiceSelect">Narrator Voice</label>
-                        <select id="voiceSelect">
-                            <option value="relationship-male" selected>🎙️ Guy (Confident & Storyteller)</option>
-                            <option value="energetic-male">🔥 Christopher (Energetic & Dynamic)</option>
-                            <option value="soft-female">🌸 Jenny (Warm & Narrative Female)</option>
-                            <option value="professional-female">✨ Aria (Professional & Clean Female)</option>
-                        </select>
-                    </div>
-
-                    <!-- Presets & Styling Accordion -->
-                    <details class="advanced-accordion">
-                        <summary>🎨 Visual Styling & Audio Presets</summary>
-                        <div class="accordion-content">
-                            
-                            <div class="form-row">
-                                <div class="form-group flex-1">
-                                    <label for="gridColorInput">Focus Grid Color</label>
-                                    <input type="color" id="gridColorInput" value="#ffffff">
-                                </div>
-                                <div class="form-group flex-1">
-                                    <label for="captionColorInput">Caption Color</label>
-                                    <input type="color" id="captionColorInput" value="#ffffff">
-                                </div>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group flex-1">
-                                    <label for="fontSizeInput">Caption Font Size</label>
-                                    <input type="number" id="fontSizeInput" value="60" min="20" max="120">
-                                </div>
-                                <div class="form-group flex-1">
-                                    <label for="fontYPosInput">Caption Y-Position (%)</label>
-                                    <div class="slider-val-row">
-                                        <input type="range" id="fontYPosInput" min="10" max="95" value="83">
-                                        <span id="fontYPosVal">83%</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group flex-1">
-                                    <label for="voiceBoostInput">Voice Boost (%)</label>
-                                    <div class="slider-val-row">
-                                        <input type="range" id="voiceBoostInput" min="50" max="250" value="120">
-                                        <span id="voiceBoostVal">120%</span>
-                                    </div>
-                                </div>
-                                <div class="form-group flex-1">
-                                    <label for="bgmVolumeInput">BGM Volume (%)</label>
-                                    <div class="slider-val-row">
-                                        <input type="range" id="bgmVolumeInput" min="0" max="100" value="15">
-                                        <span id="bgmVolumeVal">15%</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <div class="toggle-row">
-                                    <label for="addGridToggle">Enable 9:16 Focus Grid Rectangle</label>
-                                    <label class="switch">
-                                        <input type="checkbox" id="addGridToggle" checked>
-                                        <span class="slider round"></span>
-                                    </label>
-                                </div>
-                            </div>
-
+                    <!-- Action Bar -->
+                    <div class="logs-actions-toolbar">
+                        <div class="left-actions">
+                            <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select Multiple</button>
+                            <button id="webhookSettingsBtn" class="btn-tool">⚙️ Webhook URL</button>
                         </div>
-                    </details>
-
-                    <!-- Launch Button -->
-                    <button type="submit" id="submitBatchBtn" class="btn-launch">
-                        🚀 Launch EpicSync Pexels Run
-                    </button>
-                </form>
-            </section>
-
-            <!-- Execution Logs & Real-Time Feed -->
-            <section class="card feed-card">
-                <div class="card-header feed-header">
-                    <div>
-                        <h2>📊 Live Video Feed</h2>
-                        <p class="subtitle">Real-time status synced from Kaggle via Firestore.</p>
+                        <div class="right-actions">
+                            <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All</button>
+                        </div>
                     </div>
-                    <button id="clearLogsBtn" class="btn-clear">🗑️ Clear</button>
-                </div>
 
-                <div id="videoLogsContainer" class="logs-list">
-                    <div class="empty-state">No videos launched yet. Submit titles above to start!</div>
-                </div>
-            </section>
+                    <!-- Batch Selection Bar (Appears when items are selected) -->
+                    <div id="batchSelectionBar" class="batch-selection-bar" style="display: none;">
+                        <span id="selectedCountText">0 selected</span>
+                        <div class="batch-btns">
+                            <button id="pushBatchYtBtn" class="btn-push-yt">📺 Push Selected to YouTube</button>
+                            <button id="deleteSelectedBtn" class="btn-delete-sel">🗑️ Delete</button>
+                        </div>
+                    </div>
+
+                    <div id="allLogsContainer" class="logs-list">
+                        <div class="empty-state">Loading all historical executions...</div>
+                    </div>
+                </section>
+
+            </div>
 
         </main>
         
@@ -205,7 +260,22 @@
 
     </div>
 
+    <!-- Webhook Modal -->
+    <div id="webhookModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3>⚙️ YouTube Dispatch Webhook</h3>
+            <p class="subtitle">Enter the webhook URL where selected videos ({ title, video_url }) will be dispatched.</p>
+            <div class="form-group">
+                <input type="url" id="webhookUrlInput" placeholder="https://your-server.com/api/youtube_webhook">
+            </div>
+            <div class="modal-actions">
+                <button id="saveWebhookBtn" class="btn-launch" style="padding: 10px 16px; font-size: 0.9rem;">Save Webhook</button>
+                <button id="closeWebhookBtn" class="btn-tool" style="padding: 10px 16px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- App JavaScript -->
-    <script src="app.js?v=20260816_v4" type="module"></script>
+    <script src="app.js?v=20260816_v5" type="module"></script>
 </body>
 </html>

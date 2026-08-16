@@ -87,14 +87,14 @@ print(f"Starting batch of {{len(batch_config['jobs'])}} video(s)...")
 
 for idx, job in enumerate(batch_config["jobs"]):
     job_id = job["job_id"]
+    batch_id = job.get("batch_id", "")
     title = job["title"]
     script_text = job.get("script", "")
     voice = job.get("voice", "relationship-male")
     aspect_ratio = job.get("aspect_ratio", "9:16")
-    target_dur = job.get("target_duration", "30-45s (Shorts)")
-    voice_boost = job.get("voice_boost", "100")
+    target_dur = job.get("target_duration", "45 seconds")
+    voice_boost = job.get("voice_boost", "120")
     bgm_volume = job.get("bgm_volume", "15")
-    bgm_select = job.get("bgm_select", "")
     add_captions = job.get("add_captions", "true")
     add_grid = job.get("add_grid", "true")
     grid_color = job.get("grid_color", "#ffffff")
@@ -111,18 +111,21 @@ for idx, job in enumerate(batch_config["jobs"]):
     
     # 1. AI Script Generation (Nemotron Super / Default)
     if not script_text or script_text.strip() == "":
-        dur_prompt = "\\n\\nCRITICAL DURATION: Target is SHORTS (30-45s). Output between 60 to 90 words total."
-        if "3 min" in target_dur:
-            dur_prompt = "\\n\\nCRITICAL DURATION: Target is 3 MINUTES. Output between 380 to 450 words total."
-        elif "5 min" in target_dur:
-            dur_prompt = "\\n\\nCRITICAL DURATION: Target is 5 MINUTES. Output between 650 to 750 words total."
-        elif "60" in target_dur:
-            dur_prompt = "\\n\\nCRITICAL DURATION: Target is 60 SECONDS. Output between 120 to 150 words total."
+        # Calculate dynamic word count based on natural seconds / minutes
+        words_est = 80
+        if "min" in target_dur.lower():
+            m_match = re.findall(r'[\\d.]+', target_dur)
+            m_val = float(m_match[0]) if m_match else 1.0
+            words_est = max(50, int(m_val * 135))
+        else:
+            s_match = re.findall(r'[\\d.]+', target_dur)
+            s_val = float(s_match[0]) if s_match else 45.0
+            words_est = max(30, int(s_val * 2.2))
             
-        tts_prompt = "\\n\\nCRITICAL FORMAT: Output ONLY the raw spoken words. No narrator tags, stage directions, or markdown."
+        dur_prompt = f"\\n\\nCRITICAL DURATION DIRECTIVE: Target duration is {{target_dur}}. Output a script of EXACTLY {{words_est}} spoken words total."
+        tts_prompt = "\\n\\nCRITICAL FORMAT: Output ONLY the raw words spoken by the narrator. No stage directions, brackets, or markdown."
         sys_prompt = "You are a world-class viral YouTube content creator."
         
-        # Try NVIDIA NIM Super Model / OpenAI
         api_key = batch_config.get("ai_api_key") or os.environ.get("NVIDIA_API_KEY", "")
         base_url = "https://integrate.api.nvidia.com/v1"
         model_name = "nvidia/nemotron-4-340b-instruct"
@@ -151,7 +154,7 @@ for idx, job in enumerate(batch_config["jobs"]):
                 print(f"AI Gen Warning: {{e}}")
                 
         if not script_text:
-            script_text = f"Here is the ultimate breakdown of {{title}}. By applying these critical strategies, you will immediately see remarkable results."
+            script_text = f"Here is what you need to know about {{title}}. Applying these practical insights will immediately transform your daily outcomes."
 
     update_job(job_id, "RUNNING", 25, "Synthesizing voiceover with Edge-TTS...", {{"script": script_text}})
     
@@ -166,6 +169,8 @@ for idx, job in enumerate(batch_config["jobs"]):
         edge_voice = "en-US-JennyNeural"
     elif "energetic" in voice:
         edge_voice = "en-US-ChristopherNeural"
+    elif "professional" in voice:
+        edge_voice = "en-US-AriaNeural"
         
     async def make_audio():
         comm = edge_tts.Communicate(script_text, edge_voice)
@@ -179,8 +184,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
     orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
     
-    # Extract search query from title
-    search_q = "+".join(re.findall(r'\\w+', title)[:4]) or "modern+cinematic"
+    search_q = "+".join(re.findall(r'\\w+', title)[:4]) or "cinematic+modern"
     try:
         pex_res = requests.get(
             f"https://api.pexels.com/videos/search?query={{search_q}}&per_page=1&orientation={{orientation}}",
@@ -198,22 +202,19 @@ for idx, job in enumerate(batch_config["jobs"]):
     except Exception as e:
         print(f"Pexels fetch notice: {{e}}")
         
-    # Fallback to dark animated canvas if no video clip
     if not os.path.exists(video_clip_path) or os.path.getsize(video_clip_path) == 0:
         subprocess.run(f"ffmpeg -y -f lavfi -i color=c=0x0a0a0f:s={{w}}x{{h}}:d=30 -c:v libx264 {{video_clip_path}}", shell=True)
 
     update_job(job_id, "RUNNING", 75, "Compiling final video via FFmpeg...")
     
     output_mp4 = os.path.join(work_dir, f"{{job_id}}.mp4")
-    
-    # Volume boost calculation
-    vb_float = float(voice_boost) / 100.0 if voice_boost else 1.0
+    vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
     
     # 4. FFmpeg Video Assembly
     ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{{video_clip_path}}" -i "{{audio_path}}" -filter_complex "[1:a]volume={{vb_float}}[aout]" -map 0:v -map "[aout]" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{{output_mp4}}"'
     subprocess.run(ff_cmd, shell=True)
     
-    update_job(job_id, "RUNNING", 90, "Uploading completed video to Hugging Face Dataset...")
+    update_job(job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
     remote_path = f"outputs/{{job_id}}.mp4"
     direct_url = f"https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/{{remote_path}}"
     
@@ -293,10 +294,9 @@ class handler(BaseHTTPRequestHandler):
                 "script": req_data.get("script", ""),
                 "voice": req_data.get("voice", "relationship-male"),
                 "aspect_ratio": req_data.get("aspect_ratio", "9:16"),
-                "target_duration": req_data.get("target_duration", "30-45s (Shorts)"),
-                "voice_boost": req_data.get("voice_boost", "100"),
+                "target_duration": req_data.get("target_duration", "45 seconds"),
+                "voice_boost": req_data.get("voice_boost", "120"),
                 "bgm_volume": req_data.get("bgm_volume", "15"),
-                "bgm_select": req_data.get("bgm_select", ""),
                 "add_captions": req_data.get("add_captions", "true"),
                 "add_grid": req_data.get("add_grid", "true"),
                 "grid_color": req_data.get("grid_color", "#ffffff"),
@@ -315,7 +315,10 @@ class handler(BaseHTTPRequestHandler):
                     db.collection("executions").document(job["job_id"]).set({
                         "job_id": job["job_id"],
                         "batch_id": batch_id,
+                        "batch_index": job["batch_index"],
                         "title": job["title"],
+                        "aspect_ratio": job["aspect_ratio"],
+                        "target_duration": job["target_duration"],
                         "status": "QUEUED",
                         "progress": 0,
                         "step_text": "Queued for Kaggle CPU Worker...",
