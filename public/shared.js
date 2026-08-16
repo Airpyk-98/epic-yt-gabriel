@@ -314,6 +314,7 @@ STRICT HOOK & RETENTION DIRECTIVES:
     work_dir = f"/kaggle/working/job_{job_id}"
     os.makedirs(work_dir, exist_ok=True)
     audio_path = os.path.join(work_dir, "audio.mp3")
+    wav_path = os.path.join(work_dir, "audio.wav")
 
     import asyncio, edge_tts
     edge_voice = "en-US-GuyNeural"
@@ -329,8 +330,11 @@ STRICT HOOK & RETENTION DIRECTIVES:
         await comm.save(audio_path)
     asyncio.run(make_audio())
 
+    # Convert to uncompressed WAV for zero-jitter Whisper & FFmpeg decoding
+    subprocess.run(f'ffmpeg -y -i "{audio_path}" -c:a pcm_s16le -ar 44100 "{wav_path}"', shell=True, check=True)
+
     # Get exact audio duration
-    r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_path}"', shell=True, capture_output=True, text=True)
+    r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{wav_path}"', shell=True, capture_output=True, text=True)
     audio_dur = float(r_dur.stdout.strip()) if r_dur.stdout.strip() else 20.0
     print(f"Exact Audio Duration: {audio_dur:.3f}s")
 
@@ -338,7 +342,7 @@ STRICT HOOK & RETENTION DIRECTIVES:
     update_job(uid, job_id, "RUNNING", 45, "Running Whisper word-level alignment & midpoint bridging...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     whisper_model = whisper.load_model("tiny.en", device=device)
-    whisper_res = whisper_model.transcribe(audio_path, word_timestamps=True)
+    whisper_res = whisper_model.transcribe(wav_path, word_timestamps=True)
     
     all_segments = whisper_res.get("segments", [])
     raw_scenes = []
@@ -487,15 +491,15 @@ STRICT HOOK & RETENTION DIRECTIVES:
             f.write(f"file '{tc}'\\n")
 
     manifest_p = concat_manifest.replace("\\\\", "/")
-    audio_p = os.path.abspath(audio_path).replace("\\\\", "/")
+    wav_p = os.path.abspath(wav_path).replace("\\\\", "/")
     out_p = os.path.abspath(output_mp4).replace("\\\\", "/")
 
     if has_nvenc:
         print("⚡ Using NVIDIA GPU NVENC hardware acceleration with midpoint bridged cuts...")
-        ff_cmd = f'ffmpeg -y -stream_loop -1 -f concat -safe 0 -i "{manifest_p}" -i "{audio_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+        ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
     else:
         print("🐢 Using multi-threaded CPU acceleration with midpoint bridged cuts...")
-        ff_cmd = f'ffmpeg -y -stream_loop -1 -f concat -safe 0 -i "{manifest_p}" -i "{audio_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+        ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
 
     subprocess.run(ff_cmd, shell=True)
 
