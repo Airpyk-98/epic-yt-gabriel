@@ -153,12 +153,14 @@ import sys
 import subprocess
 
 print("Installing required packages...")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "huggingface-hub", "firebase-admin", "edge-tts", "requests"], check=False)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "huggingface-hub", "firebase-admin", "edge-tts", "requests", "openai-whisper"], check=False)
 
 import json
 import re
 import time
 import requests
+import torch
+import whisper
 from huggingface_hub import HfApi
 
 batch_config = json.loads("${jsonStr}")
@@ -306,8 +308,8 @@ STRICT HOOK & RETENTION DIRECTIVES:
         print(f"Job {job_id} was CANCELLED by user. Skipping.")
         continue
 
-    # Step 2: Audio TTS
-    update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS...")
+    # Step 2: Audio Synthesis & Word-Level Whisper Transcription
+    update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS & Whisper timestamps...")
 
     work_dir = f"/kaggle/working/job_{job_id}"
     os.makedirs(work_dir, exist_ok=True)
@@ -327,32 +329,87 @@ STRICT HOOK & RETENTION DIRECTIVES:
         await comm.save(audio_path)
     asyncio.run(make_audio())
 
-    # Step 3: Multi-Scene Pexels Stock B-Roll Video Download (3s Scene Cuts)
-    update_job(uid, job_id, "RUNNING", 55, "Searching & downloading multi-scene Pexels B-roll (3s scene cuts)...")
+    # Get exact audio duration
+    r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_path}"', shell=True, capture_output=True, text=True)
+    audio_dur = float(r_dur.stdout.strip()) if r_dur.stdout.strip() else 20.0
+    print(f"Exact Audio Duration: {audio_dur:.3f}s")
+
+    # Step 2b: Whisper Word-Level Transcription & Midpoint Boundary Bridging
+    update_job(uid, job_id, "RUNNING", 45, "Running Whisper word-level alignment & midpoint bridging...")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    whisper_model = whisper.load_model("tiny.en", device=device)
+    whisper_res = whisper_model.transcribe(audio_path, word_timestamps=True)
+    
+    all_segments = whisper_res.get("segments", [])
+    raw_scenes = []
+    for seg in all_segments:
+        text = seg.get("text", "").strip()
+        words = seg.get("words", [])
+        if words:
+            start_t = float(words[0]["start"])
+            end_t = float(words[-1]["end"])
+        else:
+            start_t = float(seg.get("start", 0))
+            end_t = float(seg.get("end", 0))
+        if text:
+            raw_scenes.append({"text": text, "start": start_t, "end": end_t})
+
+    if not raw_scenes:
+        raw_scenes = [{"text": title, "start": 0.0, "end": audio_dur}]
+
+    # Midpoint Boundary Bridging (ensuring sum of scene durations == exact audio duration)
+    bridged_scenes = []
+    num_sc = len(raw_scenes)
+    for i in range(num_sc):
+        if i == 0:
+            start_b = 0.0
+        else:
+            start_b = (raw_scenes[i-1]["end"] + raw_scenes[i]["start"]) / 2.0
+
+        if i == num_sc - 1:
+            end_b = audio_dur
+        else:
+            end_b = (raw_scenes[i]["end"] + raw_scenes[i+1]["start"]) / 2.0
+
+        dur_b = max(0.5, end_b - start_b)
+        bridged_scenes.append({
+            "text": raw_scenes[i]["text"],
+            "start": start_b,
+            "end": end_b,
+            "duration": dur_b
+        })
+        print(f"  Bridged Scene {i+1}: [{start_b:.3f}s -> {end_b:.3f}s] (Duration: {dur_b:.3f}s) '{raw_scenes[i]['text']}'")
+
+    # Step 3: Multi-Scene 3s Slicing with Remainder Cut-off & Candidate Discard
+    update_job(uid, job_id, "RUNNING", 60, f"Downloading & slicing {len(bridged_scenes)} scenes (3s cuts)...")
 
     w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
     orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
     scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
-
-    # Split script into semantic scenes / clauses (sentence boundaries and conjunctions)
+    
     stopwords = {"a", "an", "the", "in", "on", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "you", "your", "is", "are", "can", "that", "this", "what", "how", "top", "why", "exist", "slowly", "secretly", "and", "but", "while", "because", "so", "or", "of"}
-    raw_clauses = re.split(r'(?<=[.!?])\s+|,\s+(?=and\b|but\b|while\b|because\b|so\b)', script_text)
-    scenes = [c.strip() for c in raw_clauses if len(c.strip()) > 8]
-    if not scenes:
-        scenes = [title]
+    all_trimmed_clips = []
 
-    print(f"Total semantic scenes to cut: {len(scenes)}")
-    trimmed_clips = []
+    # Check if NVIDIA NVENC hardware encoder is supported
+    has_nvenc = False
+    try:
+        chk = subprocess.run("ffmpeg -encoders 2>&1 | grep -i h264_nvenc", shell=True, capture_output=True, text=True)
+        if "h264_nvenc" in chk.stdout:
+            has_nvenc = True
+    except Exception:
+        has_nvenc = False
 
-    for idx, sc in enumerate(scenes):
-        words = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in sc.split()]
+    enc_v = "h264_nvenc -preset p1" if has_nvenc else "libx264 -preset ultrafast"
+
+    for idx, sc in enumerate(bridged_scenes):
+        sc_dur = sc["duration"]
+        words = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in sc["text"].split()]
         filtered = [w for w in words if w and len(w) > 2 and w not in stopwords and not w.isdigit()]
         search_q = "+".join(filtered[:3]) if filtered else "travel"
-        print(f"Scene {idx+1}/{len(scenes)}: Query '{search_q}'")
+        print(f"\\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
 
-        raw_clip_path = os.path.join(work_dir, f"raw_{idx}.mp4")
-        trimmed_clip_path = os.path.join(work_dir, f"scene_{idx}.mp4")
-
+        # Fetch up to 4 candidate Pexels clips
+        candidate_urls = []
         try:
             pex_res = requests.get(
                 f"https://api.pexels.com/videos/search?query={search_q}&per_page=4&orientation={orientation}",
@@ -367,73 +424,77 @@ STRICT HOOK & RETENTION DIRECTIVES:
                 )
 
             if pex_res.ok and pex_res.json().get("videos"):
-                videos_list = pex_res.json()["videos"]
-                best_vid_url = None
-                for v_entry in videos_list:
+                for v_entry in pex_res.json()["videos"]:
                     files = v_entry.get("video_files", [])
                     for f in files:
                         if f.get("link") and f.get("quality") == "hd":
-                            best_vid_url = f.get("link")
+                            candidate_urls.append(f.get("link"))
                             break
-                    if not best_vid_url and files:
-                        best_vid_url = files[0].get("link")
-                    if best_vid_url:
-                        break
-                        
-                if best_vid_url:
-                    r_vid = requests.get(best_vid_url, stream=True, timeout=25)
-                    with open(raw_clip_path, "wb") as f:
-                        for chunk in r_vid.iter_content(chunk_size=512*1024):
-                            f.write(chunk)
         except Exception as e:
             print(f"Pexels fetch notice for scene {idx}: {e}")
 
-        # Fallback to procedural testsrc if clip fetch failed
-        if not os.path.exists(raw_clip_path) or os.path.getsize(raw_clip_path) < 1000:
-            subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t 3 -c:v libx264 {raw_clip_path}", shell=True)
+        # Fill sc_dur in 3.0s chunks
+        rem_dur = sc_dur
+        c_idx = 0
+        while rem_dur > 0.05:
+            if rem_dur <= 3.5:
+                slot_dur = rem_dur
+            else:
+                slot_dur = 3.0
 
-        # Standardize and trim clip to 3.0s
-        trim_cmd = f'ffmpeg -y -ss 0 -t 3.0 -i "{raw_clip_path}" -vf "{scale_filter}" -c:v libx264 -preset ultrafast -r 30 -an "{trimmed_clip_path}"'
-        subprocess.run(trim_cmd, shell=True)
-        if os.path.exists(trimmed_clip_path) and os.path.getsize(trimmed_clip_path) > 1000:
-            trimmed_clips.append(trimmed_clip_path)
+            raw_clip = os.path.join(work_dir, f"raw_sc{idx}_c{c_idx}.mp4")
+            trimmed_clip = os.path.join(work_dir, f"trimmed_sc{idx}_c{c_idx}.mp4")
 
-    # Step 4: High-Speed Multi-Threaded & GPU-Accelerated Multi-Scene Video Assembly
-    update_job(uid, job_id, "RUNNING", 75, "Compiling multi-scene video via high-speed FFmpeg (NVENC GPU / Fast CPU)...")
+            # Download candidate clip if available
+            if c_idx < len(candidate_urls):
+                try:
+                    r_v = requests.get(candidate_urls[c_idx], stream=True, timeout=20)
+                    with open(raw_clip, "wb") as f:
+                        for chunk in r_v.iter_content(chunk_size=512*1024):
+                            f.write(chunk)
+                except Exception:
+                    pass
+
+            # Fallback to testsrc if download failed
+            if not os.path.exists(raw_clip) or os.path.getsize(raw_clip) < 1000:
+                subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t {slot_dur:.3f} -c:v libx264 {raw_clip}", shell=True, capture_output=True)
+
+            # Standardize and trim clip to exact slot_dur
+            trim_cmd = f'ffmpeg -y -ss 0 -t {slot_dur:.3f} -i "{raw_clip}" -vf "{scale_filter}" -c:v {enc_v} -r 30 -an "{trimmed_clip}"'
+            subprocess.run(trim_cmd, shell=True, capture_output=True)
+            if os.path.exists(trimmed_clip) and os.path.getsize(trimmed_clip) > 1000:
+                clean_p = os.path.abspath(trimmed_clip).replace('\\\\', '/')
+                all_trimmed_clips.append(clean_p)
+                print(f"   [Slot {c_idx+1}] Added {slot_dur:.3f}s clip -> {trimmed_clip}")
+
+            rem_dur -= slot_dur
+            c_idx += 1
+
+        # Discard any remaining candidate videos
+        discarded = max(0, len(candidate_urls) - c_idx)
+        print(f"   Candidate clips discarded: {discarded}")
+
+    # Step 4: High-Speed Multi-Threaded & GPU-Accelerated Final Video Assembly
+    update_job(uid, job_id, "RUNNING", 80, "Compiling seamless multi-scene video via high-speed FFmpeg...")
 
     output_mp4 = os.path.join(work_dir, f"{job_id}.mp4")
     vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
 
-    # Get exact audio duration
-    r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_path}"', shell=True, capture_output=True, text=True)
-    audio_dur = float(r_dur.stdout.strip()) if r_dur.stdout.strip() else 10.0
-    print(f"Audio duration: {audio_dur:.3f}s")
-
     # Create Concat Manifest with forward-slashed absolute paths
     concat_manifest = os.path.abspath(os.path.join(work_dir, "concat_list.txt"))
     with open(concat_manifest, "w") as f:
-        for tc in trimmed_clips:
-            clean_path = os.path.abspath(tc).replace("\\", "/")
-            f.write(f"file '{clean_path}'\n")
+        for tc in all_trimmed_clips:
+            f.write(f"file '{tc}'\\n")
 
-    # Check if NVIDIA NVENC hardware encoder is supported
-    has_nvenc = False
-    try:
-        chk = subprocess.run("ffmpeg -encoders 2>&1 | grep -i h264_nvenc", shell=True, capture_output=True, text=True)
-        if "h264_nvenc" in chk.stdout:
-            has_nvenc = True
-    except Exception:
-        has_nvenc = False
-
-    manifest_p = concat_manifest.replace("\\", "/")
-    audio_p = os.path.abspath(audio_path).replace("\\", "/")
-    out_p = os.path.abspath(output_mp4).replace("\\", "/")
+    manifest_p = concat_manifest.replace("\\\\", "/")
+    audio_p = os.path.abspath(audio_path).replace("\\\\", "/")
+    out_p = os.path.abspath(output_mp4).replace("\\\\", "/")
 
     if has_nvenc:
-        print("⚡ Using NVIDIA GPU NVENC hardware acceleration with multi-scene cuts...")
+        print("⚡ Using NVIDIA GPU NVENC hardware acceleration with midpoint bridged cuts...")
         ff_cmd = f'ffmpeg -y -stream_loop -1 -f concat -safe 0 -i "{manifest_p}" -i "{audio_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
     else:
-        print("🐢 Using multi-threaded CPU acceleration with multi-scene cuts...")
+        print("🐢 Using multi-threaded CPU acceleration with midpoint bridged cuts...")
         ff_cmd = f'ffmpeg -y -stream_loop -1 -f concat -safe 0 -i "{manifest_p}" -i "{audio_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
 
     subprocess.run(ff_cmd, shell=True)
