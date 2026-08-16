@@ -287,7 +287,7 @@ VIRAL HOOK & ATTENTION RETENTION RULES (Addictive Script System):
 4. TONE: 6th grade reading level, conversational gossip whisperer, active voice, addressing the viewer as "you".
 
 PEXELS STOCK B-ROLL PROMPT RULES:
-For EVERY single scene line, provide a tailored `pexels_query` (2 to 4 keywords) designed specifically for the Pexels Stock Video Search API.
+For EVERY single scene line, provide a tailored 'pexels_query' (2 to 4 keywords) designed specifically for the Pexels Stock Video Search API.
 - Must describe tangible, concrete real-world visuals (e.g., "stressed office businessman", "luxury sports car night", "mountain drone aerial", "counting money cash", "whispering secret shadow").
 - NEVER use abstract concepts (do NOT write "jealousy concept" or "efficiency"). Use what the camera actually sees!
 
