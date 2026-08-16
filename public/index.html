@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="style.css?v=20260816_v105">
+    <link rel="stylesheet" href="style.css?v=20260816_v150">
 </head>
 <body>
 
@@ -60,7 +60,7 @@
             <section class="card creator-card">
                 <div class="card-header">
                     <h2>🎬 Create Video Batch</h2>
-                    <p class="subtitle">Enter one title per line. Videos are generated sequentially on Kaggle CPU (0 GPU quota used).</p>
+                    <p class="subtitle">Enter one title per line. Runs on 1 dedicated Kaggle CPU Worker (0 GPU quota used).</p>
                 </div>
 
                 <form id="createBatchForm">
@@ -69,7 +69,7 @@
                     <div class="form-group">
                         <label for="videoTitles">Video Titles <span class="required">*</span></label>
                         <textarea id="videoTitles" rows="4" placeholder="Top 5 Productivity Secrets in 2026&#10;How to Master Deep Focus Fast&#10;The Science of Viral Habits" required></textarea>
-                        <span class="input-hint">Each line is processed as a separate full video.</span>
+                        <span class="input-hint">Each line is processed as a separate video row in Firestore and generated sequentially.</span>
                     </div>
 
                     <!-- Manual Script Override -->
@@ -109,7 +109,7 @@
                         </div>
                     </div>
 
-                    <!-- Target Duration (Prominent & Chunky Unit Controls) -->
+                    <!-- Target Duration (Chunky Unit Controls) -->
                     <div class="form-group">
                         <label>Target Video Duration</label>
                         <div class="duration-panel">
@@ -244,7 +244,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, launchKaggleBatchDirectly, escapeHtml } from "./shared.js?v=20260816_v105";
+        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, launchKaggleBatchDirectly, escapeHtml } from "./shared.js?v=20260816_v150";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -466,7 +466,7 @@
             document.getElementById('currentBatchSubtitle').innerText = 'Feed cleared.';
         });
 
-        // 5. Submit Batch Creation (Reliable Direct Dispatch)
+        // 5. Submit Batch Creation (Single Kaggle CPU Worker)
         const createBatchForm = document.getElementById('createBatchForm');
         const submitBatchBtn = document.getElementById('submitBatchBtn');
 
@@ -511,11 +511,12 @@
                 // Direct Kaggle Cloud Kernel Push
                 const result = await launchKaggleBatchDirectly(db, utils, payload);
 
+                // Set new active batch (resets studio view to new batch)
                 const storageKey = currentUser ? `epicsync_batch_${currentUser.uid}` : 'epicsync_active_batch_id';
                 localStorage.setItem(storageKey, result.batch_id);
 
-                document.getElementById('currentBatchLogsContainer').innerHTML = '<div class="empty-state">🚀 Batch queued! Kaggle CPU worker is initializing...</div>';
-                alert(`🚀 Successfully launched batch of ${titles.length} video(s)! Watching real-time stream below.`);
+                document.getElementById('currentBatchLogsContainer').innerHTML = '<div class="empty-state">🚀 1 Kaggle CPU Worker started! Processing videos sequentially...</div>';
+                alert(`🚀 Successfully launched 1 Kaggle CPU Worker for ${titles.length} video(s)! Watching real-time stream below.`);
                 document.getElementById('videoTitles').value = '';
                 if (manualScriptArea) document.getElementById('manualScriptText').value = '';
 
