@@ -2,8 +2,8 @@
 
 export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
-export const HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
-export const PEXELS_API_KEY = "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d";
+export const DEFAULT_HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
+export const DEFAULT_PEXELS_KEY = "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d";
 
 // 1. Initialize Auth Navigation Pill across all pages
 export function initSharedAuth(auth, db, utils) {
@@ -39,6 +39,7 @@ export async function getUserSettings(db, utils, uid) {
     let settings = {
         kaggle_username: localStorage.getItem('epicsync_kaggle_username') || DEFAULT_KAGGLE_USERNAME,
         kaggle_key: localStorage.getItem('epicsync_kaggle_key') || DEFAULT_KAGGLE_KEY,
+        hf_token: localStorage.getItem('epicsync_hf_token') || DEFAULT_HF_TOKEN,
         webhook_url: localStorage.getItem('epicsync_yt_webhook') || ''
     };
 
@@ -49,6 +50,7 @@ export async function getUserSettings(db, utils, uid) {
                 const data = snap.data();
                 if (data.kaggle_username) settings.kaggle_username = data.kaggle_username;
                 if (data.kaggle_key) settings.kaggle_key = data.kaggle_key;
+                if (data.hf_token) settings.hf_token = data.hf_token;
                 if (data.webhook_url) settings.webhook_url = data.webhook_url;
             }
         } catch (e) {
@@ -104,8 +106,9 @@ export async function dispatchToWebhook(webhookUrl, videosList) {
 }
 
 // 4. Generate Self-Contained Kaggle Pure CPU Worker Python Code
-export function buildWorkerCode(batchConfig) {
+export function buildWorkerCode(batchConfig, hfToken) {
     const jsonStr = JSON.stringify(batchConfig).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const tokenToUse = hfToken || DEFAULT_HF_TOKEN;
     
     return `# EpicSync On-Demand Batch Worker (Pure CPU)
 import os
@@ -124,7 +127,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 batch_config = json.loads("${jsonStr}")
-HF_TOKEN = "${HF_TOKEN}"
+HF_TOKEN = "${tokenToUse}"
 hf_api = HfApi(token=HF_TOKEN)
 
 # Initialize Firebase via REST or App
@@ -164,7 +167,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     target_dur = job.get("target_duration", "45 seconds")
     voice_boost = job.get("voice_boost", "120")
     bgm_volume = job.get("bgm_volume", "15")
-    pexels_key = job.get("pexels_api_key", "${PEXELS_API_KEY}")
+    pexels_key = job.get("pexels_api_key", "${DEFAULT_PEXELS_KEY}")
 
     print(f"\\n========================================================")
     print(f" Processing Video {idx+1}/{len(batch_config['jobs'])}: {title} (ID: {job_id})")
@@ -313,6 +316,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     const userSettings = await getUserSettings(db, utils, payload.uid);
     const kaggleUsername = (payload.kaggle_username || userSettings.kaggle_username || DEFAULT_KAGGLE_USERNAME).trim();
     const kaggleKey = (payload.kaggle_key || userSettings.kaggle_key || DEFAULT_KAGGLE_KEY).trim();
+    const hfToken = (payload.hf_token || userSettings.hf_token || DEFAULT_HF_TOKEN).trim();
 
     // Initialize execution documents in Firestore
     for (let idx = 0; idx < titles.length; idx++) {
@@ -354,7 +358,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
         jobs: jobs,
         ai_api_key: payload.ai_api_key || ''
     };
-    const workerScript = buildWorkerCode(batchConfig);
+    const workerScript = buildWorkerCode(batchConfig, hfToken);
 
     // Push to Kaggle API using Bearer Token Auth
     const slugName = `epicsync-batch-${ts}`;

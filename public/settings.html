@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="style.css?v=20260816_v125">
+    <link rel="stylesheet" href="style.css?v=20260816_v160">
 </head>
 <body>
 
@@ -59,7 +59,7 @@
             <section class="card settings-card">
                 <div class="card-header">
                     <h2>⚙️ Cloud & Automation Settings</h2>
-                    <p class="subtitle">Configure your Kaggle CPU Execution credentials and optional YouTube Automation Webhook.</p>
+                    <p class="subtitle">Configure your Kaggle CPU Execution credentials, Hugging Face Token, and optional YouTube Automation Webhook.</p>
                 </div>
 
                 <form id="settingsForm">
@@ -84,6 +84,23 @@
 
                         <button type="button" id="testKaggleBtn" class="btn-tool" style="margin-top: 6px;">
                             🧪 Test Kaggle Connection
+                        </button>
+                    </div>
+
+                    <!-- Hugging Face Token Section -->
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1.5px solid rgba(16, 185, 129, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <span>🤗</span> Hugging Face Storage Token
+                        </h3>
+
+                        <div class="form-group">
+                            <label for="hfTokenInput">Hugging Face Access Token (hf_...)</label>
+                            <input type="password" id="hfTokenInput" placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxx">
+                            <span class="input-hint">Write token for uploading and streaming MP4 videos from <code>epic-gab/EpicSync-Dataset</code>.</span>
+                        </div>
+
+                        <button type="button" id="testHfBtn" class="btn-tool" style="margin-top: 6px;">
+                            🧪 Test Hugging Face Token
                         </button>
                     </div>
 
@@ -129,7 +146,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserSettings, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY } from "./shared.js?v=20260816_v125";
+        import { initSharedAuth, getUserSettings, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, DEFAULT_HF_TOKEN } from "./shared.js?v=20260816_v160";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -150,10 +167,12 @@
         let currentUser = null;
         const kaggleUsernameInput = document.getElementById('kaggleUsernameInput');
         const kaggleKeyInput = document.getElementById('kaggleKeyInput');
+        const hfTokenInput = document.getElementById('hfTokenInput');
         const webhookUrlSetting = document.getElementById('webhookUrlSetting');
         const settingsForm = document.getElementById('settingsForm');
         const settingsStatusMsg = document.getElementById('settingsStatusMsg');
         const testKaggleBtn = document.getElementById('testKaggleBtn');
+        const testHfBtn = document.getElementById('testHfBtn');
         const testWebhookBtn = document.getElementById('testWebhookBtn');
 
         auth.onAuthStateChanged(async (user) => {
@@ -161,6 +180,7 @@
             const s = await getUserSettings(db, utils, user?.uid);
             kaggleUsernameInput.value = s.kaggle_username || DEFAULT_KAGGLE_USERNAME;
             kaggleKeyInput.value = s.kaggle_key || DEFAULT_KAGGLE_KEY;
+            hfTokenInput.value = s.hf_token || DEFAULT_HF_TOKEN;
             webhookUrlSetting.value = s.webhook_url || '';
         });
 
@@ -169,12 +189,14 @@
             e.preventDefault();
             const username = kaggleUsernameInput.value.trim();
             const key = kaggleKeyInput.value.trim();
+            const hfToken = hfTokenInput.value.trim() || DEFAULT_HF_TOKEN;
             const webhookUrl = webhookUrlSetting.value.trim();
 
             if (!username || !key) return alert('Please enter both Kaggle Username and API Token.');
 
             localStorage.setItem('epicsync_kaggle_username', username);
             localStorage.setItem('epicsync_kaggle_key', key);
+            localStorage.setItem('epicsync_hf_token', hfToken);
             localStorage.setItem('epicsync_yt_webhook', webhookUrl);
 
             if (currentUser) {
@@ -182,11 +204,12 @@
                     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'config'), {
                         kaggle_username: username,
                         kaggle_key: key,
+                        hf_token: hfToken,
                         webhook_url: webhookUrl,
                         updatedAt: new Date()
                     }, { merge: true });
                     
-                    showStatusMsg('✅ Settings saved to your account successfully!', true);
+                    showStatusMsg('✅ All settings & tokens saved to your account!', true);
                 } catch (err) {
                     alert('Error saving settings: ' + err.message);
                 }
@@ -230,7 +253,31 @@
             }
         });
 
-        // 3. Test Webhook Connection
+        // 3. Test Hugging Face Token
+        testHfBtn.addEventListener('click', async () => {
+            const token = hfTokenInput.value.trim() || DEFAULT_HF_TOKEN;
+            if (!token) return alert('Please enter a Hugging Face Token to test.');
+
+            testHfBtn.innerText = '🧪 Testing HF Token...';
+            try {
+                const res = await fetch('https://huggingface.co/api/whoami-v2', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    alert(`✅ Success! Hugging Face token is VALID for account: "${data.name || 'epic-gab'}".`);
+                } else {
+                    alert(`❌ Invalid HF Token (Status: ${res.status}): Token is expired or invalid.`);
+                }
+            } catch (err) {
+                alert(`HF Test notice: ${err.message}`);
+            } finally {
+                testHfBtn.innerText = '🧪 Test Hugging Face Token';
+            }
+        });
+
+        // 4. Test Webhook Connection
         testWebhookBtn.addEventListener('click', async () => {
             const url = webhookUrlSetting.value.trim();
             if (!url) return alert('Please enter a Webhook URL to test, or leave it blank if not using one.');
