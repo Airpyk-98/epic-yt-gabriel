@@ -232,39 +232,80 @@ for idx, job in enumerate(batch_config["jobs"]):
         print(f"Job {job_id} was CANCELLED by user. Skipping to next video.")
         continue
 
-    # Step 1: Script Gen
-    update_job(uid, job_id, "RUNNING", 10, f"Generating AI script for '{title}'...")
+    # Step 1: AI Script & Visual Direction Generation (MiniMax M3 / NVIDIA / Groq / OpenAI)
+    update_job(uid, job_id, "RUNNING", 10, f"Generating MiniMax M3 script & Pexels director queries for '{title}'...")
 
-    if not script_text or script_text.strip() == "":
-        words_est = 80
-        if "min" in target_dur.lower():
-            m_match = re.findall(r'[\\d.]+', target_dur)
-            m_val = float(m_match[0]) if m_match else 1.0
-            words_est = max(50, int(m_val * 135))
-        else:
-            s_match = re.findall(r'[\\d.]+', target_dur)
-        words_est = max(30, int(float(target_dur.split()[0]) * 2.2)) if target_dur and target_dur[0].isdigit() else 75
+    ai_scenes = []
 
-        sys_prompt = f"""You are a world-class viral YouTube Shorts scriptwriter.
-Write an addictive, high-retention video script for the title: "{title}".
+    # Calculate exact duration constraints
+    dur_str = str(target_dur).lower()
+    if "min" in dur_str:
+        m_val = re.findall(r'[\d.]+', dur_str)
+        t_secs = float(m_val[0]) * 60.0 if m_val else 60.0
+    else:
+        s_val = re.findall(r'[\d.]+', dur_str)
+        t_secs = float(s_val[0]) if s_val else 45.0
+    t_secs = max(15.0, t_secs)
+    t_words = int(t_secs * 2.35)
+    min_words = int(t_words * 0.90)
+    max_words = int(t_words * 1.10)
+    target_scenes_count = max(3, int(t_secs / 3.5))
 
-STRICT HOOK & RETENTION DIRECTIVES:
-1. NEVER start with "Here is what you need to know", "In this video", "Welcome", or greetings.
-2. The very first 3 seconds MUST deliver an immediate pattern interrupt or bold curiosity hook.
-3. Use short, punchy sentences connected by "therefore" and "but" to create open loops that hold attention until the end.
-4. Target length: EXACTLY {words_est} spoken words.
-5. Output ONLY the raw spoken narration words. No stage directions, brackets, timestamps, or headers."""
+    if script_text and script_text.strip():
+        # User provided manual script: split into sentences and generate Pexels queries
+        manual_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', script_text) if len(l.strip()) > 5]
+        for ml in manual_lines:
+            w_list = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in ml.split()]
+            q = "+".join([w for w in w_list if len(w) > 3][:3]) or "lifestyle"
+            ai_scenes.append({"line": ml, "pexels_query": q})
+    else:
+        sys_prompt = f"""You are an elite viral YouTube scriptwriter and visual director using MiniMax M3 reasoning.
+Write a high-retention, psychology-backed video script for the title: "{title}".
 
-        api_key = batch_config.get("ai_api_key") or os.environ.get("NVIDIA_API_KEY", "")
+TARGET TIMING & LENGTH CONSTRAINTS:
+- TARGET VIDEO DURATION: {target_dur} (~{int(t_secs)} seconds)
+- REQUIRED WORD COUNT: STRICTLY between {min_words} and {max_words} total spoken words across all lines combined. (Never under {min_words} words; never over {max_words} words).
+- TARGET SCENE COUNT: Exactly {target_scenes_count} distinct thought beats / scene cuts.
+
+VIRAL HOOK & ATTENTION RETENTION RULES (Addictive Script System):
+1. BANNED: Never use greetings, introductions, rhetorical throat-clearing, or phrases like "In this video", "Here is what you need to know".
+2. HOOK (Scene 1): The first 3 seconds MUST be an immediate pattern interrupt or contrarian truth that attacks a common assumption (relevance + curiosity).
+3. BODY CHAIN: Connect every subsequent scene using causal connectors ("therefore", "but", "meanwhile", "which is why") instead of flat lists. Open a new curiosity loop before closing the last one.
+4. TONE: 6th grade reading level, conversational gossip whisperer, active voice, addressing the viewer as "you".
+
+PEXELS STOCK B-ROLL PROMPT RULES:
+For EVERY single scene line, provide a tailored `pexels_query` (2 to 4 keywords) designed specifically for the Pexels Stock Video Search API.
+- Must describe tangible, concrete real-world visuals (e.g., "stressed office businessman", "luxury sports car night", "mountain drone aerial", "counting money cash", "whispering secret shadow").
+- NEVER use abstract concepts (do NOT write "jealousy concept" or "efficiency"). Use what the camera actually sees!
+
+OUTPUT FORMAT:
+You MUST respond with valid JSON ONLY matching this exact JSON structure:
+{{
+  "scenes": [
+    {{
+      "line": "Spoken sentence or thought beat 1...",
+      "pexels_query": "specific visual pexels search query 1"
+    }},
+    {{
+      "line": "Spoken sentence or thought beat 2...",
+      "pexels_query": "specific visual pexels search query 2"
+    }}
+  ]
+}}"""
+
+        api_key = batch_config.get("ai_api_key") or os.environ.get("MINIMAX_API_KEY", "") or os.environ.get("NVIDIA_API_KEY", "")
 
         if api_key:
             try:
-                base_url = "https://integrate.api.nvidia.com/v1"
-                model_name = "meta/llama-3.3-70b-instruct"
-                if api_key.startswith("gsk_"):
+                base_url = "https://api.minimax.chat/v1"
+                model_name = "MiniMax-Text-01"
+                if api_key.startswith("nvapi-"):
+                    base_url = "https://integrate.api.nvidia.com/v1"
+                    model_name = "meta/llama-3.3-70b-instruct"
+                elif api_key.startswith("gsk_"):
                     base_url = "https://api.groq.com/openai/v1"
                     model_name = "llama-3.3-70b-versatile"
-                elif api_key.startswith("sk-"):
+                elif api_key.startswith("sk-") and not api_key.startswith("sk-minimax"):
                     base_url = "https://api.openai.com/v1"
                     model_name = "gpt-4o-mini"
 
@@ -275,33 +316,49 @@ STRICT HOOK & RETENTION DIRECTIVES:
                         "model": model_name,
                         "messages": [
                             {"role": "system", "content": sys_prompt},
-                            {"role": "user", "content": f"Write the viral short-form script for: {title}"}
+                            {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
                         ],
-                        "max_tokens": 300,
+                        "max_tokens": 1500,
                         "temperature": 0.7
                     },
-                    timeout=30
+                    timeout=35
                 )
                 if r_ai.ok:
-                    raw_s = r_ai.json()["choices"][0]["message"]["content"]
-                    clean_s = re.sub(r'\[.*?\]', '', raw_s)
-                    clean_s = re.sub(r'\(.*?\)', '', clean_s).replace('**', '').replace('---', '')
-                    clean_s = re.sub(r'^(Narrator|Script|Audio|Voiceover):?\s*', '', clean_s, flags=re.IGNORECASE | re.MULTILINE).strip()
-                    script_text = clean_s
+                    resp_c = r_ai.json()["choices"][0]["message"]["content"]
+                    json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
+                    if json_match:
+                        parsed_j = json.loads(json_match.group(0))
+                        for sc_item in parsed_j.get("scenes", []):
+                            l_val = str(sc_item.get("line", "")).strip()
+                            q_val = str(sc_item.get("pexels_query", "")).strip()
+                            if l_val:
+                                ai_scenes.append({"line": l_val, "pexels_query": q_val})
             except Exception as e:
-                print(f"AI Gen Notice: {e}")
+                print(f"AI Generation notice: {e}")
 
-        if not script_text:
-            import random
+        # Smart procedural fallback if no API key or invalid output
+        if not ai_scenes:
             hooks = [
-                f"Nobody wants to admit this, but {title} is secretly changing everything you do.",
-                f"If you're still looking at {title} the traditional way, you're missing the entire point.",
-                f"The biggest misconception about {title} is that it takes massive effort, but the reality is completely different.",
-                f"Most people get {title} totally backward, and it costs them more than they realize."
+                f"Most people think {title} is completely obvious, but the real psychology is shockingly counterintuitive.",
+                f"If you're still approaching {title} the traditional way, you're falling into a massive trap.",
+                f"Nobody wants to admit this out loud, but {title} reveals everything about human nature.",
+                f"The biggest misconception about {title} is that it takes effort, but the reality is totally different."
             ]
-            hook = random.choice(hooks)
-            body = f"Here is why: when you streamline the foundational steps, your results compound automatically. But if you skip the key leverage points, friction builds up immediately. Focus on the core highest-impact action first, eliminate unnecessary bottlenecks, and watch how quickly your consistency shifts."
-            script_text = f"{hook} {body}"
+            import random
+            h_line = random.choice(hooks)
+            default_flow = [
+                {"line": h_line, "pexels_query": "dramatic shadow thoughtful person"},
+                {"line": "Notice how subtle comments start slipping out whenever you begin making genuine progress.", "pexels_query": "whispering envious conversation"},
+                {"line": "Therefore, pay close attention to who goes completely silent when your wins start compounding.", "pexels_query": "person looking at phone alone"},
+                {"line": "Because genuine support is enthusiastic, but hidden resistance always hides behind awkward hesitation.", "pexels_query": "dramatic mirror reflection stare"},
+                {"line": "Stay locked into your daily execution, ignore the passive noise, and let your consistency speak for itself.", "pexels_query": "confident person walking city skyline"}
+            ]
+            ai_scenes = default_flow
+
+    script_text = " ".join([s["line"] for s in ai_scenes])
+    print(f"\\nGenerated Script ({len(ai_scenes)} scenes, {len(script_text.split())} words):")
+    for s_idx, sc_obj in enumerate(ai_scenes):
+        print(f"  [{s_idx+1}] Pexels Query: '{sc_obj.get('pexels_query', '')}' | Line: '{sc_obj.get('line', '')}'")
 
     # Check for cancellation again
     if is_job_cancelled(uid, job_id):
@@ -376,13 +433,18 @@ STRICT HOOK & RETENTION DIRECTIVES:
             end_b = (raw_scenes[i]["end"] + raw_scenes[i+1]["start"]) / 2.0
 
         dur_b = max(0.5, end_b - start_b)
+        
+        # Attach the corresponding AI pexels_query
+        pq = ai_scenes[i]["pexels_query"] if i < len(ai_scenes) else "lifestyle"
+
         bridged_scenes.append({
             "text": raw_scenes[i]["text"],
+            "pexels_query": pq,
             "start": start_b,
             "end": end_b,
             "duration": dur_b
         })
-        print(f"  Bridged Scene {i+1}: [{start_b:.3f}s -> {end_b:.3f}s] (Duration: {dur_b:.3f}s) '{raw_scenes[i]['text']}'")
+        print(f"  Bridged Scene {i+1}: [{start_b:.3f}s -> {end_b:.3f}s] (Duration: {dur_b:.3f}s) Query: '{pq}'")
 
     # Step 3: Multi-Scene 3s Slicing with Remainder Cut-off & Candidate Discard
     update_job(uid, job_id, "RUNNING", 60, f"Downloading & slicing {len(bridged_scenes)} scenes (3s cuts)...")
@@ -390,8 +452,6 @@ STRICT HOOK & RETENTION DIRECTIVES:
     w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
     orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
     scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
-    
-    stopwords = {"a", "an", "the", "in", "on", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "you", "your", "is", "are", "can", "that", "this", "what", "how", "top", "why", "exist", "slowly", "secretly", "and", "but", "while", "because", "so", "or", "of"}
     all_trimmed_clips = []
 
     # Check if NVIDIA NVENC hardware encoder is supported
@@ -407,12 +467,10 @@ STRICT HOOK & RETENTION DIRECTIVES:
 
     for idx, sc in enumerate(bridged_scenes):
         sc_dur = sc["duration"]
-        words = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in sc["text"].split()]
-        filtered = [w for w in words if w and len(w) > 2 and w not in stopwords and not w.isdigit()]
-        search_q = "+".join(filtered[:3]) if filtered else "travel"
+        search_q = "+".join(sc.get("pexels_query", "lifestyle").split())
         print(f"\\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
 
-        # Fetch up to 4 candidate Pexels clips
+        # Fetch up to 4 candidate Pexels clips using AI Director Query
         candidate_urls = []
         try:
             pex_res = requests.get(
@@ -420,9 +478,9 @@ STRICT HOOK & RETENTION DIRECTIVES:
                 headers={"Authorization": pexels_key},
                 timeout=12
             )
-            if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "travel":
+            if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "lifestyle":
                 pex_res = requests.get(
-                    f"https://api.pexels.com/videos/search?query=travel&per_page=4&orientation={orientation}",
+                    f"https://api.pexels.com/videos/search?query=lifestyle&per_page=4&orientation={orientation}",
                     headers={"Authorization": pexels_key},
                     timeout=12
                 )
