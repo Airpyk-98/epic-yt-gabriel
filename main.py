@@ -3070,10 +3070,19 @@ def advance_batch_queue(batch_id: str, uid: str, project_id: str, next_index: in
             batch_doc_ref.update({"status": "COMPLETED", "completed_at": firestore.SERVER_TIMESTAMP})
             return
             
-        batch_doc_ref.update({"current_index": next_index, "status": "RUNNING"})
         title = titles[next_index]
         job_id = bdata.get("job_ids", {}).get(str(next_index)) or f"epicsync_premium_{int(time.time())}_{uuid.uuid4().hex[:4]}"
         
+        # IDEMPOTENCY & CONCURRENCY GUARD: Check target job status before proceeding!
+        target_doc_ref = db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id)
+        target_doc = target_doc_ref.get()
+        if target_doc.exists:
+            curr_status = target_doc.to_dict().get("status", "")
+            if curr_status in ["GENERATING SCRIPT", "STAGING", "RUNNING", "DOWNLOADING", "SUCCESS", "POSTED_TO_YOUTUBE"]:
+                print(f"[BATCH GUARD] Job {job_id} (batch index {next_index}) is ALREADY active/completed ({curr_status}). Aborting duplicate trigger.", flush=True)
+                return
+                
+        batch_doc_ref.update({"current_index": next_index, "status": "RUNNING"})
         print(f"[BATCH] Advancing batch {batch_id} -> Job {next_index+1}/{len(titles)}: {title} (ID: {job_id})", flush=True)
         
         # 1. Fetch AI settings & Generate Script
