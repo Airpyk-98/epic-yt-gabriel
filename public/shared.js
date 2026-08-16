@@ -1,7 +1,7 @@
 // EpicSync Shared Application Logic & Direct Cloud Dispatcher
 
 const KAGGLE_USERNAME = "ikechukwuebiringa1";
-const KAGGLE_KEY = "KGAT_a8e461388354fdc41c5a7a259007d897";
+const KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
 const HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
 const PEXELS_API_KEY = "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d";
 
@@ -123,7 +123,7 @@ except Exception:
 def update_job(uid, job_id, status, progress, step_text, extra=None):
     print(f"[JOB {job_id}] {status} ({progress}%) - {step_text}")
     try:
-        # Direct REST update to Firestore (works without auth credentials if open rules or via REST)
+        # Direct REST update to Firestore
         url = f"https://firestore.googleapis.com/v1/projects/epic-yt-gab/databases/(default)/documents/executions/{job_id}?updateMask.fieldPaths=status&updateMask.fieldPaths=progress&updateMask.fieldPaths=step_text"
         fields = {
             "status": {"stringValue": status},
@@ -157,7 +157,7 @@ for idx, job in enumerate(batch_config["jobs"]):
 
     update_job(uid, job_id, "RUNNING", 10, f"Generating AI script for '{title}'...")
 
-    # 1. AI Script Generation (Nemotron Super / Default)
+    # 1. AI Script Generation
     if not script_text or script_text.strip() == "":
         words_est = 80
         if "min" in target_dur.lower():
@@ -287,7 +287,7 @@ print("\\n[BATCH COMPLETED] All videos generated and uploaded successfully. Work
 `;
 }
 
-// 5. Direct Kaggle Batch Dispatcher (Bypasses serverless 404 errors completely)
+// 5. Direct Kaggle Batch Dispatcher (Using Bearer Token Auth)
 export async function launchKaggleBatchDirectly(db, utils, payload) {
     const ts = Math.floor(Date.now() / 1000);
     const batch_id = `batch_${ts}`;
@@ -336,8 +336,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     };
     const workerScript = buildWorkerCode(batchConfig);
 
-    // Push to Kaggle API directly via Basic Auth
-    const authHeader = 'Basic ' + btoa(`${KAGGLE_USERNAME}:${KAGGLE_KEY}`);
+    // Push to Kaggle API using Bearer Token Auth
     const slugName = `epicsync-batch-${ts}`;
 
     const kagglePayload = {
@@ -359,7 +358,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     const res = await fetch('https://www.kaggle.com/api/v1/kernels/push', {
         method: 'POST',
         headers: {
-            'Authorization': authHeader,
+            'Authorization': `Bearer ${KAGGLE_KEY}`,
             'Content-Type': 'application/json'
         },
         body: JSON.stringify(kagglePayload)
