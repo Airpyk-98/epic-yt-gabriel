@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EpicSync — Sign In / Create Account</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Main Container -->
+    <div class="app-wrapper">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <a href="index.html" class="brand">
+                <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                <h1>Epic<span class="accent-text">Sync</span></h1>
+            </a>
+            
+            <div class="header-right">
+                <a href="index.html" class="btn-auth-pill">
+                    <span>← Back to Studio</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Auth Card -->
+        <main class="main-content">
+            
+            <div class="card auth-container">
+                <div class="card-header" style="text-align: center; margin-bottom: 20px;">
+                    <h2>Welcome to EpicSync</h2>
+                    <p class="subtitle" style="margin-bottom: 0;">Sign in or create an account to isolate your video generations and webhook settings.</p>
+                </div>
+
+                <div class="auth-tabs">
+                    <button type="button" class="auth-tab active" id="tabSignIn">Sign In</button>
+                    <button type="button" class="auth-tab" id="tabSignUp">Create Account</button>
+                </div>
+
+                <form id="authForm">
+                    <div class="form-group">
+                        <label for="authEmail">Email Address</label>
+                        <input type="email" id="authEmail" required placeholder="you@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="authPassword">Password</label>
+                        <input type="password" id="authPassword" required placeholder="••••••••">
+                    </div>
+
+                    <div id="authErrorMsg" class="error-msg" style="display: none;"></div>
+
+                    <div style="margin-top: 24px;">
+                        <button type="submit" id="authSubmitBtn" class="btn-launch">
+                            Sign In to Account
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+        </main>
+        
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>EpicSync Studio &bull; Powered by Kaggle CPU &amp; Hugging Face Datasets</p>
+        </footer>
+
+    </div>
+
+    <!-- Script Entry -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
+            authDomain: "epic-yt-gab.firebaseapp.com",
+            projectId: "epic-yt-gab",
+            storageBucket: "epic-yt-gab.appspot.com",
+            messagingSenderId: "113535246997",
+            appId: "1:113535246997:web:c6ce1994e6378c2e684491"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        const tabSignIn = document.getElementById('tabSignIn');
+        const tabSignUp = document.getElementById('tabSignUp');
+        const authForm = document.getElementById('authForm');
+        const authEmail = document.getElementById('authEmail');
+        const authPassword = document.getElementById('authPassword');
+        const authSubmitBtn = document.getElementById('authSubmitBtn');
+        const authErrorMsg = document.getElementById('authErrorMsg');
+
+        let isSignUpMode = false;
+
+        tabSignIn.addEventListener('click', () => {
+            isSignUpMode = false;
+            tabSignIn.classList.add('active');
+            tabSignUp.classList.remove('active');
+            authSubmitBtn.innerText = 'Sign In to Account';
+            authErrorMsg.style.display = 'none';
+        });
+
+        tabSignUp.addEventListener('click', () => {
+            isSignUpMode = true;
+            tabSignUp.classList.add('active');
+            tabSignIn.classList.remove('active');
+            authSubmitBtn.innerText = 'Create New Account';
+            authErrorMsg.style.display = 'none';
+        });
+
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = authEmail.value.trim();
+            const pass = authPassword.value.trim();
+            if (!email || !pass) return;
+
+            authSubmitBtn.disabled = true;
+            authErrorMsg.style.display = 'none';
+
+            try {
+                if (isSignUpMode) {
+                    await createUserWithEmailAndPassword(auth, email, pass);
+                } else {
+                    await signInWithEmailAndPassword(auth, email, pass);
+                }
+                // Redirect back to Studio
+                window.location.href = 'index.html';
+            } catch (err) {
+                authErrorMsg.innerText = err.message;
+                authErrorMsg.style.display = 'block';
+            } finally {
+                authSubmitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

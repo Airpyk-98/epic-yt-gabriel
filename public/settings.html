@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EpicSync — Account & Webhook Settings</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Main Container -->
+    <div class="app-wrapper">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <a href="index.html" class="brand">
+                <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                <h1>Epic<span class="accent-text">Sync</span></h1>
+            </a>
+            
+            <div class="header-right">
+                <a href="login.html" id="userAuthPill" class="btn-auth-pill">
+                    <span class="auth-icon">👤</span>
+                    <span id="userEmailDisplay">Sign In / Register</span>
+                </a>
+                <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">Sign Out</button>
+            </div>
+        </header>
+
+        <!-- Real Multi-Page Navigation Bar -->
+        <nav class="nav-bar">
+            <a href="index.html" class="nav-link">
+                <span class="nav-icon">🎬</span>
+                <span>Creator Studio</span>
+            </a>
+            <a href="logs.html" class="nav-link">
+                <span class="nav-icon">📜</span>
+                <span>Execution Logs</span>
+            </a>
+            <a href="settings.html" class="nav-link active">
+                <span class="nav-icon">⚙️</span>
+                <span>Settings</span>
+            </a>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <section class="card settings-card">
+                <div class="card-header">
+                    <h2>⚙️ Account & Webhook Settings</h2>
+                    <p class="subtitle">Configure your YouTube Dispatch Webhook URL (n8n, Make, or Custom Automation API).</p>
+                </div>
+
+                <form id="settingsForm">
+                    <div class="form-group">
+                        <label for="webhookUrlSetting">YouTube Dispatch Webhook URL</label>
+                        <input type="url" id="webhookUrlSetting" placeholder="https://your-n8n-instance.com/webhook/youtube-publish">
+                        <span class="input-hint">When you click "Push to YouTube" on any video, the title and direct video download link are sent to this URL.</span>
+                    </div>
+
+                    <div class="webhook-test-box">
+                        <div class="payload-preview-header">
+                            <strong>Standard Dispatched Payload Format:</strong>
+                        </div>
+                        <pre class="code-preview"><code>{
+  "event": "youtube_publish_request",
+  "timestamp": 1786903415000,
+  "count": 2,
+  "videos": [
+    {
+      "title": "Top 5 Productivity Secrets in 2026",
+      "video_download_link": "https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/outputs/epicsync_1786903415_0.mp4",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}</code></pre>
+                    </div>
+
+                    <div class="form-actions-row">
+                        <button type="button" id="testWebhookBtn" class="btn-tool">🧪 Test Webhook Connection</button>
+                        <button type="submit" id="saveSettingsBtn" class="btn-launch" style="width: auto; padding: 14px 28px;">💾 Save Webhook URL</button>
+                    </div>
+                    
+                    <div id="settingsStatusMsg" class="status-msg" style="display: none;"></div>
+                </form>
+            </section>
+
+        </main>
+        
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>EpicSync Studio &bull; Powered by Kaggle CPU &amp; Hugging Face Datasets</p>
+        </footer>
+
+    </div>
+
+    <!-- Script Entry -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { initSharedAuth, getUserWebhookUrl } from "./shared.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
+            authDomain: "epic-yt-gab.firebaseapp.com",
+            projectId: "epic-yt-gab",
+            storageBucket: "epic-yt-gab.appspot.com",
+            messagingSenderId: "113535246997",
+            appId: "1:113535246997:web:c6ce1994e6378c2e684491"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const utils = { doc, setDoc, getDoc };
+
+        initSharedAuth(auth, db, utils);
+
+        let currentUser = null;
+        const webhookUrlSetting = document.getElementById('webhookUrlSetting');
+        const settingsForm = document.getElementById('settingsForm');
+        const settingsStatusMsg = document.getElementById('settingsStatusMsg');
+        const testWebhookBtn = document.getElementById('testWebhookBtn');
+
+        auth.onAuthStateChanged(async (user) => {
+            currentUser = user;
+            if (user) {
+                const url = await getUserWebhookUrl(db, utils, user.uid);
+                webhookUrlSetting.value = url;
+            } else {
+                webhookUrlSetting.value = localStorage.getItem('epicsync_yt_webhook') || '';
+            }
+        });
+
+        settingsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = webhookUrlSetting.value.trim();
+
+            if (currentUser) {
+                try {
+                    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'config'), {
+                        webhook_url: url,
+                        updatedAt: new Date()
+                    }, { merge: true });
+                    
+                    settingsStatusMsg.innerText = '✅ Webhook URL saved to your account successfully!';
+                    settingsStatusMsg.style.background = 'rgba(16, 185, 129, 0.15)';
+                    settingsStatusMsg.style.border = '1.5px solid rgba(16, 185, 129, 0.4)';
+                    settingsStatusMsg.style.color = '#34d399';
+                    settingsStatusMsg.style.display = 'block';
+                    setTimeout(() => settingsStatusMsg.style.display = 'none', 3500);
+                } catch (err) {
+                    alert('Error saving settings: ' + err.message);
+                }
+            } else {
+                localStorage.setItem('epicsync_yt_webhook', url);
+                alert('Webhook saved to local browser storage! Sign in to sync across devices.');
+            }
+        });
+
+        testWebhookBtn.addEventListener('click', async () => {
+            const url = webhookUrlSetting.value.trim();
+            if (!url) return alert('Please enter a Webhook URL to test.');
+
+            testWebhookBtn.innerText = '🧪 Testing...';
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        event: 'test_connection',
+                        source: 'EpicSync Studio',
+                        timestamp: Date.now(),
+                        message: 'Connection successfully verified with EpicSync!'
+                    })
+                });
+                alert(`✅ Webhook test sent successfully! Response status: ${res.status}`);
+            } catch (err) {
+                alert(`Webhook connection test notice: ${err.message}\n\n(If you are using n8n or Make, make sure webhook is listening)`);
+            } finally {
+                testWebhookBtn.innerText = '🧪 Test Webhook Connection';
+            }
+        });
+    </script>
+</body>
+</html>

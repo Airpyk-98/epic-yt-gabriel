@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EpicSync — Execution Logs</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Main Container -->
+    <div class="app-wrapper">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <a href="index.html" class="brand">
+                <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                <h1>Epic<span class="accent-text">Sync</span></h1>
+            </a>
+            
+            <div class="header-right">
+                <a href="login.html" id="userAuthPill" class="btn-auth-pill">
+                    <span class="auth-icon">👤</span>
+                    <span id="userEmailDisplay">Sign In / Register</span>
+                </a>
+                <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">Sign Out</button>
+            </div>
+        </header>
+
+        <!-- Real Multi-Page Navigation Bar -->
+        <nav class="nav-bar">
+            <a href="index.html" class="nav-link">
+                <span class="nav-icon">🎬</span>
+                <span>Creator Studio</span>
+            </a>
+            <a href="logs.html" class="nav-link active">
+                <span class="nav-icon">📜</span>
+                <span>Execution Logs</span>
+                <span class="nav-badge" id="totalLogsBadge">0</span>
+            </a>
+            <a href="settings.html" class="nav-link">
+                <span class="nav-icon">⚙️</span>
+                <span>Settings</span>
+            </a>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <section class="card feed-card">
+                <div class="card-header logs-main-header">
+                    <div>
+                        <h2>📜 All Execution Logs</h2>
+                        <p class="subtitle">Complete generation history for your account. Select multiple to push to YouTube via Webhook.</p>
+                    </div>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="logs-actions-toolbar">
+                    <div class="left-actions">
+                        <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select Multiple</button>
+                    </div>
+                    <div class="right-actions">
+                        <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All Logs</button>
+                    </div>
+                </div>
+
+                <!-- Batch Selection Bar (Slides in when items are selected) -->
+                <div id="batchSelectionBar" class="batch-selection-bar" style="display: none;">
+                    <span id="selectedCountText">0 selected</span>
+                    <div class="batch-btns">
+                        <button id="pushBatchYtBtn" class="btn-push-yt">📺 Push Selected to YouTube</button>
+                        <button id="deleteSelectedBtn" class="btn-delete-sel">🗑️ Delete</button>
+                    </div>
+                </div>
+
+                <!-- Logs Feed Container -->
+                <div id="allLogsContainer" class="logs-list">
+                    <div class="empty-state">Loading historical executions...</div>
+                </div>
+            </section>
+
+        </main>
+        
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>EpicSync Studio &bull; Powered by Kaggle CPU &amp; Hugging Face Datasets</p>
+        </footer>
+
+    </div>
+
+    <!-- Script Entry -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, escapeHtml } from "./shared.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
+            authDomain: "epic-yt-gab.firebaseapp.com",
+            projectId: "epic-yt-gab",
+            storageBucket: "epic-yt-gab.appspot.com",
+            messagingSenderId: "113535246997",
+            appId: "1:113535246997:web:c6ce1994e6378c2e684491"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const utils = { doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit, writeBatch, deleteDoc };
+
+        initSharedAuth(auth, db, utils);
+
+        let currentUser = null;
+        let multiSelectMode = false;
+        const selectedJobs = new Map();
+        let allLogsList = [];
+
+        auth.onAuthStateChanged((user) => {
+            currentUser = user;
+            listenToAllLogs(user ? user.uid : null);
+        });
+
+        function listenToAllLogs(uid) {
+            const allContainer = document.getElementById('allLogsContainer');
+            const totalLogsBadge = document.getElementById('totalLogsBadge');
+
+            const colRef = uid 
+                ? collection(db, 'users', uid, 'executions')
+                : collection(db, 'executions');
+
+            const q = query(colRef, limit(150));
+
+            onSnapshot(q, (snapshot) => {
+                const docs = [];
+                snapshot.forEach(d => docs.push({ id: d.id, ...d.data() }));
+
+                docs.sort((a, b) => {
+                    const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0);
+                    const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0);
+                    return timeB - timeA;
+                });
+
+                allLogsList = docs;
+                if (totalLogsBadge) totalLogsBadge.innerText = docs.length;
+
+                renderAllLogs(docs, allContainer);
+            });
+        }
+
+        function renderAllLogs(docs, container) {
+            if (docs.length === 0) {
+                container.innerHTML = '<div class="empty-state">No execution logs found for this account.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            docs.forEach(data => {
+                const status = data.status || 'QUEUED';
+                const progress = data.progress !== undefined ? data.progress : (status === 'SUCCESS' ? 100 : 0);
+                const stepText = data.step_text || 'Waiting for runner...';
+                const outputUrl = data.output_file || '';
+                const jobId = data.job_id || data.id;
+                const isSelected = selectedJobs.has(jobId);
+
+                const card = document.createElement('div');
+                card.className = `video-card ${isSelected ? 'selected' : ''}`;
+                card.dataset.jobId = jobId;
+
+                let checkboxHtml = '';
+                if (multiSelectMode) {
+                    checkboxHtml = `<input type="checkbox" class="card-checkbox" ${isSelected ? 'checked' : ''}>`;
+                }
+
+                card.innerHTML = `
+                    <div class="video-card-top">
+                        ${checkboxHtml}
+                        <div class="video-info">
+                            <span class="video-title">${escapeHtml(data.title || 'Untitled Video')}</span>
+                            <span class="status-badge badge-${status}">${status}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" style="width: ${progress}%;"></div>
+                    </div>
+                    
+                    <div class="step-text">${escapeHtml(stepText)} (${progress}%)</div>
+                    
+                    ${outputUrl ? `
+                        <div class="player-container">
+                            <video src="${outputUrl}" controls playsinline preload="metadata"></video>
+                            <div class="player-actions">
+                                <a href="${outputUrl}" target="_blank" download class="btn-download">⬇️ Download MP4</a>
+                                <button class="btn-yt-single" data-job-id="${jobId}">📺 Push to YouTube</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                `;
+
+                if (multiSelectMode) {
+                    card.addEventListener('click', (e) => {
+                        if (e.target.tagName === 'VIDEO' || e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
+                        toggleJobSelection(jobId, data);
+                    });
+                    const chk = card.querySelector('.card-checkbox');
+                    if (chk) {
+                        chk.addEventListener('change', (e) => {
+                            e.stopPropagation();
+                            toggleJobSelection(jobId, data);
+                        });
+                    }
+                }
+
+                const singleYtBtn = card.querySelector('.btn-yt-single');
+                if (singleYtBtn) {
+                    singleYtBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const webhookUrl = await getUserWebhookUrl(db, utils, currentUser?.uid);
+                        dispatchToWebhook(webhookUrl, [data]);
+                    });
+                }
+
+                container.appendChild(card);
+            });
+
+            updateSelectionBar();
+        }
+
+        // Multi-Select Handlers
+        const toggleMultiSelectBtn = document.getElementById('toggleMultiSelectBtn');
+        const batchSelectionBar = document.getElementById('batchSelectionBar');
+        const selectedCountText = document.getElementById('selectedCountText');
+        const pushBatchYtBtn = document.getElementById('pushBatchYtBtn');
+        const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+
+        toggleMultiSelectBtn.addEventListener('click', () => {
+            multiSelectMode = !multiSelectMode;
+            toggleMultiSelectBtn.classList.toggle('active', multiSelectMode);
+            if (!multiSelectMode) selectedJobs.clear();
+            renderAllLogs(allLogsList, document.getElementById('allLogsContainer'));
+        });
+
+        function toggleJobSelection(jobId, data) {
+            if (selectedJobs.has(jobId)) {
+                selectedJobs.delete(jobId);
+            } else {
+                selectedJobs.set(jobId, {
+                    job_id: jobId,
+                    title: data.title || '',
+                    video_download_link: data.output_file || '',
+                    aspect_ratio: data.aspect_ratio || '9:16'
+                });
+            }
+            renderAllLogs(allLogsList, document.getElementById('allLogsContainer'));
+        }
+
+        function updateSelectionBar() {
+            const count = selectedJobs.size;
+            if (multiSelectMode && count > 0) {
+                batchSelectionBar.style.display = 'flex';
+                selectedCountText.innerText = `${count} video${count > 1 ? 's' : ''} selected`;
+            } else {
+                batchSelectionBar.style.display = 'none';
+            }
+        }
+
+        // Push Selected Batch to YouTube
+        pushBatchYtBtn.addEventListener('click', async () => {
+            const list = Array.from(selectedJobs.values()).filter(v => v.video_download_link);
+            if (list.length === 0) return alert('None of the selected videos have finished generating yet.');
+            const webhookUrl = await getUserWebhookUrl(db, utils, currentUser?.uid);
+            const ok = await dispatchToWebhook(webhookUrl, list);
+            if (ok) {
+                selectedJobs.clear();
+                updateSelectionBar();
+            }
+        });
+
+        // Delete Selected
+        deleteSelectedBtn.addEventListener('click', async () => {
+            if (!confirm(`Are you sure you want to delete ${selectedJobs.size} selected execution(s)?`)) return;
+            try {
+                const batch = writeBatch(db);
+                selectedJobs.forEach((_, jobId) => {
+                    if (currentUser) {
+                        batch.delete(doc(db, 'users', currentUser.uid, 'executions', jobId));
+                    }
+                    batch.delete(doc(db, 'executions', jobId));
+                });
+                await batch.commit();
+                selectedJobs.clear();
+                alert('Selected logs deleted.');
+            } catch (e) {
+                alert('Error deleting: ' + e.message);
+            }
+        });
+
+        // Clear All Logs
+        const clearAllLogsBtn = document.getElementById('clearAllLogsBtn');
+        clearAllLogsBtn.addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to permanently clear ALL execution history for this account?')) return;
+            try {
+                const batch = writeBatch(db);
+                allLogsList.forEach(d => {
+                    if (currentUser) {
+                        batch.delete(doc(db, 'users', currentUser.uid, 'executions', d.id));
+                    }
+                    batch.delete(doc(db, 'executions', d.id));
+                });
+                await batch.commit();
+                selectedJobs.clear();
+                alert('All execution logs cleared.');
+            } catch (e) {
+                alert('Failed to clear logs: ' + e.message);
+            }
+        });
+    </script>
+</body>
+</html>

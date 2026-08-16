@@ -3,39 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EpicSync Studio — Viral Video Automation</title>
+    <title>EpicSync — Creator Studio</title>
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="style.css">
-    
-    <!-- Firebase SDK (Modular) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, orderBy, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
-            authDomain: "epic-yt-gab.firebaseapp.com",
-            projectId: "epic-yt-gab",
-            storageBucket: "epic-yt-gab.appspot.com",
-            messagingSenderId: "113535246997",
-            appId: "1:113535246997:web:c6ce1994e6378c2e684491"
-        };
-        
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        
-        window.auth = auth;
-        window.db = db;
-        window.FirebaseAuth = { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut };
-        window.FirebaseUtils = { collection, doc, setDoc, getDoc, getDocs, onSnapshot, query, orderBy, limit, writeBatch, deleteDoc };
-    </script>
 </head>
 <body>
 
@@ -44,303 +19,213 @@
         
         <!-- Header -->
         <header class="app-header">
-            <div class="header-left">
-                <div class="brand">
-                    <span class="brand-badge">⚡ PEXELS CLOUD</span>
-                    <h1>Epic<span class="accent-text">Sync</span></h1>
-                </div>
-            </div>
+            <a href="index.html" class="brand">
+                <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                <h1>Epic<span class="accent-text">Sync</span></h1>
+            </a>
             
             <div class="header-right">
-                <!-- User Account Profile / Auth Pill -->
-                <div id="userAccountSection">
-                    <button id="openAuthModalBtn" class="btn-auth-pill">
-                        <span class="auth-icon">👤</span>
-                        <span id="userEmailDisplay">Sign In / Register</span>
-                    </button>
-                    <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">🚪</button>
-                </div>
+                <a href="login.html" id="userAuthPill" class="btn-auth-pill">
+                    <span class="auth-icon">👤</span>
+                    <span id="userEmailDisplay">Sign In / Register</span>
+                </a>
+                <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">Sign Out</button>
             </div>
         </header>
 
-        <!-- Navigation Bar (3 Distinct Pages) -->
+        <!-- Real Multi-Page Navigation Bar -->
         <nav class="nav-bar">
-            <button class="nav-btn active" id="navStudioBtn" data-target="studioView">
+            <a href="index.html" class="nav-link active">
                 <span class="nav-icon">🎬</span>
-                <span class="nav-label">Studio</span>
-            </button>
-            <button class="nav-btn" id="navLogsBtn" data-target="logsView">
+                <span>Creator Studio</span>
+            </a>
+            <a href="logs.html" class="nav-link">
                 <span class="nav-icon">📜</span>
-                <span class="nav-label">Execution Logs</span>
+                <span>Execution Logs</span>
                 <span class="nav-badge" id="totalLogsBadge">0</span>
-            </button>
-            <button class="nav-btn" id="navSettingsBtn" data-target="settingsView">
+            </a>
+            <a href="settings.html" class="nav-link">
                 <span class="nav-icon">⚙️</span>
-                <span class="nav-label">Settings</span>
-            </button>
+                <span>Settings</span>
+            </a>
         </nav>
 
-        <!-- Main Content Area -->
+        <!-- Main Studio Content -->
         <main class="main-content">
             
-            <!-- PAGE 1: CREATOR STUDIO -->
-            <div id="studioView" class="view-panel active">
-                
-                <!-- Batch Creator Card -->
-                <section class="card creator-card">
-                    <div class="card-header">
-                        <h2>🎬 Create Video Batch</h2>
-                        <p class="subtitle">Enter one title per line. Videos are generated on-demand on Kaggle CPU (0 GPU quota).</p>
+            <!-- Video Batch Creator Card -->
+            <section class="card creator-card">
+                <div class="card-header">
+                    <h2>🎬 Create Video Batch</h2>
+                    <p class="subtitle">Enter one title per line. Videos are generated sequentially on Kaggle CPU (0 GPU quota used).</p>
+                </div>
+
+                <form id="createBatchForm">
+                    
+                    <!-- Titles Input -->
+                    <div class="form-group">
+                        <label for="videoTitles">Video Titles <span class="required">*</span></label>
+                        <textarea id="videoTitles" rows="4" placeholder="Top 5 Productivity Secrets in 2026&#10;How to Master Deep Focus Fast&#10;The Science of Viral Habits" required></textarea>
+                        <span class="input-hint">Each line is processed as a separate full video.</span>
                     </div>
 
-                    <form id="createBatchForm">
-                        
-                        <!-- Titles Input -->
-                        <div class="form-group">
-                            <label for="videoTitles">Video Titles <span class="required">*</span></label>
-                            <textarea id="videoTitles" rows="4" placeholder="Top 5 Productivity Secrets in 2026&#10;How to Master Deep Focus Fast&#10;The Science of Viral Habits" required></textarea>
-                            <span class="input-hint">Each line will be compiled as a separate full video.</span>
+                    <!-- Manual Script Override -->
+                    <div class="form-group">
+                        <div class="toggle-row">
+                            <label for="manualScriptToggle">Manual Script Override</label>
+                            <label class="switch">
+                                <input type="checkbox" id="manualScriptToggle">
+                                <span class="slider round"></span>
+                            </label>
                         </div>
-
-                        <!-- Manual Script Override -->
-                        <div class="form-group">
-                            <div class="toggle-row">
-                                <label for="manualScriptToggle">Manual Script Override</label>
-                                <label class="switch">
-                                    <input type="checkbox" id="manualScriptToggle">
-                                    <span class="slider round"></span>
-                                </label>
-                            </div>
-                            <div id="manualScriptArea" style="display: none; margin-top: 10px;">
-                                <textarea id="manualScriptText" rows="4" placeholder="Type or paste your exact voiceover script here..."></textarea>
-                            </div>
+                        <div id="manualScriptArea" style="display: none; margin-top: 12px;">
+                            <textarea id="manualScriptText" rows="4" placeholder="Type or paste your exact voiceover script here..."></textarea>
                         </div>
+                    </div>
 
-                        <!-- Aspect Ratio -->
-                        <div class="form-group">
-                            <label>Aspect Ratio</label>
-                            <div class="aspect-ratio-grid">
-                                <label class="aspect-card active" id="aspectPortraitLabel">
-                                    <input type="radio" name="aspectRatio" value="9:16" checked>
-                                    <div class="aspect-visual aspect-9-16"></div>
-                                    <div class="aspect-details">
-                                        <strong>📱 9:16 Shorts</strong>
-                                        <span>Reels, TikTok, YouTube Shorts (1080×1920)</span>
-                                    </div>
-                                </label>
-                                <label class="aspect-card" id="aspectLandscapeLabel">
-                                    <input type="radio" name="aspectRatio" value="16:9">
-                                    <div class="aspect-visual aspect-16-9"></div>
-                                    <div class="aspect-details">
-                                        <strong>🖥️ 16:9 Landscape</strong>
-                                        <span>Full YouTube Video (1920×1080)</span>
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Target Duration (Prominent & Clear Unit Controls) -->
-                        <div class="form-group">
-                            <label>Target Video Duration</label>
-                            <div class="duration-panel">
-                                <div class="unit-selector-pills">
-                                    <button type="button" class="unit-pill active" id="unitSecondsBtn">
-                                        <span class="pill-icon">⚡</span>
-                                        <span>Seconds</span>
-                                    </button>
-                                    <button type="button" class="unit-pill" id="unitMinutesBtn">
-                                        <span class="pill-icon">⏱️</span>
-                                        <span>Minutes</span>
-                                    </button>
+                    <!-- Aspect Ratio Cards -->
+                    <div class="form-group">
+                        <label>Aspect Ratio</label>
+                        <div class="aspect-ratio-grid">
+                            <label class="aspect-card active" id="aspectPortraitLabel">
+                                <input type="radio" name="aspectRatio" value="9:16" checked>
+                                <div class="aspect-visual aspect-9-16"></div>
+                                <div class="aspect-details">
+                                    <strong>📱 9:16 Shorts</strong>
+                                    <span>Reels, TikTok, YouTube Shorts (1080×1920)</span>
                                 </div>
-                                
-                                <div class="duration-input-row">
-                                    <div class="number-stepper">
-                                        <button type="button" class="stepper-btn" id="stepDownBtn">-</button>
-                                        <input type="number" id="durationValueInput" min="5" max="3600" value="45" required>
-                                        <button type="button" class="stepper-btn" id="stepUpBtn">+</button>
-                                    </div>
-                                    <div class="duration-calc-badge" id="durationCalcBadge">
-                                        🎯 ~80 words (Viral Shorts)
-                                    </div>
+                            </label>
+                            <label class="aspect-card" id="aspectLandscapeLabel">
+                                <input type="radio" name="aspectRatio" value="16:9">
+                                <div class="aspect-visual aspect-16-9"></div>
+                                <div class="aspect-details">
+                                    <strong>🖥️ 16:9 Landscape</strong>
+                                    <span>Full YouTube Video (1920×1080)</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Target Duration (Prominent & Chunky Unit Controls) -->
+                    <div class="form-group">
+                        <label>Target Video Duration</label>
+                        <div class="duration-panel">
+                            <div class="unit-selector-pills">
+                                <button type="button" class="unit-pill active" id="unitSecondsBtn">
+                                    <span class="pill-icon">⚡</span>
+                                    <span>Seconds</span>
+                                </button>
+                                <button type="button" class="unit-pill" id="unitMinutesBtn">
+                                    <span class="pill-icon">⏱️</span>
+                                    <span>Minutes</span>
+                                </button>
+                            </div>
+                            
+                            <div class="duration-input-row">
+                                <div class="number-stepper">
+                                    <button type="button" class="stepper-btn" id="stepDownBtn">-</button>
+                                    <input type="number" id="durationValueInput" min="5" max="3600" value="45" required>
+                                    <button type="button" class="stepper-btn" id="stepUpBtn">+</button>
+                                </div>
+                                <div class="duration-calc-badge" id="durationCalcBadge">
+                                    🎯 ~80 words (Viral 45s Shorts)
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Voice Model -->
-                        <div class="form-group">
-                            <label for="voiceSelect">Narrator Voice</label>
-                            <select id="voiceSelect">
-                                <option value="relationship-male" selected>🎙️ Guy (Confident & Storyteller)</option>
-                                <option value="energetic-male">🔥 Christopher (Energetic & Dynamic)</option>
-                                <option value="soft-female">🌸 Jenny (Warm & Narrative Female)</option>
-                                <option value="professional-female">✨ Aria (Professional & Clean Female)</option>
-                            </select>
-                        </div>
+                    <!-- Voice Model -->
+                    <div class="form-group">
+                        <label for="voiceSelect">Narrator Voice</label>
+                        <select id="voiceSelect">
+                            <option value="relationship-male" selected>🎙️ Guy (Confident & Storyteller)</option>
+                            <option value="energetic-male">🔥 Christopher (Energetic & Dynamic)</option>
+                            <option value="soft-female">🌸 Jenny (Warm & Narrative Female)</option>
+                            <option value="professional-female">✨ Aria (Professional & Clean Female)</option>
+                        </select>
+                    </div>
 
-                        <!-- Presets & Styling Accordion -->
-                        <details class="advanced-accordion">
-                            <summary>🎨 Visual Styling & Audio Presets</summary>
-                            <div class="accordion-content">
-                                
-                                <div class="form-row">
-                                    <div class="form-group flex-1">
-                                        <label for="gridColorInput">Focus Grid Color</label>
-                                        <input type="color" id="gridColorInput" value="#ffffff">
-                                    </div>
-                                    <div class="form-group flex-1">
-                                        <label for="captionColorInput">Caption Color</label>
-                                        <input type="color" id="captionColorInput" value="#ffffff">
-                                    </div>
+                    <!-- Presets & Styling Accordion -->
+                    <details class="advanced-accordion">
+                        <summary>🎨 Visual Styling & Audio Presets</summary>
+                        <div class="accordion-content">
+                            
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="gridColorInput">Focus Grid Color</label>
+                                    <input type="color" id="gridColorInput" value="#ffffff">
                                 </div>
-
-                                <div class="form-row">
-                                    <div class="form-group flex-1">
-                                        <label for="fontSizeInput">Caption Font Size</label>
-                                        <input type="number" id="fontSizeInput" value="60" min="20" max="120">
-                                    </div>
-                                    <div class="form-group flex-1">
-                                        <label for="fontYPosInput">Caption Y-Position (%)</label>
-                                        <div class="slider-val-row">
-                                            <input type="range" id="fontYPosInput" min="10" max="95" value="83">
-                                            <span id="fontYPosVal">83%</span>
-                                        </div>
-                                    </div>
+                                <div class="form-group flex-1">
+                                    <label for="captionColorInput">Caption Color</label>
+                                    <input type="color" id="captionColorInput" value="#ffffff">
                                 </div>
-
-                                <div class="form-row">
-                                    <div class="form-group flex-1">
-                                        <label for="voiceBoostInput">Voice Boost (%)</label>
-                                        <div class="slider-val-row">
-                                            <input type="range" id="voiceBoostInput" min="50" max="250" value="120">
-                                            <span id="voiceBoostVal">120%</span>
-                                        </div>
-                                    </div>
-                                    <div class="form-group flex-1">
-                                        <label for="bgmVolumeInput">BGM Volume (%)</label>
-                                        <div class="slider-val-row">
-                                            <input type="range" id="bgmVolumeInput" min="0" max="100" value="15">
-                                            <span id="bgmVolumeVal">15%</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <div class="toggle-row">
-                                        <label for="addGridToggle">Enable 9:16 Focus Grid Rectangle</label>
-                                        <label class="switch">
-                                            <input type="checkbox" id="addGridToggle" checked>
-                                            <span class="slider round"></span>
-                                        </label>
-                                    </div>
-                                </div>
-
                             </div>
-                        </details>
 
-                        <!-- Launch Button -->
-                        <button type="submit" id="submitBatchBtn" class="btn-launch">
-                            🚀 Launch EpicSync Pexels Run
-                        </button>
-                    </form>
-                </section>
-
-                <!-- Current Batch Live Feed (Isolated to Active Batch) -->
-                <section class="card feed-card">
-                    <div class="card-header feed-header">
-                        <div>
-                            <h2>📊 Current Batch Live Feed</h2>
-                            <p class="subtitle" id="currentBatchSubtitle">Live execution stream for your active batch.</p>
-                        </div>
-                        <button id="clearCurrentFeedBtn" class="btn-tool-sm">🧹 Clear Feed</button>
-                    </div>
-
-                    <div id="currentBatchLogsContainer" class="logs-list">
-                        <div class="empty-state">No batch currently active. Launch a batch above!</div>
-                    </div>
-                </section>
-
-            </div>
-
-            <!-- PAGE 2: EXECUTION LOGS (HISTORY & BATCH ACTIONS) -->
-            <div id="logsView" class="view-panel">
-                
-                <section class="card feed-card">
-                    <div class="card-header logs-main-header">
-                        <div>
-                            <h2>📜 All Execution Logs</h2>
-                            <p class="subtitle">Complete generation history for your account. Select multiple to push to YouTube.</p>
-                        </div>
-                    </div>
-
-                    <!-- Action Bar -->
-                    <div class="logs-actions-toolbar">
-                        <div class="left-actions">
-                            <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select Multiple</button>
-                        </div>
-                        <div class="right-actions">
-                            <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All Logs</button>
-                        </div>
-                    </div>
-
-                    <!-- Batch Selection Bar (Slides in when videos are selected) -->
-                    <div id="batchSelectionBar" class="batch-selection-bar" style="display: none;">
-                        <span id="selectedCountText">0 selected</span>
-                        <div class="batch-btns">
-                            <button id="pushBatchYtBtn" class="btn-push-yt">📺 Push Selected to YouTube</button>
-                            <button id="deleteSelectedBtn" class="btn-delete-sel">🗑️ Delete</button>
-                        </div>
-                    </div>
-
-                    <div id="allLogsContainer" class="logs-list">
-                        <div class="empty-state">Loading executions...</div>
-                    </div>
-                </section>
-
-            </div>
-
-            <!-- PAGE 3: SETTINGS -->
-            <div id="settingsView" class="view-panel">
-                
-                <section class="card settings-card">
-                    <div class="card-header">
-                        <h2>⚙️ Account & Webhook Settings</h2>
-                        <p class="subtitle">Configure your YouTube Dispatch Webhook (n8n, Make, or Custom API).</p>
-                    </div>
-
-                    <form id="settingsForm">
-                        <div class="form-group">
-                            <label for="webhookUrlSetting">YouTube Dispatch Webhook URL</label>
-                            <input type="url" id="webhookUrlSetting" placeholder="https://your-n8n.com/webhook/youtube-publish">
-                            <span class="input-hint">When you click "Push to YouTube", the video title and direct download link are dispatched to this endpoint.</span>
-                        </div>
-
-                        <div class="webhook-test-box">
-                            <div class="payload-preview-header">
-                                <strong>Payload Format Dispatched:</strong>
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="fontSizeInput">Caption Font Size</label>
+                                    <input type="number" id="fontSizeInput" value="60" min="20" max="120">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="fontYPosInput">Caption Y-Position (%)</label>
+                                    <div class="slider-val-row">
+                                        <input type="range" id="fontYPosInput" min="10" max="95" value="83">
+                                        <span id="fontYPosVal">83%</span>
+                                    </div>
+                                </div>
                             </div>
-                            <pre class="code-preview"><code>{
-  "event": "youtube_publish_request",
-  "videos": [
-    {
-      "title": "Top 5 AI Secrets",
-      "video_download_link": "https://huggingface.co/.../output.mp4",
-      "aspect_ratio": "9:16"
-    }
-  ]
-}</code></pre>
-                        </div>
 
-                        <div class="form-actions-row">
-                            <button type="button" id="testWebhookBtn" class="btn-tool">🧪 Test Webhook</button>
-                            <button type="submit" id="saveSettingsBtn" class="btn-launch" style="width: auto; padding: 10px 24px;">💾 Save Settings</button>
-                        </div>
-                        
-                        <div id="settingsStatusMsg" class="status-msg" style="display: none;"></div>
-                    </form>
-                </section>
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="voiceBoostInput">Voice Boost (%)</label>
+                                    <div class="slider-val-row">
+                                        <input type="range" id="voiceBoostInput" min="50" max="250" value="120">
+                                        <span id="voiceBoostVal">120%</span>
+                                    </div>
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="bgmVolumeInput">BGM Volume (%)</label>
+                                    <div class="slider-val-row">
+                                        <input type="range" id="bgmVolumeInput" min="0" max="100" value="15">
+                                        <span id="bgmVolumeVal">15%</span>
+                                    </div>
+                                </div>
+                            </div>
 
-            </div>
+                            <div class="form-group">
+                                <div class="toggle-row">
+                                    <label for="addGridToggle">Enable 9:16 Focus Grid Rectangle</label>
+                                    <label class="switch">
+                                        <input type="checkbox" id="addGridToggle" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                        </div>
+                    </details>
+
+                    <!-- Large Glowing Launch Button -->
+                    <button type="submit" id="submitBatchBtn" class="btn-launch">
+                        🚀 Launch EpicSync Pexels Run
+                    </button>
+                </form>
+            </section>
+
+            <!-- Current Batch Live Feed (Isolated to Active Batch) -->
+            <section class="card feed-card" style="margin-top: 20px;">
+                <div class="card-header feed-header">
+                    <div>
+                        <h2>📊 Current Batch Live Feed</h2>
+                        <p class="subtitle" id="currentBatchSubtitle">Showing latest triggered batch (persisted across page refresh).</p>
+                    </div>
+                    <button id="clearCurrentFeedBtn" class="btn-tool">🧹 Clear Current Feed</button>
+                </div>
+
+                <div id="currentBatchLogsContainer" class="logs-list">
+                    <div class="empty-state">No batch currently active. Submit titles above to start generating!</div>
+                </div>
+            </section>
 
         </main>
         
@@ -351,35 +236,305 @@
 
     </div>
 
-    <!-- Authentication Modal (Sign In / Register) -->
-    <div id="authModal" class="modal-overlay" style="display: none;">
-        <div class="modal-content auth-modal-box">
-            <div class="auth-tabs">
-                <button type="button" class="auth-tab active" id="tabSignIn">Sign In</button>
-                <button type="button" class="auth-tab" id="tabSignUp">Create Account</button>
-            </div>
-            
-            <form id="authForm">
-                <div class="form-group">
-                    <label for="authEmail">Email Address</label>
-                    <input type="email" id="authEmail" required placeholder="you@example.com">
-                </div>
-                <div class="form-group">
-                    <label for="authPassword">Password</label>
-                    <input type="password" id="authPassword" required placeholder="••••••••">
-                </div>
-                
-                <div id="authErrorMsg" class="error-msg" style="display: none;"></div>
-                
-                <div class="modal-actions mt-3">
-                    <button type="submit" id="authSubmitBtn" class="btn-launch">Sign In</button>
-                    <button type="button" id="closeAuthModalBtn" class="btn-tool">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <!-- Script Entry -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, escapeHtml } from "./shared.js";
 
-    <!-- App JavaScript -->
-    <script src="app.js?v=20260816_v6" type="module"></script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
+            authDomain: "epic-yt-gab.firebaseapp.com",
+            projectId: "epic-yt-gab",
+            storageBucket: "epic-yt-gab.appspot.com",
+            messagingSenderId: "113535246997",
+            appId: "1:113535246997:web:c6ce1994e6378c2e684491"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const utils = { doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit };
+
+        initSharedAuth(auth, db, utils);
+
+        let currentUser = null;
+        let currentDurationUnit = 'seconds';
+
+        // 1. Aspect Ratio Cards Toggle
+        const aspectCards = document.querySelectorAll('.aspect-card');
+        aspectCards.forEach(card => {
+            card.addEventListener('click', () => {
+                aspectCards.forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                const radio = card.querySelector('input[type="radio"]');
+                if (radio) radio.checked = true;
+            });
+        });
+
+        // 2. Duration Selector Logic
+        const unitSecondsBtn = document.getElementById('unitSecondsBtn');
+        const unitMinutesBtn = document.getElementById('unitMinutesBtn');
+        const durationValueInput = document.getElementById('durationValueInput');
+        const durationCalcBadge = document.getElementById('durationCalcBadge');
+        const stepDownBtn = document.getElementById('stepDownBtn');
+        const stepUpBtn = document.getElementById('stepUpBtn');
+
+        function updateDurationDisplay() {
+            const val = parseFloat(durationValueInput.value) || 0;
+            if (currentDurationUnit === 'seconds') {
+                const words = Math.max(25, Math.round(val * 2.2));
+                durationCalcBadge.innerText = `🎯 ~${words} words (Viral ${val}s Shorts)`;
+            } else {
+                const words = Math.max(50, Math.round(val * 135));
+                durationCalcBadge.innerText = `🎯 ~${words} words (${val} min Explainer)`;
+            }
+        }
+
+        unitSecondsBtn.addEventListener('click', () => {
+            currentDurationUnit = 'seconds';
+            unitSecondsBtn.classList.add('active');
+            unitMinutesBtn.classList.remove('active');
+            if (parseFloat(durationValueInput.value) <= 10) durationValueInput.value = 45;
+            updateDurationDisplay();
+        });
+
+        unitMinutesBtn.addEventListener('click', () => {
+            currentDurationUnit = 'minutes';
+            unitMinutesBtn.classList.add('active');
+            unitSecondsBtn.classList.remove('active');
+            if (parseFloat(durationValueInput.value) > 10) durationValueInput.value = 3;
+            updateDurationDisplay();
+        });
+
+        stepDownBtn.addEventListener('click', () => {
+            const current = parseFloat(durationValueInput.value) || 1;
+            const step = currentDurationUnit === 'seconds' ? 5 : 1;
+            durationValueInput.value = Math.max(1, current - step);
+            updateDurationDisplay();
+        });
+
+        stepUpBtn.addEventListener('click', () => {
+            const current = parseFloat(durationValueInput.value) || 1;
+            const step = currentDurationUnit === 'seconds' ? 5 : 1;
+            durationValueInput.value = current + step;
+            updateDurationDisplay();
+        });
+
+        durationValueInput.addEventListener('input', updateDurationDisplay);
+
+        // 3. UI Sliders & Manual Script Toggle
+        const fontYPosInput = document.getElementById('fontYPosInput');
+        const fontYPosVal = document.getElementById('fontYPosVal');
+        if (fontYPosInput && fontYPosVal) {
+            fontYPosInput.addEventListener('input', (e) => fontYPosVal.innerText = `${e.target.value}%`);
+        }
+
+        const voiceBoostInput = document.getElementById('voiceBoostInput');
+        const voiceBoostVal = document.getElementById('voiceBoostVal');
+        if (voiceBoostInput && voiceBoostVal) {
+            voiceBoostInput.addEventListener('input', (e) => voiceBoostVal.innerText = `${e.target.value}%`);
+        }
+
+        const bgmVolumeInput = document.getElementById('bgmVolumeInput');
+        const bgmVolumeVal = document.getElementById('bgmVolumeVal');
+        if (bgmVolumeInput && bgmVolumeVal) {
+            bgmVolumeInput.addEventListener('input', (e) => bgmVolumeVal.innerText = `${e.target.value}%`);
+        }
+
+        const manualScriptToggle = document.getElementById('manualScriptToggle');
+        const manualScriptArea = document.getElementById('manualScriptArea');
+        if (manualScriptToggle && manualScriptArea) {
+            manualScriptToggle.addEventListener('change', (e) => {
+                manualScriptArea.style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
+
+        // 4. Listen to Executions & Live Current Batch
+        let activeUnsubscribe = null;
+
+        auth.onAuthStateChanged((user) => {
+            currentUser = user;
+            listenToExecutions(user ? user.uid : null);
+        });
+
+        function listenToExecutions(uid) {
+            if (activeUnsubscribe) {
+                activeUnsubscribe();
+                activeUnsubscribe = null;
+            }
+
+            const currentContainer = document.getElementById('currentBatchLogsContainer');
+            const totalLogsBadge = document.getElementById('totalLogsBadge');
+
+            const colRef = uid 
+                ? collection(db, 'users', uid, 'executions')
+                : collection(db, 'executions');
+
+            const q = query(colRef, limit(100));
+
+            activeUnsubscribe = onSnapshot(q, (snapshot) => {
+                const docs = [];
+                snapshot.forEach(d => docs.push({ id: d.id, ...d.data() }));
+
+                docs.sort((a, b) => {
+                    const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0);
+                    const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0);
+                    return timeB - timeA;
+                });
+
+                if (totalLogsBadge) totalLogsBadge.innerText = docs.length;
+
+                // Active Batch ID
+                const storageKey = uid ? `epicsync_batch_${uid}` : 'epicsync_active_batch_id';
+                let activeBatchId = localStorage.getItem(storageKey);
+                if (!activeBatchId && docs.length > 0) {
+                    activeBatchId = docs[0].batch_id || '';
+                    if (activeBatchId) localStorage.setItem(storageKey, activeBatchId);
+                }
+
+                const currentDocs = activeBatchId ? docs.filter(d => d.batch_id === activeBatchId) : [];
+                renderCurrentBatch(currentDocs, currentContainer, activeBatchId);
+            });
+        }
+
+        function renderCurrentBatch(docs, container, batchId) {
+            const subtitle = document.getElementById('currentBatchSubtitle');
+            if (subtitle && batchId) subtitle.innerText = `Active Batch: ${batchId}`;
+
+            if (docs.length === 0) {
+                container.innerHTML = '<div class="empty-state">No batch currently active. Submit titles above to start!</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            docs.forEach(data => {
+                const status = data.status || 'QUEUED';
+                const progress = data.progress !== undefined ? data.progress : (status === 'SUCCESS' ? 100 : 0);
+                const stepText = data.step_text || 'Waiting for runner...';
+                const outputUrl = data.output_file || '';
+
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                card.innerHTML = `
+                    <div class="video-card-top">
+                        <div class="video-info">
+                            <span class="video-title">${escapeHtml(data.title || 'Untitled Video')}</span>
+                            <span class="status-badge badge-${status}">${status}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" style="width: ${progress}%;"></div>
+                    </div>
+                    
+                    <div class="step-text">${escapeHtml(stepText)} (${progress}%)</div>
+                    
+                    ${outputUrl ? `
+                        <div class="player-container">
+                            <video src="${outputUrl}" controls playsinline preload="metadata"></video>
+                            <div class="player-actions">
+                                <a href="${outputUrl}" target="_blank" download class="btn-download">⬇️ Download MP4</a>
+                                <button class="btn-yt-single" data-job-id="${data.job_id || data.id}">📺 Push to YouTube</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                `;
+
+                const ytBtn = card.querySelector('.btn-yt-single');
+                if (ytBtn) {
+                    ytBtn.addEventListener('click', async () => {
+                        const webhookUrl = await getUserWebhookUrl(db, utils, currentUser?.uid);
+                        dispatchToWebhook(webhookUrl, [data]);
+                    });
+                }
+
+                container.appendChild(card);
+            });
+        }
+
+        // Clear Current Feed Button
+        const clearCurrentFeedBtn = document.getElementById('clearCurrentFeedBtn');
+        clearCurrentFeedBtn.addEventListener('click', () => {
+            const storageKey = currentUser ? `epicsync_batch_${currentUser.uid}` : 'epicsync_active_batch_id';
+            localStorage.removeItem(storageKey);
+            document.getElementById('currentBatchLogsContainer').innerHTML = '<div class="empty-state">Current feed cleared. Launch a new batch above!</div>';
+            document.getElementById('currentBatchSubtitle').innerText = 'Feed cleared.';
+        });
+
+        // 5. Submit Batch Creation
+        const createBatchForm = document.getElementById('createBatchForm');
+        const submitBatchBtn = document.getElementById('submitBatchBtn');
+
+        createBatchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const titlesRaw = document.getElementById('videoTitles').value.trim();
+            if (!titlesRaw) return alert('Please enter at least one title.');
+
+            const titles = titlesRaw.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+            if (titles.length === 0) return alert('Please enter valid titles.');
+
+            const isManual = manualScriptToggle?.checked;
+            const manualScript = document.getElementById('manualScriptText')?.value?.trim() || '';
+            if (isManual && !manualScript) return alert('Please enter your manual script.');
+
+            const durationVal = durationValueInput.value || '45';
+            const formattedDuration = `${durationVal} ${currentDurationUnit}`;
+            const selectedAspect = document.querySelector('input[name="aspectRatio"]:checked')?.value || '9:16';
+
+            const payload = {
+                uid: currentUser?.uid || '',
+                titles: titles,
+                script: isManual ? manualScript : '',
+                aspect_ratio: selectedAspect,
+                target_duration: formattedDuration,
+                voice: document.getElementById('voiceSelect').value,
+                grid_color: document.getElementById('gridColorInput').value,
+                caption_color: document.getElementById('captionColorInput').value,
+                font_size: document.getElementById('fontSizeInput').value,
+                font_y_pos: document.getElementById('fontYPosInput').value,
+                voice_boost: document.getElementById('voiceBoostInput').value,
+                bgm_volume: document.getElementById('bgmVolumeInput').value,
+                add_grid: document.getElementById('addGridToggle').checked ? 'true' : 'false',
+                add_captions: 'true'
+            };
+
+            submitBatchBtn.innerText = `🚀 Launching ${titles.length} Video(s)...`;
+            submitBatchBtn.disabled = true;
+
+            try {
+                const res = await fetch('/api/launch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    const storageKey = currentUser ? `epicsync_batch_${currentUser.uid}` : 'epicsync_active_batch_id';
+                    localStorage.setItem(storageKey, data.batch_id);
+
+                    document.getElementById('currentBatchLogsContainer').innerHTML = '<div class="empty-state">🚀 Batch queued! Kaggle CPU worker is initializing...</div>';
+                    alert(`🚀 Successfully launched batch of ${titles.length} video(s)! Watching real-time stream below.`);
+                    document.getElementById('videoTitles').value = '';
+                    if (manualScriptArea) document.getElementById('manualScriptText').value = '';
+                } else {
+                    alert(`Failed to launch: ${data.error || 'Unknown error'}`);
+                }
+            } catch (err) {
+                console.error("Batch launch error:", err);
+                alert(`Network error launching batch: ${err.message}`);
+            } finally {
+                submitBatchBtn.innerText = '🚀 Launch EpicSync Pexels Run';
+                submitBatchBtn.disabled = false;
+            }
+        });
+
+        // Initialize
+        updateDurationDisplay();
+    </script>
 </body>
 </html>
