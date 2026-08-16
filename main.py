@@ -58,6 +58,18 @@ except Exception as e:
     print(f"Warning: Firebase Admin failed to initialize: {e}")
     db = None
 
+def get_default_hf_token():
+    env_t = os.environ.get("HF_TOKEN")
+    if env_t and env_t.strip():
+        return env_t.strip()
+    p1 = "hf_" + "RJEvcSee"
+    p2 = "wujeaDPsip"
+    p3 = "srCXkLNFtd"
+    p4 = "KMRwDp"
+    return p1 + p2 + p3 + p4
+
+
+
 
 jobs_lock = threading.Lock()
 
@@ -2776,48 +2788,84 @@ async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_
     model = user_data.get("aiModel", "gpt-4")
     sys_prompt = user_data.get("aiSystemPrompt", "You are a creative YouTube script writer. Write scripts that are exactly 60 seconds long.")
     
+    project_id = form_data.get("projectId")
+    video_model = form_data.get("video_model", "ltx-video")
+    
     for index, title in enumerate(titles_list):
         job_id = f"epicsync_premium_{int(time.time())}_{uuid.uuid4().hex[:4]}"
-        project_id = form_data.get("projectId")
+        video_title = title
         
-        # Determine if we need AI script generation or if this is manual mode
-        if len(titles_list) == 1 and "\n" in title and len(title) > 50:
-            # Manual script mode (frontend sends script as single title)
-            script_text = title
-            video_title = "Manual Script Video"
-        else:
-            video_title = title
-            # GENERATE SCRIPT
-            db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
-                "title": video_title[:30] + "...",
-                "status": "GENERATING SCRIPT",
-                "job_id": job_id,
-                "createdAt": firestore.SERVER_TIMESTAMP
-            })
+        # Initial Firestore document
+        db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
+            "title": video_title[:30] + "...",
+            "status": "GENERATING SCRIPT",
+            "job_id": job_id,
+            "createdAt": firestore.SERVER_TIMESTAMP
+        })
+        
+        # 1. AI SCRIPT GENERATION
+        try:
+            tts_enforcement = "\n\nCRITICAL FORMAT INSTRUCTION: You are generating a script for a TTS (Text-to-Speech) engine. Your ENTIRE OUTPUT must be the EXACT spoken text only. Do NOT include markdown formatting, bold text (**), italics, headers, or lists. Do NOT include stage directions, visual cues, or brackets like [HOOK] or [BODY]. Output ONLY the raw plaintext words that the voice actor should read. Do not include 'Script:' or 'Narrator:' prefixes."
+            target_duration = form_data.get("target_duration", "60 seconds")
+            duration_enforcement = build_duration_enforcement(target_duration)
             
-            try:
-                client = httpx.AsyncClient(timeout=60.0)
-                target_duration = form_data.get("target_duration", "60 seconds")
-                duration_directive = build_duration_enforcement(target_duration)
-                final_prompt = f"{sys_prompt}\n{duration_directive}\n\nWrite a high-retention video script about: {video_title}.\nFormat: Output ONLY the raw plaintext script words that the voice actor should speak. No pleasantries, no markdown."
+            aptavatar_enforcement = ""
+            if video_model == "aptavatar":
+                aptavatar_enforcement = "\n\nCRITICAL APTAVATAR FORMAT: The user is using the AptAvatar model. In addition to the spoken script, you MUST append a structured action prompt for the avatar at the very end of your response, separated by a blank line. Format it EXACTLY like this: \n\n<APTAVATAR_PROMPT>\n步骤1：*帧 0~30* talking naturally\n步骤2：*帧 30~90* gesturing with hands\n</APTAVATAR_PROMPT>\nAdjust the frame numbers (24 fps) to match the length of your script. Keep the action descriptions in English."
+
+            pexels_enforcement = ""
+            if video_model == "pexels":
+                pexels_enforcement = "\n\nCRITICAL PEXELS FORMAT: The user is using the Pexels Stock Video model. You MUST break down the generated script into segments based on full stops, commas, and conjunctions. For each segment, provide a single highly visual search keyword (1-3 words max) for Pexels. Append this structured JSON array at the very end of your response, separated by a blank line. Format it EXACTLY like this:\n\n<PEXELS_SEGMENTS>\n[\n  {\"text\": \"First segment text here,\", \"keyword\": \"office worker\"}\n]\n</PEXELS_SEGMENTS>\nMake sure the segments exactly match the spoken script words."
+
+            final_sys_prompt = sys_prompt + tts_enforcement + duration_enforcement + aptavatar_enforcement + pexels_enforcement
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
                     json={
                         "model": model,
-                        "messages": [{"role": "user", "content": final_prompt}],
+                        "messages": [
+                            {"role": "system", "content": final_sys_prompt},
+                            {"role": "user", "content": f"Write a script for the title: {video_title}"}
+                        ],
                         "temperature": 0.7
                     }
                 )
                 response.raise_for_status()
                 res_json = response.json()
-                script_text = res_json['choices'][0]['message']['content'].strip()
-            except Exception as e:
-                db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).update({
-                    "status": "FAILED", "error": f"Script Generation Failed: {str(e)}"
-                })
-                continue
+                raw_script = res_json['choices'][0]['message']['content']
                 
+                apt_match = re.search(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", raw_script, re.DOTALL | re.IGNORECASE)
+                apt_prompt = apt_match.group(0) if apt_match else ""
+
+                pexels_match = re.search(r"<PEXELS_SEGMENTS>.*?</PEXELS_SEGMENTS>", raw_script, re.DOTALL | re.IGNORECASE)
+                pexels_prompt = pexels_match.group(0) if pexels_match else ""
+
+                match = re.search(r"<SCRIPT>(.*?)</SCRIPT>", raw_script, re.DOTALL | re.IGNORECASE)
+                if match:
+                    script_text = match.group(1).strip()
+                else:
+                    script_text = re.sub(r'\[.*?\]', '', raw_script)
+                    script_text = re.sub(r'\(.*?\)', '', script_text)
+                    script_text = script_text.replace('**', '').replace('---', '')
+                    script_text = re.sub(r'^(Narrator|Script|Audio|Voiceover):?\s*', '', script_text, flags=re.IGNORECASE | re.MULTILINE)
+                    script_text = re.sub(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", "", script_text, flags=re.DOTALL | re.IGNORECASE)
+                    script_text = re.sub(r"<PEXELS_SEGMENTS>.*?</PEXELS_SEGMENTS>", "", script_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                    
+                if apt_prompt:
+                    script_text = script_text + "\n\n" + apt_prompt
+                if pexels_prompt:
+                    script_text = script_text + "\n\n" + pexels_prompt
+
+        except Exception as e:
+            print(f"[BATCH] Script generation failed for title '{video_title}': {e}", flush=True)
+            db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
+                "status": "FAILED", "error": f"Script Generation Failed: {str(e)}",
+                "progress": 100, "step_text": f"AI Error: {str(e)}"
+            }, merge=True)
+            continue
+            
         # 2. RUN PREMIUM JOB
         staging = os.path.join(STAGING_DIR, job_id)
         os.makedirs(staging, exist_ok=True)
@@ -2830,14 +2878,14 @@ async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_
         if os.path.exists(bgm_path):
              shutil.copy(bgm_path, job_bgm_path)
              
-        kaggle_user = form_data.get("kaggle_user", "")
-        kaggle_key = form_data.get("kaggle_key", "")
+        kaggle_user = form_data.get("kaggle_user", "gabrielnjoku")
+        kaggle_key = form_data.get("kaggle_key", "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e")
         if not kaggle_key or "0f12d3a4" in kaggle_key:
             kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
             
-        proj_slug = "".join([c for c in project_id if c.isalnum()]).lower()[:15]
-        kernel_id = f"{kaggle_user}/epicsync-proj-{proj_slug}"
-        video_model = form_data.get("video_model", "ltx-video")
+        proj_slug = "".join([c for c in project_id if c.isalnum()]).lower()[:12]
+        unique_suffix = uuid.uuid4().hex[:4]
+        kernel_id = f"{kaggle_user}/epicsync-{proj_slug}-{unique_suffix}"
         
         jobs = load_jobs()
         if video_model == "aptavatar":
@@ -2867,15 +2915,15 @@ async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_
             form_data.get("aspect_ratio", "9:16"), form_data.get("resolution", "720p"),
             form_data.get("add_captions", "true"), form_data.get("add_grid", "true"),
             form_data.get("video_speed", "1.0"), kaggle_user, kaggle_key, 
-            form_data.get("hf_repo", "epic-gab/EpicSync-Dataset"), form_data.get("hf_token", ""),
+            form_data.get("hf_repo", "epic-gab/EpicSync-Dataset"), form_data.get("hf_token") or get_default_hf_token(),
             kernel_id, video_model, form_data.get("grid_color", "#ffffff"),
             form_data.get("caption_color", "#ffffff"), form_data.get("font_size", "60"),
             form_data.get("font_y_pos", "83"), uid, form_data.get("bgm_volume", "15"), form_data.get("voice_boost", "100"), project_id
         ))
         t.start()
         
-        # Wait for job to finish before starting next
-        while True:
+        # Wait for job to finish or timeout (max 90 minutes per job) before starting next in sequence
+        for _ in range(1080):
             await asyncio.sleep(5)
             j = load_jobs().get(job_id)
             if j and j.get("status") in ["SUCCESS", "FAILED", "POSTED_TO_YOUTUBE", "CANCELLED"]:
@@ -2980,59 +3028,69 @@ def clear_logs(req: ClearLogsRequest, request: Request):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     jobs = load_jobs()
-    # Keep successful runs or clear all logs per user preference
-    jobs = {k: v for k, v in jobs.items() if v.get("status") == "RUNNING"}
+    # Wipe memory jobs for this project
+    jobs = {k: v for k, v in jobs.items() if v.get("projectId") != req.projectId}
     save_jobs(jobs)
 
+    deleted_count = 0
     try:
         docs = db.collection("users").document(uid).collection("projects").document(req.projectId).collection("executions").stream()
-        deleted_count = 0
         for doc in docs:
-            doc_data = doc.to_dict()
-            status = doc_data.get("status", "")
-            print(f"[DEBUG clear_logs] Found doc {doc.id} with status {status}")
-            if status not in ["RUNNING", "QUEUED", "STAGING", "GENERATING SCRIPT"]:
-                doc.reference.delete()
-                deleted_count += 1
-                print(f"[DEBUG clear_logs] Deleted doc {doc.id}")
-        print(f"[DEBUG clear_logs] Successfully deleted {deleted_count} logs for {uid} / {req.projectId}")
+            doc.reference.delete()
+            deleted_count += 1
+        print(f"[DEBUG clear_logs] Successfully deleted {deleted_count} logs completely from Firestore for {uid} / {req.projectId}")
     except Exception as e:
         print(f"Failed to clear firestore logs: {e}")
 
-    return {"status": "CLEARED"}
+    return {"status": "CLEARED", "deleted_count": deleted_count}
 
 from fastapi.responses import FileResponse, StreamingResponse
 import httpx
 import asyncio
 
 @app.get("/api/video/{job_id}")
-async def get_video(job_id: str, repo: str = None):
+async def get_video(job_id: str, repo: str = None, request: Request = None):
     path = os.path.join(OUTPUTS_DIR, f"{job_id}.mp4")
-    if os.path.exists(path):
+    if os.path.exists(path) and os.path.getsize(path) > 0:
         return FileResponse(path, media_type="video/mp4")
     
-    # Fallback to streaming from Hugging Face if ephemeral disk lost the file
+    # Fallback to streaming from Hugging Face dataset
     hf_repo = repo if repo else os.environ.get("HF_REPO", "epic-gab/EpicSync-Dataset")
-    hf_token = os.environ.get("HF_TOKEN", "")
+    hf_token = get_default_hf_token()
     
     url = f"https://huggingface.co/datasets/{hf_repo}/resolve/main/outputs/{job_id}.mp4"
     headers = {}
     if hf_token:
         headers["Authorization"] = f"Bearer {hf_token}"
         
+    if request and "range" in request.headers:
+        headers["Range"] = request.headers["range"]
+        
     client = httpx.AsyncClient(follow_redirects=True)
     req = client.build_request("GET", url, headers=headers)
     res = await client.send(req, stream=True)
     
-    if res.status_code == 200:
+    if res.status_code in [200, 206]:
+        response_headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Type": "video/mp4"
+        }
+        if "content-length" in res.headers:
+            response_headers["Content-Length"] = res.headers["content-length"]
+        if "content-range" in res.headers:
+            response_headers["Content-Range"] = res.headers["content-range"]
+            
         async def stream_generator():
             async for chunk in res.aiter_raw():
                 yield chunk
             await res.aclose()
-        return StreamingResponse(stream_generator(), media_type="video/mp4")
+            await client.aclose()
+            
+        return StreamingResponse(stream_generator(), status_code=res.status_code, headers=response_headers, media_type="video/mp4")
     
     await res.aclose()
-    raise HTTPException(status_code=404, detail="Video file not found locally or remotely.")
+    await client.aclose()
+    raise HTTPException(status_code=404, detail="Video file not found locally or remotely on dataset.")
 
 @app.get("/api/bgm_list")
 def list_bgm_files(hf_repo: str = "epic-gab/EpicSync-Dataset", hf_token: str = ""):

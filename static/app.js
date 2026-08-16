@@ -387,9 +387,21 @@ if (fontYPosInput) {
 const clearLogsBtn = document.getElementById('clearLogsBtn');
 if (clearLogsBtn) {
     clearLogsBtn.addEventListener('click', async () => {
-        if (!confirm("Are you sure you want to clear the execution logs?")) return;
+        if (!currentProject) return alert('Select a project first!');
+        if (!confirm("Are you sure you want to permanently clear all execution logs for this project?")) return;
         try {
-            const token = await auth.currentUser.getIdToken();
+            const token = currentUser ? await currentUser.getIdToken() : '';
+            
+            // 1. Direct Firestore batch delete client-side for immediate wipe
+            if (currentUser && currentProject) {
+                const execsRef = collection(db, 'users', currentUser.uid, 'projects', currentProject, 'executions');
+                const snap = await getDocs(execsRef);
+                const batch = writeBatch(db);
+                snap.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+            }
+            
+            // 2. Notify backend to clear memory & disk logs
             await fetch(`${BACKEND_URL}/api/clear_logs`, {
                 method: 'POST',
                 headers: { 
@@ -401,6 +413,7 @@ if (clearLogsBtn) {
             document.getElementById('executionLogsList').innerHTML = '<div class="empty-state">No videos generated yet in this project.</div>';
         } catch (e) {
             console.error("Failed to clear logs", e);
+            alert('Failed to clear logs: ' + e.message);
         }
     });
 }
@@ -435,11 +448,10 @@ createContentForm.addEventListener('submit', async (e) => {
         if (!script) return alert('Please enter your manual script.');
         titles = ["Manual Video Generation"];
     } else {
-        titles = videoTitlesInput.value.split('\n').filter(line => line.trim().length > 0);
+        titles = videoTitlesInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         if (titles.length === 0) return alert('Please enter at least one title.');
     }
     
-    const isPreviewOn = previewScriptToggle.checked && titles.length === 1 && window.currentPromptMode === 'ai';
     const mediaFile = mediaFileInput.files[0];
     const voiceModel = document.getElementById('voiceModelSelect').value;
     const videoModel = document.getElementById('videoModelSelect').value;
@@ -447,100 +459,16 @@ createContentForm.addEventListener('submit', async (e) => {
     
     if (!mediaFile && videoModel !== 'pexels') return alert('Missing source image.');
     
-    submitContentBtn.innerText = 'Processing Queue...';
-    submitContentBtn.disabled = true;
-    
-    // Setup UI Queue
-    const queueContainer = document.getElementById('bulkQueueContainer');
-    const queueList = document.getElementById('bulkQueueList');
-    queueContainer.style.display = 'block';
-    queueList.innerHTML = '';
-    
-    const queueElements = [];
-    titles.forEach((t, i) => {
-        const el = document.createElement('div');
-        el.className = 'log-card';
-        el.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <strong>${i+1}. ${t}</strong>
-                <span id="queue-status-${i}" style="color:#e5b300;">Pending</span>
-            </div>
-        `;
-        queueList.appendChild(el);
-        queueElements.push(document.getElementById(`queue-status-${i}`));
-    });
-
     const token = await currentUser.getIdToken();
     
-    for (let i = 0; i < titles.length; i++) {
-        const title = titles[i];
-        const statusEl = queueElements[i];
+    // CASE A: BATCH QUEUE (More than 1 title)
+    if (titles.length > 1) {
+        submitContentBtn.innerText = 'Queuing Batch...';
+        submitContentBtn.disabled = true;
         
-        let scriptText = '';
-        if (window.currentPromptMode === 'manual') {
-            scriptText = document.getElementById('manualScript').value.trim();
-        } else {
-            // 1. Generate Script
-            try {
-                statusEl.innerText = 'Generating Script...';
-                const videoModel = document.getElementById('videoModelSelect').value;
-                const targetDuration = document.getElementById('targetDurationSelect').value;
-                const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ 
-                        titles: title,
-                        video_model: videoModel,
-                        target_duration: targetDuration
-                    })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    scriptText = data.script;
-                } else {
-                    statusEl.innerText = `Failed: ${data.error || 'Unknown Error'}`;
-                    statusEl.style.color = '#ff4444';
-                    continue;
-                }
-            } catch (err) {
-                console.error(err);
-                statusEl.innerText = 'Failed: Network Error';
-                statusEl.style.color = '#ff4444';
-                continue;
-            }
-
-            // 2. Handle Preview Mode vs Automatic Mode
-            if (isPreviewOn && window.currentPromptMode !== 'manual') {
-                statusEl.innerText = 'Waiting for User Approval...';
-                generatedScriptText.value = scriptText;
-                scriptResultArea.style.display = 'block';
-                checkVideoSubmitState();
-                submitContentBtn.innerText = 'Confirm to Launch';
-                submitContentBtn.disabled = false;
-                
-                // Wait for user to click "Continue to Video"
-                await new Promise(resolve => {
-                    const handler = () => {
-                        continueVideoBtn.removeEventListener('click', handler);
-                        resolve();
-                    };
-                    continueVideoBtn.addEventListener('click', handler);
-                });
-                scriptText = generatedScriptText.value.trim();
-                scriptResultArea.style.display = 'none';
-                submitContentBtn.innerText = 'Processing Queue...';
-                submitContentBtn.disabled = true;
-            }
-        }
-        
-        // 3. Launch Video Generation
         try {
-            statusEl.innerText = 'Staging GPU...';
             const formData = new FormData();
-            formData.append('script_text', scriptText);
+            formData.append('titles_json', JSON.stringify(titles));
             formData.append('voice', voiceModel);
             if (mediaFile) {
                 formData.append('image', mediaFile);
@@ -548,7 +476,7 @@ createContentForm.addEventListener('submit', async (e) => {
             }
             formData.append('projectId', currentProject);
             formData.append('resolution', document.getElementById('resolutionSelect').value);
-            formData.append('video_model', document.getElementById('videoModelSelect').value);
+            formData.append('video_model', videoModel);
             formData.append('target_duration', document.getElementById('targetDurationSelect').value);
             formData.append('aspect_ratio', aspectRatio);
             
@@ -587,7 +515,7 @@ createContentForm.addEventListener('submit', async (e) => {
                 if (pData.kaggleKey) formData.append('kaggle_key', pData.kaggleKey);
             }
             
-            const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
+            const res = await fetch(`${BACKEND_URL}/api/queue_batch`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
@@ -595,34 +523,158 @@ createContentForm.addEventListener('submit', async (e) => {
             
             const data = await res.json();
             if (res.ok) {
-                await setDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', data.job_id), {
-                    title: title.substring(0, 30) + '...',
-                    status: 'STAGING',
-                    job_id: data.job_id,
-                    createdAt: serverTimestamp()
-                });
-                statusEl.innerText = 'STAGING';
-                
-                // 4. Wait for Job Completion Sequentially
-                const finalStatus = await waitForJobCompletion(currentUser.uid, currentProject, data.job_id, statusEl);
-                if (finalStatus === 'FAILED') {
-                    statusEl.style.color = '#ff4444';
-                } else {
-                    statusEl.style.color = '#4caf50';
-                }
+                alert(`🚀 Successfully queued ${titles.length} videos! The backend queue is processing them sequentially. You can monitor progress in Execution Logs.`);
+                document.querySelector('[data-target="view-logs"]').click();
             } else {
-                statusEl.innerText = `Launch Error: ${data.error || 'Unknown'}`;
-                statusEl.style.color = '#ff4444';
+                alert(`Failed to queue batch: ${data.detail || data.error || 'Server error'}`);
             }
         } catch (err) {
             console.error(err);
-            statusEl.innerText = 'Launch Failed';
-            statusEl.style.color = '#ff4444';
+            alert('Failed to connect to batch queue server: ' + err.message);
+        }
+        
+        submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+        submitContentBtn.disabled = false;
+        return;
+    }
+    
+    // CASE B: SINGLE TITLE GENERATION
+    const isPreviewOn = previewScriptToggle.checked && window.currentPromptMode === 'ai';
+    const title = titles[0];
+    
+    submitContentBtn.innerText = 'Processing...';
+    submitContentBtn.disabled = true;
+    
+    let scriptText = '';
+    if (window.currentPromptMode === 'manual') {
+        scriptText = document.getElementById('manualScript').value.trim();
+    } else {
+        // 1. Generate Script
+        try {
+            const targetDuration = document.getElementById('targetDurationSelect').value;
+            const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ 
+                    titles: title,
+                    video_model: videoModel,
+                    target_duration: targetDuration
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                scriptText = data.script;
+            } else {
+                alert(`Script Generation Failed: ${data.detail || data.error || 'Unknown Error'}`);
+                submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+                submitContentBtn.disabled = false;
+                return;
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Script generation failed due to network error: ' + err.message);
+            submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
+            submitContentBtn.disabled = false;
+            return;
+        }
+
+        // 2. Handle Preview Mode vs Automatic Mode
+        if (isPreviewOn) {
+            generatedScriptText.value = scriptText;
+            scriptResultArea.style.display = 'block';
+            checkVideoSubmitState();
+            submitContentBtn.innerText = 'Confirm to Launch';
+            submitContentBtn.disabled = false;
+            
+            await new Promise(resolve => {
+                const handler = () => {
+                    continueVideoBtn.removeEventListener('click', handler);
+                    resolve();
+                };
+                continueVideoBtn.addEventListener('click', handler);
+            });
+            scriptText = generatedScriptText.value.trim();
+            scriptResultArea.style.display = 'none';
+            submitContentBtn.innerText = 'Launching GPU...';
+            submitContentBtn.disabled = true;
         }
     }
     
-    alert('Queue processing finished! Check Execution Logs.');
-    document.querySelector('[data-target="view-logs"]').click();
+    // 3. Launch Video Generation
+    try {
+        const formData = new FormData();
+        formData.append('script_text', scriptText);
+        formData.append('voice', voiceModel);
+        if (mediaFile) {
+            formData.append('image', mediaFile);
+            formData.append('video', mediaFile);
+        }
+        formData.append('projectId', currentProject);
+        formData.append('resolution', document.getElementById('resolutionSelect').value);
+        formData.append('video_model', videoModel);
+        formData.append('target_duration', document.getElementById('targetDurationSelect').value);
+        formData.append('aspect_ratio', aspectRatio);
+        
+        const gridColorEl = document.getElementById('gridColorInput');
+        if (gridColorEl) formData.append('grid_color', gridColorEl.value);
+        
+        const captionColorEl = document.getElementById('captionColorInput');
+        if (captionColorEl) formData.append('caption_color', captionColorEl.value);
+        
+        const fontSizeEl = document.getElementById('fontSizeInput');
+        if (fontSizeEl) formData.append('font_size', fontSizeEl.value);
+        
+        const fontYPosEl = document.getElementById('fontYPosInput');
+        if (fontYPosEl) formData.append('font_y_pos', fontYPosEl.value);
+        
+        const bgmSelectEl = document.getElementById('bgmSelect');
+        if (bgmSelectEl) formData.append('bgm_select', bgmSelectEl.value);
+        
+        const bgmVolumeEl = document.getElementById('bgmVolumeInput');
+        if (bgmVolumeEl) formData.append('bgm_volume', bgmVolumeEl.value);
+        
+        const voiceBoostEl = document.getElementById('voiceBoostInput');
+        if (voiceBoostEl) formData.append('voice_boost', voiceBoostEl.value);
+        
+        const addCaptionsEl = document.getElementById('addCaptionsToggle');
+        if (addCaptionsEl) formData.append('add_captions', addCaptionsEl.checked ? 'true' : 'false');
+
+        const addGridEl = document.getElementById('addGridToggle');
+        if (addGridEl) formData.append('add_grid', addGridEl.checked ? 'true' : 'false');
+        
+        // Fetch Kaggle credentials for the project
+        const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
+        if (projDoc.exists()) {
+            const pData = projDoc.data();
+            if (pData.kaggleUsername) formData.append('kaggle_user', pData.kaggleUsername);
+            if (pData.kaggleKey) formData.append('kaggle_key', pData.kaggleKey);
+        }
+        
+        const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            await setDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', data.job_id), {
+                title: title.substring(0, 30) + '...',
+                status: 'STAGING',
+                job_id: data.job_id,
+                createdAt: serverTimestamp()
+            });
+            document.querySelector('[data-target="view-logs"]').click();
+        } else {
+            alert(`Launch Error: ${data.detail || data.error || 'Unknown'}`);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Launch failed: ' + err.message);
+    }
     
     submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
     submitContentBtn.disabled = false;
