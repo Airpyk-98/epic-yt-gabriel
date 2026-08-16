@@ -608,29 +608,13 @@ createContentForm.addEventListener('submit', async (e) => {
         const title = titles[i];
         const jobId = `epicsync_premium_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
         
-        submitContentBtn.innerText = `Generating script ${i+1}/${titles.length}...`;
-        
-        let scriptText = manualScript;
-        if (!isManual) {
-            try {
-                scriptText = await generateScriptDirect(title, videoModel, targetDuration, currentUser.uid);
-            } catch (err) {
-                console.error("AI Generation Error:", err);
-                alert(`AI Script Generation error on "${title}": ` + err.message);
-                submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
-                submitContentBtn.disabled = false;
-                return;
-            }
-        }
-        
-        // Write Job directly to Firestore
         try {
             await setDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', jobId), {
                 job_id: jobId,
                 batch_id: batchId,
                 batch_index: i,
                 title: title.length > 40 ? title.substring(0, 37) + '...' : title,
-                script: scriptText,
+                script: isManual ? manualScript : '',
                 voice: voiceModel,
                 video_model: videoModel,
                 aspect_ratio: aspectRatio,
@@ -647,8 +631,8 @@ createContentForm.addEventListener('submit', async (e) => {
                 font_y_pos: fontYPos,
                 status: 'QUEUED',
                 progress: 0,
-                step_text: 'Queued for 12-Hour Kaggle Cloud Worker...',
-                logs: [`[${new Date().toLocaleTimeString()}] Task queued for Kaggle worker execution.`],
+                step_text: 'Queued for 12-Hour Cloud Worker...',
+                logs: [`[${new Date().toLocaleTimeString()}] Task queued for execution.`],
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             });
@@ -663,7 +647,7 @@ createContentForm.addEventListener('submit', async (e) => {
     submitContentBtn.disabled = false;
     
     if (queuedCount > 0) {
-        alert(`🚀 Successfully queued ${queuedCount} video(s)! Your active 12-Hour Kaggle Worker will process them sequentially.`);
+        alert(`🚀 Successfully queued ${queuedCount} video(s)! The 12-Hour Cloud Worker is processing them now.`);
         document.querySelector('[data-target="view-logs"]')?.click();
     }
 });

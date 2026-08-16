@@ -23,7 +23,7 @@ import soundfile as sf
 import datetime
 
 print("================================================================")
-print("🚀 STARTING EPICSYNC 12-HOUR CONTINUOUS WORKER ENGINE...")
+print(" STARTING EPICSYNC 12-HOUR CONTINUOUS WORKER ENGINE...")
 print("================================================================")
 
 # Install required packages
@@ -41,25 +41,19 @@ HF_TOKEN = "".join(["hf_", "RJEvcSee", "wujeaDPsip", "srCXkLNFtd", "KMRwDp"])
 HF_REPO = "epic-gab/EpicSync-Dataset"
 os.environ["HF_TOKEN"] = HF_TOKEN
 
-# Initialize Firebase Admin
-FIREBASE_PROJECT_ID = "epic-yt-gab"
+# Initialize Firebase Admin with Embedded Service Account
 try:
+    import base64
+    sa_json = base64.b64decode('eyJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsICJwcm9qZWN0X2lkIjogImVwaWMteXQtZ2FiIiwgInByaXZhdGVfa2V5X2lkIjogImFhMzMyNjlhZTMzZTcxNjhhYTQzYmNlNDU5YWNmMzg5YmU1NjI1ZDciLCAicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5NSUlFdlFJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLY3dnZ1NqQWdFQUFvSUJBUURnTlh1UnRielNqd01UXG5kbHlBMTlSQTBIYWJIV09uKzJaYVAxNUR0QkNlTlRwSUprTm40Q3ZieERMMHBMOHlQVFB3U0J2eit0VFltbzJRXG5vTktjWGU0S1VJZHFiSElycnZMYnB0K3dLemhsd2lHV2czdVBXR1RRNFp2Ukx4eE9xekNWU2FaeTBlR3ZPVmZyXG41U2dnQnpMcXM1Z3MyU3pKOEFXSmR4emJGZzhySC9ka3RVTHU4V21QR3NpOGVKZmxKVEk2V3F1RS8vaVh1R0JYXG5KbDBiK1dnMVFFZmw1WTgzQXQ1ZndvVFVEQ2NrY3pCOXhnZEs5am81SDdKc2hpRHhFQmVCenVVZkFxMVNVQ1dlXG4zOWVCQnMyS3ZMM2pBdFhjaVcrQzlyQ3pCeHE3NWZLaEVlbGphSk84Q05NN05SNTc2cmRucmgwWXp6cmlUZ0NKXG5wclZ4UDNOYkFnTUJBQUVDZ2dFQUJRY04vWlRqUWNPK1Z6TTlpbGp4TWFTV2VOZXVTNjY0eEdmZkV4eTRhUFlTXG5CWDlMM2pnQXlGYWxoQ2FUM2RnYVdWWkc1SGsva2dhMEMyRjdRS3p4OVdLdVVocDJicVpWTjRMWEpQVnczTHovXG5QdlUxUDZreXc5S2JTVzlrM0dQaGVFd1c2OWJHYXVtWjF2aDJYU2wrY3ZBQVQvMjJJaDBYbDBPc1hHY0ZPcUFsXG5JZkg0U3daeGxRR3pmSHIwQkNkcVZtdmtteXN6NHQ2aUJ4dlkwZ293RmhzVGZTVEJKWUI5SkFJekdsck1BL2VXXG5oQ1BwcFc3bzlneUszSjhiQ3N0NXpLR0haWURTbGpDVUI5bUJ4VGxMMysrM1BhbUE5dzE0cHpTMENSY0szR3BtXG5mR1RNeUFHWXhyZEh4di92TkthM1lISnQ5RjBscHkwOG45b2NqU2o1R1FLQmdRRHlhc3hwSUlTajdaNno4K3RsXG45QjV5ZW9qRnpRK00zUkZDbFhFRmxhVjhwejZpRWFPRTRGeWl2SzVwdHRYVjFBQ2l1QzQ5K1ZFQ0lyZkJjSmdXXG53Qjdwdk94Q29mQm9DZUZtYjhhNm9UaDhBdjZXVUJxeVI4bTRQck8wMlo4ZnNtWDBjN29PRmxyZVRhMDNkenYwXG5uRWd6TGdDaFluVkdWNHdHUmZRMUxkTWl0UUtCZ1FEc3hZSFUrcmU0d3RVREFoeEd4dkdvNkY1U3JyMWxPS2lhXG5OS2NZUENxdjg2K3g0cVk2MGpJei9DOWNmZlhzWk14b0pHSCs0elIzcytVaDRZZ2QwWW9Tc3h3RU8vdFZ6aEM5XG5YaEErdDA0ZFdwOGRzL21HUVhyUEE1NzRKd0xuTXJDdnhlU2E0VzV0aUFlMURPbjQ2N2ZRV09zT0xSME9pb0RQXG52bnJjWGp1M3p3S0JnRlA0TkhnUndJQTc5ZVlsanB1Uk5ONjRuUm5QRHh6ZkVuUjY2VnhpMnFEVUdianYzVEZRXG51aVhRcjZXRXBJdGQxUjZJSjlSbHdPNjVjZWM2aGlRVFJtSDJnK3dNeGdaenJiVGE4UDZDaTl0QStraTgxSkorXG5sVndSdEJQbjhkdDc0eDhLMng2NEZaKzlUa3ZSTEY1dHFBQzZaWk9CVkZnYVNURi9GN2szOTFPbEFvR0FaYU4vXG5VVkx6TFJBTjZzV3NKOEhkR1RudXk2V1JUZk5kaFJ6WElmTXFDL0FhMnN6RnVQaGticVp5R2sxRUZWOUwwK1RTXG5ZRjFlTjRoMDh1OWl4QklnS0ZqVXpRaUdvdFhibjc3U1VHblYwWW9HUmZUdFIzR3lhMDFObjQ3M2t4SFNnUkg5XG5TWE0rT1N5c3lrNnAzWjRxZ1BpNnBwSTlKL0hTeTlzajJKZG5JVWNDZ1lFQXN2djEzZXJHY2h5L1M1Qm0zV2tXXG54RER2RHVaR09pLzNjbHd3R0p4dDNTdzNnTnJ2K3FNdUJJcWtkYTBmQTM5UUoyNHVDZmJsMUM0ZksrUjJxTGpDXG5rVFZ2NXlyelJUY0VqQUtBNHRlU3FnWHZXNDJsdHhVblN4UWt6ZmtNU096SmJmOUh0OStRVjhkLzIvQy9vSzJ2XG42U3gyTUdXTCtMRDA0R1JlK0JOMkdHOD1cbi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS1cbiIsICJjbGllbnRfZW1haWwiOiAiZmlyZWJhc2UtYWRtaW5zZGstZmJzdmNAZXBpYy15dC1nYWIuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCAiY2xpZW50X2lkIjogIjExMzUzNTI0Njk5NzEzMDU2OTQ5OCIsICJhdXRoX3VyaSI6ICJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20vby9vYXV0aDIvYXV0aCIsICJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLCAiYXV0aF9wcm92aWRlcl94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsICJjbGllbnRfeDUwOV9jZXJ0X3VybCI6ICJodHRwczovL3d3dy5nb29nbGVhcGlzLmNvbS9yb2JvdC92MS9tZXRhZGF0YS94NTA5L2ZpcmViYXNlLWFkbWluc2RrLWZic3ZjJTQwZXBpYy15dC1nYWIuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCAidW5pdmVyc2VfZG9tYWluIjogImdvb2dsZWFwaXMuY29tIn0=').decode('utf-8')
+    sa_dict = json.loads(sa_json)
     if not firebase_admin._apps:
-        # Use default credentials or initialize with project_id
-        cred = credentials.ApplicationDefault()
-        firebase_admin.initialize_app(cred, {'projectId': FIREBASE_PROJECT_ID})
+        cred = credentials.Certificate(sa_dict)
+        firebase_admin.initialize_app(cred)
     db = firestore.client()
-    print("[INIT] Firebase Firestore connected successfully!")
+    print(" [INIT] Firebase Admin initialized with full credentials!")
 except Exception as e:
-    print(f"[INIT] Initializing Firebase with direct project context ({FIREBASE_PROJECT_ID})...")
-    try:
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(options={'projectId': FIREBASE_PROJECT_ID})
-        db = firestore.client()
-        print("[INIT] Firebase Firestore connected!")
-    except Exception as e2:
-        print(f"[INIT] Firestore connection error: {e2}")
-        db = None
+    print(f" [INIT] Firebase Admin initialization error: {e}")
+    db = None
 
 # Voice maps
 voice_instruct_map = {
@@ -149,7 +143,7 @@ def process_job(doc_ref, job_data):
     pexels_key = job_data.get("pexels_api_key", "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d")
     
     print(f"\n========================================================")
-    print(f"🎬 PROCESSING JOB: {job_id} | Title: {title}")
+    print(f" PROCESSING JOB: {job_id} | Title: {title}")
     print(f"========================================================")
     
     doc_ref.update({
@@ -159,6 +153,64 @@ def process_job(doc_ref, job_data):
         "updatedAt": firestore.SERVER_TIMESTAMP
     })
     log_job(doc_ref, f"Started processing job {job_id}")
+
+        # If script is empty, generate it with AI settings from user profile (Zero CORS)
+    if not script_text or script_text.strip() == "":
+        log_job(doc_ref, f"Generating AI script for '{title}'...")
+        doc_ref.update({"status": "RUNNING", "progress": 5, "step_text": "Generating AI script..."})
+        try:
+            path_parts = doc_ref.path.split('/')
+            uid = path_parts[1] if len(path_parts) > 1 else ""
+            user_doc = db.collection('users').document(uid).get() if uid else None
+            user_data = user_doc.to_dict() if user_doc and user_doc.exists else {}
+            
+            base_url = user_data.get("aiBaseUrl", "https://api.openai.com/v1").rstrip('/')
+            api_key = user_data.get("aiApiKey", "")
+            model = user_data.get("aiModel", "gpt-4")
+            sys_prompt = user_data.get("aiSystemPrompt", "You are a creative YouTube script writer.")
+            target_dur = job_data.get("target_duration", "60 seconds")
+            
+            if "15" in target_dur or "30" in target_dur or "Shorts" in target_dur:
+                dur_inst = "\n\nCRITICAL DURATION: Target duration is SHORTS (30-45s). Output between 60 to 90 words total."
+            elif "3 min" in target_dur or "180" in target_dur:
+                dur_inst = "\n\nCRITICAL DURATION: Target duration is 3 MINUTES. Output between 380 to 450 words total."
+            elif "5 min" in target_dur or "300" in target_dur:
+                dur_inst = "\n\nCRITICAL DURATION: Target duration is 5 MINUTES. Output between 650 to 750 words total."
+            elif "10 min" in target_dur or "600" in target_dur:
+                dur_inst = "\n\nCRITICAL DURATION: Target duration is 10 MINUTES. Output between 1300 to 1500 words total."
+            else:
+                dur_inst = "\n\nCRITICAL DURATION: Target duration is 60 SECONDS. Output between 120 to 150 words total."
+                
+            tts_inst = "\n\nCRITICAL FORMAT INSTRUCTION: Output ONLY raw plaintext words that the voice actor speaks. No markdown, no prefixes, no stage directions."
+            full_prompt = sys_prompt + tts_inst + dur_inst
+            
+            ai_res = requests.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": full_prompt},
+                        {"role": "user", "content": f"Write an engaging script for the video title: \"{title}\""}
+                    ],
+                    "temperature": 0.7
+                },
+                timeout=60
+            )
+            if ai_res.ok:
+                raw_script = ai_res.json()["choices"][0]["message"]["content"]
+                clean_s = re.sub(r'\[.*?\]', '', raw_script)
+                clean_s = re.sub(r'\(.*?\)', '', clean_s).replace('**', '').replace('---', '')
+                clean_s = re.sub(r'^(Narrator|Script|Audio|Voiceover):?\s*', '', clean_s, flags=re.IGNORECASE | re.MULTILINE).strip()
+                script_text = clean_s
+                doc_ref.update({"script": script_text})
+                log_job(doc_ref, f"AI script generated successfully ({len(script_text.split())} words).")
+            else:
+                log_job(doc_ref, f"AI API status {ai_res.status_code}. Using fallback script.")
+                script_text = f"Welcome to our video about {title}. In this video we will explore everything you need to know."
+        except Exception as e:
+            log_job(doc_ref, f"AI Script Generation notice: {e}")
+            script_text = f"Welcome to our video about {title}. In this video we will explore everything you need to know."
 
     work_dir = f"/kaggle/working/job_{job_id}"
     os.makedirs(work_dir, exist_ok=True)
@@ -284,7 +336,7 @@ def process_job(doc_ref, job_data):
     )
     
     direct_url = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main/{hf_path}"
-    log_job(doc_ref, f"🎉 Video successfully published: {direct_url}")
+    log_job(doc_ref, f" Video successfully published: {direct_url}")
     
     # 8. Mark SUCCESS in Firestore
     doc_ref.update({
@@ -294,7 +346,7 @@ def process_job(doc_ref, job_data):
         "output_file": direct_url,
         "completedAt": firestore.SERVER_TIMESTAMP
     })
-    print(f"✅ FINISHED JOB: {job_id} successfully!")
+    print(f" FINISHED JOB: {job_id} successfully!")
 
 # MAIN 12-HOUR POLLING LOOP
 def run_12hr_worker():
@@ -302,7 +354,7 @@ def run_12hr_worker():
     max_duration = 12 * 3600 # 12 hours
     
     print(f"\n========================================================")
-    print(f"🟢 EPICSYNC 12-HOUR WORKER IS ACTIVE & LISTENING...")
+    print(f" EPICSYNC 12-HOUR WORKER IS ACTIVE & LISTENING...")
     print(f"Session Duration: 12 Hours | End Time: {datetime.datetime.now() + datetime.timedelta(hours=12)}")
     print(f"========================================================\n")
     
