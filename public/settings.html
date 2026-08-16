@@ -121,6 +121,19 @@
                         </button>
                     </div>
 
+                    <!-- AI Script Engine Section -->
+                    <div style="background: rgba(168, 85, 247, 0.05); border: 1.5px solid rgba(168, 85, 247, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #c084fc; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <span>🧠</span> AI Script Engine (Llama 3.3 70B / Groq / OpenAI) <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
+                        </h3>
+
+                        <div class="form-group">
+                            <label for="aiKeyInput">AI API Key (NVIDIA NIM / Groq / OpenAI)</label>
+                            <input type="password" id="aiKeyInput" placeholder="nvapi-... or gsk_... or sk-...">
+                            <span class="input-hint">Used to power <strong>Meta Llama 3.3 70B Instruct</strong> with Addictive Script Writer psychology. If blank, smart dynamic viral script generator is used.</span>
+                        </div>
+                    </div>
+
                     <!-- YouTube Webhook Section (Optional) -->
                     <div style="background: rgba(255, 255, 255, 0.02); border: 1.5px solid var(--border-color); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
                         <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
@@ -163,7 +176,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserSettings, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, DEFAULT_HF_TOKEN, DEFAULT_PEXELS_KEY } from "./shared.js?v=20260816_v190";
+        import { initSharedAuth, getUserSettings, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, DEFAULT_HF_TOKEN, DEFAULT_PEXELS_KEY } from "./shared.js?v=20260817_v270";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -186,6 +199,7 @@
         const kaggleKeyInput = document.getElementById('kaggleKeyInput');
         const pexelsKeyInput = document.getElementById('pexelsKeyInput');
         const hfTokenInput = document.getElementById('hfTokenInput');
+        const aiKeyInput = document.getElementById('aiKeyInput');
         const webhookUrlSetting = document.getElementById('webhookUrlSetting');
         const settingsForm = document.getElementById('settingsForm');
         const settingsStatusMsg = document.getElementById('settingsStatusMsg');
@@ -201,6 +215,7 @@
             kaggleKeyInput.value = s.kaggle_key || DEFAULT_KAGGLE_KEY;
             pexelsKeyInput.value = s.pexels_key || DEFAULT_PEXELS_KEY;
             hfTokenInput.value = s.hf_token || DEFAULT_HF_TOKEN;
+            aiKeyInput.value = s.ai_api_key || '';
             webhookUrlSetting.value = s.webhook_url || '';
         });
 
@@ -211,6 +226,7 @@
             const key = kaggleKeyInput.value.trim();
             const pexKey = pexelsKeyInput.value.trim() || DEFAULT_PEXELS_KEY;
             const hfToken = hfTokenInput.value.trim() || DEFAULT_HF_TOKEN;
+            const aiKey = aiKeyInput.value.trim();
             const webhookUrl = webhookUrlSetting.value.trim();
 
             if (!username || !key) return alert('Please enter both Kaggle Username and API Token.');
@@ -219,6 +235,7 @@
             localStorage.setItem('epicsync_kaggle_key', key);
             localStorage.setItem('epicsync_pexels_key', pexKey);
             localStorage.setItem('epicsync_hf_token', hfToken);
+            localStorage.setItem('epicsync_ai_key', aiKey);
             localStorage.setItem('epicsync_yt_webhook', webhookUrl);
 
             if (currentUser) {
@@ -228,11 +245,12 @@
                         kaggle_key: key,
                         pexels_key: pexKey,
                         hf_token: hfToken,
+                        ai_api_key: aiKey,
                         webhook_url: webhookUrl,
                         updatedAt: new Date()
                     }, { merge: true });
                     
-                    showStatusMsg('✅ All settings & tokens saved to your account!', true);
+                    showStatusMsg('✅ All settings & API keys saved to your account!', true);
                 } catch (err) {
                     alert('Error saving settings: ' + err.message);
                 }
