@@ -4,6 +4,7 @@ export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
 export const DEFAULT_HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
 export const DEFAULT_PEXELS_KEY = "Y6IPbPqNHx9NYlubg8tCenK0jHVg0T8VbvJjuI0ibJU0pTGf9ED0QU3x";
+export const KAGGLE_WORKER_SLUG = "epicsync-production-worker";
 
 // 1. Initialize Auth Navigation Pill across all pages
 export function initSharedAuth(auth, db, utils) {
@@ -144,7 +145,7 @@ export function buildWorkerCode(batchConfig, hfToken, pexelsKey) {
     const tokenToUse = hfToken || DEFAULT_HF_TOKEN;
     const pexKeyToUse = pexelsKey || DEFAULT_PEXELS_KEY;
     
-    return `# EpicSync On-Demand Batch Worker
+    return `# EpicSync On-Demand Dedicated Production Worker
 import os
 import sys
 import subprocess
@@ -359,14 +360,14 @@ for idx, job in enumerate(batch_config["jobs"]):
         print("Using procedural visualizer fallback...")
         subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t 30 -c:v libx264 {video_clip_path}", shell=True)
 
-    # Step 4: Video Assembly with Pro Scale & Crop
-    update_job(uid, job_id, "RUNNING", 75, "Compiling video via FFmpeg...")
+    # Step 4: High-Speed Multi-Threaded FFmpeg Video Assembly
+    update_job(uid, job_id, "RUNNING", 75, "Compiling video via high-speed FFmpeg...")
 
     output_mp4 = os.path.join(work_dir, f"{job_id}.mp4")
     vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
     scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
 
-    ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
+    ff_cmd = f'ffmpeg -y -threads 0 -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
     subprocess.run(ff_cmd, shell=True)
 
     # Step 5: Direct Hugging Face Upload
@@ -397,7 +398,7 @@ print("\\n[BATCH COMPLETED] All videos processed. Worker exiting.")
 `;
 }
 
-// 6. Direct Kaggle Batch Dispatcher (Supporting GPU & CPU modes)
+// 6. Direct Kaggle Batch Dispatcher (Single Reusable Production Kernel)
 export async function launchKaggleBatchDirectly(db, utils, payload) {
     const ts = Math.floor(Date.now() / 1000);
     const batch_id = `batch_${ts}`;
@@ -455,12 +456,10 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     };
     const workerScript = buildWorkerCode(batchConfig, hfToken, pexelsKey);
 
-    // Push to Kaggle API using Bearer Token Auth with dynamic GPU/CPU setting
-    const slugName = `epicsync-batch-${ts}`;
-
+    // Push new version to the single persistent production worker kernel
     const kagglePayload = {
-        slug: `${kaggleUsername}/${slugName}`,
-        newTitle: `EpicSync Batch ${ts} (${enableGpu ? 'GPU' : 'CPU'})`,
+        slug: `${kaggleUsername}/${KAGGLE_WORKER_SLUG}`,
+        newTitle: "EpicSync Production Worker",
         text: workerScript,
         language: "python",
         kernelType: "script",
@@ -468,6 +467,9 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
         enableGpu: enableGpu,
         enableTpu: false,
         enableInternet: true,
+        machineShape: enableGpu ? "NvidiaTeslaT4" : "None",
+        accelerator: enableGpu ? "NvidiaTeslaT4" : "None",
+        gpuType: enableGpu ? "T4" : "None",
         datasetDataSources: [],
         competitionDataSources: [],
         kernelDataSources: [],
@@ -496,7 +498,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
         enable_gpu: enableGpu,
         count: jobs.length,
         jobs: jobs,
-        kaggle_ref: resData.ref || slugName
+        kaggle_ref: resData.ref || KAGGLE_WORKER_SLUG
     };
 }
 
