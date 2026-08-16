@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>EpicSync — Creator Studio</title>
     
     <!-- Google Fonts -->
@@ -10,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260816_v99">
 </head>
 <body>
 
@@ -223,7 +226,7 @@
                 </div>
 
                 <div id="currentBatchLogsContainer" class="logs-list">
-                    <div class="empty-state">No batch currently active. Submit titles above to start generating!</div>
+                    <div class="empty-state">No batch currently active. Submit titles above to start!</div>
                 </div>
             </section>
 
@@ -236,12 +239,12 @@
 
     </div>
 
-    <!-- Script Entry -->
+    <!-- Script Entry with cache busting -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, escapeHtml } from "./shared.js";
+        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, escapeHtml } from "./shared.js?v=20260816_v99";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
