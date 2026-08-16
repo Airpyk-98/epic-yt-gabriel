@@ -3,7 +3,7 @@
 export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
 export const DEFAULT_HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
-export const DEFAULT_PEXELS_KEY = "y8mqRFiw48HrLy8zgD6dQxdOvr2On4sjp8c22KbcFsakYnOPVK7rK0K";
+export const DEFAULT_PEXELS_KEY = "Y6IPbPqNHx9NYlubg8tCenK0jHVg0T8VbvJjuI0ibJU0pTGf9ED0QU3x";
 
 // 1. Initialize Auth Navigation Pill across all pages
 export function initSharedAuth(auth, db, utils) {
@@ -259,7 +259,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     stopwords = {"a", "an", "the", "in", "on", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "you", "your", "is", "are", "can", "that", "this", "what", "how", "top", "why", "exist", "slowly", "secretly"}
     words = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in title.split()]
     filtered = [w for w in words if w and len(w) > 2 and w not in stopwords and not w.isdigit()]
-    search_q = "+".join(filtered[:3]) if filtered else "cinematic+modern"
+    search_q = "+".join(filtered[:3]) if filtered else "travel+nature"
 
     print(f"Pexels search query: '{search_q}' (orientation: {orientation})")
     
@@ -269,10 +269,9 @@ for idx, job in enumerate(batch_config["jobs"]):
             headers={"Authorization": pexels_key},
             timeout=15
         )
-        if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "cinematic":
-            # Fallback search if specific query returned empty
+        if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "travel":
             pex_res = requests.get(
-                f"https://api.pexels.com/videos/search?query=cinematic&per_page=5&orientation={orientation}",
+                f"https://api.pexels.com/videos/search?query=travel&per_page=5&orientation={orientation}",
                 headers={"Authorization": pexels_key},
                 timeout=15
             )
@@ -283,7 +282,6 @@ for idx, job in enumerate(batch_config["jobs"]):
             
             for v_entry in videos_list:
                 files = v_entry.get("video_files", [])
-                # Prefer HD 1080p or 720p files
                 for f in files:
                     if f.get("link") and f.get("quality") == "hd":
                         best_vid_url = f.get("link")
@@ -303,9 +301,9 @@ for idx, job in enumerate(batch_config["jobs"]):
     except Exception as e:
         print(f"Pexels fetch notice: {e}")
 
-    # Fallback to dynamic animated background if download failed
+    # Fallback to testsrc only if download completely failed
     if not os.path.exists(video_clip_path) or os.path.getsize(video_clip_path) < 1000:
-        print("Using dynamic procedural visualizer fallback...")
+        print("Using procedural visualizer fallback...")
         subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t 30 -c:v libx264 {video_clip_path}", shell=True)
 
     # Step 4: Video Assembly with Pro Scale & Crop
