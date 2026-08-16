@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EpicSync Studio — Pexels Cloud Engine</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Firebase SDK (Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, orderBy, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
+            authDomain: "epic-yt-gab.firebaseapp.com",
+            projectId: "epic-yt-gab",
+            storageBucket: "epic-yt-gab.appspot.com",
+            messagingSenderId: "113535246997",
+            appId: "1:113535246997:web:c6ce1994e6378c2e684491"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        window.db = db;
+        window.FirebaseUtils = { collection, doc, setDoc, getDoc, getDocs, onSnapshot, query, orderBy, limit, writeBatch, deleteDoc };
+    </script>
+</head>
+<body>
+
+    <!-- Main Container -->
+    <div class="app-wrapper">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <div class="brand">
+                <span class="brand-badge">⚡ PEXELS CPU</span>
+                <h1>Epic<span class="accent-text">Sync</span></h1>
+            </div>
+            <div class="header-status">
+                <span class="pulse-dot"></span>
+                <span class="status-text">Cloud Engine Ready</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <!-- Video Creation Card -->
+            <section class="card creator-card">
+                <div class="card-header">
+                    <h2>🎬 Create Video Batch</h2>
+                    <p class="subtitle">Enter one title per line. Videos are generated sequentially on Kaggle CPU.</p>
+                </div>
+
+                <form id="createBatchForm">
+                    
+                    <!-- Titles Input -->
+                    <div class="form-group">
+                        <label for="videoTitles">Video Titles <span class="required">*</span></label>
+                        <textarea id="videoTitles" rows="4" placeholder="Top 5 AI Secrets You Never Knew&#10;How to Master Deep Focus in 2026&#10;The Science of Habit Formation" required></textarea>
+                        <span class="input-hint">Each line will be processed as a separate full video.</span>
+                    </div>
+
+                    <!-- Script Option -->
+                    <div class="form-group">
+                        <div class="toggle-row">
+                            <label for="manualScriptToggle">Manual Script Override</label>
+                            <label class="switch">
+                                <input type="checkbox" id="manualScriptToggle">
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div id="manualScriptArea" style="display: none; margin-top: 10px;">
+                            <textarea id="manualScriptText" rows="4" placeholder="Type or paste your exact voiceover script here..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Aspect Ratio & Duration -->
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="aspectRatioSelect">Aspect Ratio</label>
+                            <select id="aspectRatioSelect">
+                                <option value="9:16" selected>📱 9:16 (Shorts / Reels / TikTok)</option>
+                                <option value="16:9">🖥️ 16:9 (Landscape YouTube)</option>
+                            </select>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="targetDurationSelect">Target Duration</label>
+                            <select id="targetDurationSelect">
+                                <option value="30-45s (Shorts)" selected>⚡ 30-45s (Shorts)</option>
+                                <option value="60 seconds">⏱️ 60 Seconds</option>
+                                <option value="3 minutes">📖 3 Minutes</option>
+                                <option value="5 minutes">🎬 5 Minutes</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Voice Model -->
+                    <div class="form-group">
+                        <label for="voiceSelect">Narrator Voice</label>
+                        <select id="voiceSelect">
+                            <option value="relationship-male" selected>🎙️ Guy (Confident & Storyteller)</option>
+                            <option value="energetic-male">🔥 Christopher (Energetic & Dynamic)</option>
+                            <option value="soft-female">🌸 Jenny (Warm & Narrative Female)</option>
+                            <option value="professional-female">✨ Aria (Professional & Clean Female)</option>
+                        </select>
+                    </div>
+
+                    <!-- Presets & Styling Accordion -->
+                    <details class="advanced-accordion">
+                        <summary>🎨 Visual Styling & Audio Presets</summary>
+                        <div class="accordion-content">
+                            
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="gridColorInput">Focus Grid Color</label>
+                                    <input type="color" id="gridColorInput" value="#ffffff">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="captionColorInput">Caption Color</label>
+                                    <input type="color" id="captionColorInput" value="#ffffff">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="fontSizeInput">Caption Font Size</label>
+                                    <input type="number" id="fontSizeInput" value="60" min="20" max="120">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="fontYPosInput">Caption Y-Position (%)</label>
+                                    <div class="slider-val-row">
+                                        <input type="range" id="fontYPosInput" min="10" max="95" value="83">
+                                        <span id="fontYPosVal">83%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="voiceBoostInput">Voice Boost (%)</label>
+                                    <div class="slider-val-row">
+                                        <input type="range" id="voiceBoostInput" min="50" max="250" value="120">
+                                        <span id="voiceBoostVal">120%</span>
+                                    </div>
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="bgmVolumeInput">BGM Volume (%)</label>
+                                    <div class="slider-val-row">
+                                        <input type="range" id="bgmVolumeInput" min="0" max="100" value="15">
+                                        <span id="bgmVolumeVal">15%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <div class="toggle-row">
+                                    <label for="addGridToggle">Enable 9:16 Focus Grid Rectangle</label>
+                                    <label class="switch">
+                                        <input type="checkbox" id="addGridToggle" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                        </div>
+                    </details>
+
+                    <!-- Launch Button -->
+                    <button type="submit" id="submitBatchBtn" class="btn-launch">
+                        🚀 Launch EpicSync Pexels Run
+                    </button>
+                </form>
+            </section>
+
+            <!-- Execution Logs & Real-Time Feed -->
+            <section class="card feed-card">
+                <div class="card-header feed-header">
+                    <div>
+                        <h2>📊 Live Video Feed</h2>
+                        <p class="subtitle">Real-time status synced from Kaggle via Firestore.</p>
+                    </div>
+                    <button id="clearLogsBtn" class="btn-clear">🗑️ Clear</button>
+                </div>
+
+                <div id="videoLogsContainer" class="logs-list">
+                    <div class="empty-state">No videos launched yet. Submit titles above to start!</div>
+                </div>
+            </section>
+
+        </main>
+        
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>EpicSync Studio &bull; Powered by Kaggle CPU &amp; Hugging Face Datasets</p>
+        </footer>
+
+    </div>
+
+    <!-- App JavaScript -->
+    <script src="app.js?v=20260816_v4" type="module"></script>
+</body>
+</html>

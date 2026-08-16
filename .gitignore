@@ -1,10 +1,6 @@
-data/firebase_admin.json
-gabriel_api_tokens.txt
-deploy_*.py
+staging*/
+job_*
+*.log
 __pycache__/
-data/
-kaggle_debug3/
-klogs_html/
-klogs_html2/
-*.pyc
-firebase_logs_output.txt
+.env*
+data/firebase_admin.json

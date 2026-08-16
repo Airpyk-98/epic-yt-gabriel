@@ -2,14 +2,12 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Open executions feed for No-Auth EpicSync Pexels Studio
+    match /executions/{document=**} {
+      allow read, write: if true;
+    }
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    match /projects/{projectId} {
-      allow read, write: if request.auth != null;
-    }
-    match /jobs/{jobId} {
-      allow read, write: if request.auth != null;
     }
     match /{document=**} {
       allow read, write: if request.auth != null;
