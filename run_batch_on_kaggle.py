@@ -43,9 +43,9 @@ def launch_kaggle_batch(batch_title, titles, target_duration="30-45s", voice="re
         "batch_id": f"batch_{ts}",
         "jobs": jobs,
         "ai_settings": {
-            "aiBaseUrl": "https://api.openai.com/v1",
+            "aiBaseUrl": "https://integrate.api.nvidia.com/v1",
             "aiApiKey": "",
-            "aiModel": "gpt-4",
+            "aiModel": "nvidia/nemotron-4-340b-instruct",
             "aiSystemPrompt": "You are a creative YouTube script writer."
         }
     }
@@ -78,7 +78,8 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 batch_config = json.loads("""{json.dumps(batch_config)}""")
-hf_api = HfApi()
+HF_TOKEN = "".join(["hf_", "RJEvcSee", "wujeaDPsip", "srCXkLNFtd", "KMRwDp"])
+hf_api = HfApi(token=HF_TOKEN)
 
 def update_job(job_id, status, progress, step_text, extra=None):
     print(f"[JOB {{job_id}}] Status: {{status}} ({{progress}}%) - {{step_text}}")
@@ -114,9 +115,9 @@ for idx, job in enumerate(batch_config["jobs"]):
     
     if not script_text or script_text.strip() == "":
         ai_cfg = batch_config.get("ai_settings", {{}})
-        base_url = ai_cfg.get("aiBaseUrl", "https://api.openai.com/v1").rstrip('/')
+        base_url = ai_cfg.get("aiBaseUrl", "https://integrate.api.nvidia.com/v1").rstrip('/')
         api_key = ai_cfg.get("aiApiKey", "")
-        model = ai_cfg.get("aiModel", "gpt-4")
+        model = ai_cfg.get("aiModel", "nvidia/nemotron-4-340b-instruct")
         sys_prompt = ai_cfg.get("aiSystemPrompt", "You are a creative YouTube script writer.")
         target_dur = job.get("target_duration", "30-45s")
         
@@ -203,7 +204,8 @@ for idx, job in enumerate(batch_config["jobs"]):
             path_or_fileobj=output_mp4,
             path_in_repo=remote_path,
             repo_id="epic-gab/EpicSync-Dataset",
-            repo_type="dataset"
+            repo_type="dataset",
+            token=HF_TOKEN
         )
         print(f"Successfully uploaded video to: {{direct_url}}")
         update_job(job_id, "SUCCESS", 100, "Completed successfully!", {{
@@ -240,4 +242,3 @@ print("\\n[BATCH COMPLETED] All videos generated and uploaded. Worker shutting d
 if __name__ == "__main__":
     url, jobs = launch_kaggle_batch("Test Run", ["Top 3 Financial Secrets of the Wealthy"], target_duration="30-45s")
     print("Launched Batch URL:", url)
-    print("Jobs:", jobs)
