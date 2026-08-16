@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, onSnapshot, addDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, onSnapshot, addDoc, serverTimestamp, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -21,6 +21,28 @@ let currentProject = null;
 let unsubscribeProjects = null;
 let unsubscribeLogs = null;
 const BACKEND_URL = "https://epic-yt-gabriel.onrender.com";
+
+async function fetchWithWakeupRetry(url, options = {}, maxRetries = 4) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout for cold start
+            const fetchOptions = { ...options, signal: controller.signal };
+            
+            const res = await fetch(url, fetchOptions);
+            clearTimeout(timeoutId);
+            return res;
+        } catch (err) {
+            console.warn(`Connection attempt ${attempt}/${maxRetries} failed:`, err);
+            if (attempt === maxRetries) throw err;
+            if (submitContentBtn) {
+                submitContentBtn.innerText = `Waking up server (${attempt}/${maxRetries})...`;
+            }
+            await new Promise(r => setTimeout(r, 3000));
+        }
+    }
+}
+
 
 // UI Elements
 const authOverlay = document.getElementById('authOverlay');
@@ -402,7 +424,7 @@ if (clearLogsBtn) {
             }
             
             // 2. Notify backend to clear memory & disk logs
-            await fetch(`${BACKEND_URL}/api/clear_logs`, {
+            await fetchWithWakeupRetry(`${BACKEND_URL}/api/clear_logs`, {
                 method: 'POST',
                 headers: { 
                     'Authorization': `Bearer ${token}`,
@@ -515,7 +537,7 @@ createContentForm.addEventListener('submit', async (e) => {
                 if (pData.kaggleKey) formData.append('kaggle_key', pData.kaggleKey);
             }
             
-            const res = await fetch(`${BACKEND_URL}/api/queue_batch`, {
+            const res = await fetchWithWakeupRetry(`${BACKEND_URL}/api/queue_batch`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
@@ -552,7 +574,7 @@ createContentForm.addEventListener('submit', async (e) => {
         // 1. Generate Script
         try {
             const targetDuration = document.getElementById('targetDurationSelect').value;
-            const res = await fetch(`${BACKEND_URL}/api/generate-script`, {
+            const res = await fetchWithWakeupRetry(`${BACKEND_URL}/api/generate-script`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -653,7 +675,7 @@ createContentForm.addEventListener('submit', async (e) => {
             if (pData.kaggleKey) formData.append('kaggle_key', pData.kaggleKey);
         }
         
-        const res = await fetch(`${BACKEND_URL}/api/run_premium`, {
+        const res = await fetchWithWakeupRetry(`${BACKEND_URL}/api/run_premium`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
             body: formData
