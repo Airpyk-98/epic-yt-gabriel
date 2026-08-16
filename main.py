@@ -2740,23 +2740,30 @@ async def queue_batch(
     except:
         titles_list = [titles_json]
         
-    batch_id = f"epicsync_batch_{int(time.time())}"
+    batch_id = f"epicsync_batch_{int(time.time())}_{uuid.uuid4().hex[:4]}"
     staging = os.path.join(STAGING_DIR, batch_id)
     os.makedirs(staging, exist_ok=True)
     
-    image_path = os.path.join(staging, "input.png")
+    # Upload source image to HF Dataset so it persists across Render restarts
+    image_repo_path = ""
     if image and image.filename:
-        with open(image_path, "wb") as f:
+        local_img = os.path.join(staging, "input.png")
+        with open(local_img, "wb") as f:
             f.write(await image.read())
+        if hf_repo and (hf_token or get_default_hf_token()):
+            image_repo_path = f"inputs/{batch_id}_image.png"
+            upload_to_hf_hub(local_img, hf_repo, image_repo_path, hf_token or get_default_hf_token())
         
-    bgm_path = ""
     bgm_repo_path = ""
     if bgm_select and bgm_select.strip() != "":
         bgm_repo_path = bgm_select.strip()
     elif bg_music and bg_music.filename:
-        bgm_path = os.path.join(staging, "bg_music.mp3")
-        with open(bgm_path, "wb") as f:
+        local_bgm = os.path.join(staging, "bg_music.mp3")
+        with open(local_bgm, "wb") as f:
             f.write(await bg_music.read())
+        if hf_repo and (hf_token or get_default_hf_token()):
+            bgm_repo_path = f"inputs/{batch_id}_bgm.mp3"
+            upload_to_hf_hub(local_bgm, hf_repo, bgm_repo_path, hf_token or get_default_hf_token())
             
     form_data = {
         "voice": voice, "aspect_ratio": aspect_ratio, "resolution": resolution,
@@ -2764,14 +2771,46 @@ async def queue_batch(
         "video_speed": str(video_speed), "bgm_select": bgm_repo_path,
         "bgm_volume": str(bgm_volume), "voice_boost": str(voice_boost), "projectId": projectId,
         "kaggle_user": kaggle_user, "kaggle_key": kaggle_key,
-        "hf_repo": hf_repo, "hf_token": hf_token, "video_model": video_model,
+        "hf_repo": hf_repo, "hf_token": hf_token or get_default_hf_token(), "video_model": video_model,
         "target_duration": target_duration, "grid_color": grid_color,
         "caption_color": caption_color, "font_size": font_size, "font_y_pos": font_y_pos
     }
     
-    # Save jobs sequentially in background
-    background_tasks.add_task(process_batch_queue, batch_id, titles_list, form_data, image_path, bgm_path, uid)
-    return {"status": "Batch Queued", "batch_id": batch_id, "count": len(titles_list)}
+    # Pre-generate job IDs for all items in the batch
+    job_ids = {}
+    for i, t in enumerate(titles_list):
+        jid = f"epicsync_premium_{int(time.time())}_{i}_{uuid.uuid4().hex[:4]}"
+        job_ids[str(i)] = jid
+        # Pre-create execution documents in Firestore with QUEUED status
+        if db:
+            db.collection("users").document(uid).collection("projects").document(projectId).collection("executions").document(jid).set({
+                "title": t[:30] + "...",
+                "status": "QUEUED" if i > 0 else "STAGING",
+                "job_id": jid,
+                "batch_id": batch_id,
+                "batch_index": i,
+                "progress": 0,
+                "step_text": "Waiting in queue..." if i > 0 else "Preparing launch...",
+                "createdAt": firestore.SERVER_TIMESTAMP
+            })
+            
+    # Persist Batch in Firestore
+    if db:
+        db.collection("users").document(uid).collection("projects").document(projectId).collection("batch_queues").document(batch_id).set({
+            "batch_id": batch_id,
+            "titles": titles_list,
+            "current_index": 0,
+            "status": "RUNNING",
+            "job_ids": job_ids,
+            "form_data": form_data,
+            "image_repo_path": image_repo_path,
+            "bgm_repo_path": bgm_repo_path,
+            "createdAt": firestore.SERVER_TIMESTAMP
+        })
+        
+    # Kick off Job 0 in the background
+    background_tasks.add_task(advance_batch_queue, batch_id, uid, projectId, 0)
+    return {"status": "Batch Queued", "batch_id": batch_id, "count": len(titles_list), "job_ids": job_ids}
 
 async def process_batch_queue(batch_id, titles_list, form_data, image_path, bgm_path, uid):
     import json
@@ -2995,6 +3034,295 @@ class KaggleLogRequest(BaseModel):
     job_id: str
     message: str
     token: str
+
+
+class KaggleCompleteRequest(BaseModel):
+    job_id: str
+    status: str
+    hf_repo: Optional[str] = "epic-gab/EpicSync-Dataset"
+    uid: Optional[str] = None
+    projectId: Optional[str] = None
+    batch_id: Optional[str] = None
+    batch_index: Optional[int] = None
+    error: Optional[str] = None
+
+def advance_batch_queue(batch_id: str, uid: str, project_id: str, next_index: int):
+    """Stateless queue advancer that runs sequentially across Render restarts/sleeps"""
+    try:
+        if not db:
+            print("[BATCH] Firestore DB not available for advance_batch_queue")
+            return
+            
+        batch_doc_ref = db.collection("users").document(uid).collection("projects").document(project_id).collection("batch_queues").document(batch_id)
+        batch_doc = batch_doc_ref.get()
+        if not batch_doc.exists:
+            print(f"[BATCH] Batch document {batch_id} not found.")
+            return
+            
+        bdata = batch_doc.to_dict()
+        titles = bdata.get("titles", [])
+        form_data = bdata.get("form_data", {})
+        image_repo_path = bdata.get("image_repo_path", "")
+        bgm_repo_path = bdata.get("bgm_repo_path", "")
+        
+        if next_index >= len(titles):
+            print(f"[BATCH] Batch {batch_id} complete! All {len(titles)} jobs processed.")
+            batch_doc_ref.update({"status": "COMPLETED", "completed_at": firestore.SERVER_TIMESTAMP})
+            return
+            
+        batch_doc_ref.update({"current_index": next_index, "status": "RUNNING"})
+        title = titles[next_index]
+        job_id = bdata.get("job_ids", {}).get(str(next_index)) or f"epicsync_premium_{int(time.time())}_{uuid.uuid4().hex[:4]}"
+        
+        print(f"[BATCH] Advancing batch {batch_id} -> Job {next_index+1}/{len(titles)}: {title} (ID: {job_id})", flush=True)
+        
+        # 1. Fetch AI settings & Generate Script
+        user_doc = db.collection('users').document(uid).get()
+        if not user_doc.exists:
+            return
+        user_data = user_doc.to_dict()
+        base_url = user_data.get("aiBaseUrl", "https://api.openai.com/v1")
+        api_key = user_data.get("aiApiKey", "")
+        model = user_data.get("aiModel", "gpt-4")
+        sys_prompt = user_data.get("aiSystemPrompt", "You are a creative YouTube script writer.")
+        
+        video_model = form_data.get("video_model", "ltx-video")
+        target_duration = form_data.get("target_duration", "60 seconds")
+        duration_directive = build_duration_enforcement(target_duration)
+        tts_enforcement = "\n\nCRITICAL FORMAT INSTRUCTION: Output ONLY raw plaintext words that the voice actor speaks. No markdown, no prefixes."
+        
+        aptavatar_enforcement = ""
+        if video_model == "aptavatar":
+            aptavatar_enforcement = "\n\n<APTAVATAR_PROMPT>\n步骤1：*帧 0~30* talking naturally\n步骤2：*帧 30~90* gesturing with hands\n</APTAVATAR_PROMPT>"
+
+        pexels_enforcement = ""
+        if video_model == "pexels":
+            pexels_enforcement = "\n\n<PEXELS_SEGMENTS>\n[\n  {\"text\": \"First segment text here,\", \"keyword\": \"office worker\"}\n]\n</PEXELS_SEGMENTS>"
+
+        final_sys_prompt = sys_prompt + tts_enforcement + duration_directive + aptavatar_enforcement + pexels_enforcement
+        
+        # Update Firestore
+        db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
+            "title": title[:30] + "...",
+            "status": "GENERATING SCRIPT",
+            "job_id": job_id,
+            "batch_id": batch_id,
+            "batch_index": next_index,
+            "createdAt": firestore.SERVER_TIMESTAMP
+        }, merge=True)
+        
+        script_text = ""
+        try:
+            resp = requests.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": final_sys_prompt},
+                        {"role": "user", "content": f"Write a script for the title: {title}"}
+                    ],
+                    "temperature": 0.7
+                },
+                timeout=60
+            )
+            resp.raise_for_status()
+            raw_script = resp.json()['choices'][0]['message']['content']
+            
+            apt_match = re.search(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", raw_script, re.DOTALL | re.IGNORECASE)
+            apt_prompt = apt_match.group(0) if apt_match else ""
+            pexels_match = re.search(r"<PEXELS_SEGMENTS>.*?</PEXELS_SEGMENTS>", raw_script, re.DOTALL | re.IGNORECASE)
+            pexels_prompt = pexels_match.group(0) if pexels_match else ""
+
+            match = re.search(r"<SCRIPT>(.*?)</SCRIPT>", raw_script, re.DOTALL | re.IGNORECASE)
+            if match:
+                script_text = match.group(1).strip()
+            else:
+                script_text = re.sub(r'\[.*?\]', '', raw_script)
+                script_text = re.sub(r'\(.*?\)', '', script_text).replace('**', '').replace('---', '')
+                script_text = re.sub(r'^(Narrator|Script|Audio|Voiceover):?\s*', '', script_text, flags=re.IGNORECASE | re.MULTILINE)
+                script_text = re.sub(r"<APTAVATAR_PROMPT>.*?</APTAVATAR_PROMPT>", "", script_text, flags=re.DOTALL | re.IGNORECASE)
+                script_text = re.sub(r"<PEXELS_SEGMENTS>.*?</PEXELS_SEGMENTS>", "", script_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                
+            if apt_prompt:
+                script_text = script_text + "\n\n" + apt_prompt
+            if pexels_prompt:
+                script_text = script_text + "\n\n" + pexels_prompt
+        except Exception as e:
+            print(f"[BATCH] Script generation error: {e}", flush=True)
+            db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(job_id).set({
+                "status": "FAILED", "error": f"Script Generation Failed: {str(e)}", "progress": 100
+            }, merge=True)
+            # Advance to next job in batch
+            advance_batch_queue(batch_id, uid, project_id, next_index + 1)
+            return
+
+        # 2. Stage & Launch Job
+        staging = os.path.join(STAGING_DIR, job_id)
+        os.makedirs(staging, exist_ok=True)
+        
+        kaggle_user = form_data.get("kaggle_user", "gabrielnjoku")
+        kaggle_key = form_data.get("kaggle_key", "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e")
+        if not kaggle_key or "0f12d3a4" in kaggle_key:
+            kaggle_key = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e"
+            
+        proj_slug = "".join([c for c in project_id if c.isalnum()]).lower()[:10]
+        unique_suffix = uuid.uuid4().hex[:4]
+        kernel_id = f"{kaggle_user}/epicsync-{proj_slug}-{unique_suffix}"
+        
+        jobs = load_jobs()
+        jobs[job_id] = {
+            "id": job_id, "title": title, "status": "STAGING", "progress": 15,
+            "step_text": "Packaging & provisioning GPU compute engine...",
+            "script": script_text, "voice": form_data.get("voice", ""),
+            "aspect_ratio": form_data.get("aspect_ratio", "9:16"),
+            "slug": kernel_id, "kaggle_user": kaggle_user, "kaggle_key": kaggle_key,
+            "mode": "premium", "uid": uid, "projectId": project_id,
+            "batch_id": batch_id, "batch_index": next_index,
+            "created_at": time.time(), "logs": [f"[{time.strftime('%H:%M:%S')}] Job started from persistent batch queue."]
+        }
+        save_jobs(jobs)
+        update_firebase_job(job_id, jobs[job_id])
+        
+        # Launch background worker
+        t = threading.Thread(target=prepare_and_launch_premium_job, args=(
+            job_id, staging, "", "", bgm_repo_path, script_text, form_data.get("voice", "relationship-male"),
+            form_data.get("aspect_ratio", "9:16"), form_data.get("resolution", "720p"),
+            form_data.get("add_captions", "true"), form_data.get("add_grid", "true"),
+            form_data.get("video_speed", "1.0"), kaggle_user, kaggle_key, 
+            form_data.get("hf_repo", "epic-gab/EpicSync-Dataset"), form_data.get("hf_token") or get_default_hf_token(),
+            kernel_id, video_model, form_data.get("grid_color", "#ffffff"),
+            form_data.get("caption_color", "#ffffff"), form_data.get("font_size", "60"),
+            form_data.get("font_y_pos", "83"), uid, form_data.get("bgm_volume", "15"), form_data.get("voice_boost", "100"), project_id
+        ))
+        t.start()
+        
+    except Exception as e:
+        print(f"[BATCH] Advance error: {e}", flush=True)
+
+@app.post("/api/callback/kaggle_complete")
+def kaggle_complete(req: KaggleCompleteRequest):
+    print(f"[CALLBACK] Kaggle finished job: {req.job_id} | status: {req.status}", flush=True)
+    
+    jobs = load_jobs()
+    if req.job_id not in jobs:
+        jobs[req.job_id] = {
+            "id": req.job_id, "uid": req.uid, "projectId": req.projectId,
+            "batch_id": req.batch_id, "batch_index": req.batch_index, "logs": []
+        }
+        
+    jobs[req.job_id]["status"] = req.status
+    jobs[req.job_id]["progress"] = 100
+    if req.status == "SUCCESS":
+        jobs[req.job_id]["step_text"] = "Video generated successfully!"
+        jobs[req.job_id]["output_file"] = f"/api/video/{req.job_id}?repo={req.hf_repo}"
+    else:
+        jobs[req.job_id]["step_text"] = req.error or "Generation failed on compute engine."
+        if req.error:
+            jobs[req.job_id]["error"] = req.error
+            
+    save_jobs(jobs)
+    
+    uid = req.uid or jobs[req.job_id].get("uid")
+    project_id = req.projectId or jobs[req.job_id].get("projectId")
+    batch_id = req.batch_id or jobs[req.job_id].get("batch_id")
+    batch_index = req.batch_index if req.batch_index is not None else jobs[req.job_id].get("batch_index")
+    
+    if db:
+        if not uid or not project_id:
+            try:
+                users = db.collection("users").stream()
+                for u in users:
+                    projs = db.collection("users").document(u.id).collection("projects").stream()
+                    for p in projs:
+                        ex_doc = db.collection("users").document(u.id).collection("projects").document(p.id).collection("executions").document(req.job_id).get()
+                        if ex_doc.exists:
+                            uid = u.id
+                            project_id = p.id
+                            ex_data = ex_doc.to_dict()
+                            batch_id = batch_id or ex_data.get("batch_id")
+                            batch_index = batch_index if batch_index is not None else ex_data.get("batch_index")
+                            break
+                    if uid and project_id:
+                        break
+            except Exception as e:
+                print(f"Error finding job in firestore: {e}", flush=True)
+                
+        if uid and project_id:
+            data_to_sync = {
+                "status": req.status,
+                "progress": 100,
+                "step_text": "Video generated successfully!" if req.status == "SUCCESS" else (req.error or "Generation failed"),
+                "output_file": f"/api/video/{req.job_id}?repo={req.hf_repo}" if req.status == "SUCCESS" else None,
+                "updatedAt": firestore.SERVER_TIMESTAMP
+            }
+            if req.error:
+                data_to_sync["error"] = req.error
+            try:
+                db.collection("users").document(uid).collection("projects").document(project_id).collection("executions").document(req.job_id).set(data_to_sync, merge=True)
+                print(f"[CALLBACK] Synced Firestore execution {req.job_id} to {req.status}", flush=True)
+            except Exception as e:
+                print(f"[CALLBACK] Firestore write error: {e}", flush=True)
+
+            # Auto-Advance Persistent Batch Queue if this job was part of a batch!
+            if batch_id and batch_index is not None:
+                print(f"[CALLBACK] Job {req.job_id} was batch item {batch_index}. Triggering next batch item...", flush=True)
+                advance_batch_queue(batch_id, uid, project_id, int(batch_index) + 1)
+                
+    return {"status": "ACK", "job_id": req.job_id}
+
+@app.get("/api/sync_job/{job_id}")
+async def sync_job(job_id: str, projectId: Optional[str] = None, request: Request = None):
+    hf_repo = os.environ.get("HF_REPO", "epic-gab/EpicSync-Dataset")
+    hf_token = get_default_hf_token()
+    
+    url = f"https://huggingface.co/datasets/{hf_repo}/resolve/main/outputs/{job_id}.mp4"
+    headers = {}
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+        
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        try:
+            res = await client.head(url, headers=headers, timeout=10.0)
+            if res.status_code in [200, 302]:
+                output_file = f"/api/video/{job_id}?repo={hf_repo}"
+                
+                auth_header = request.headers.get("Authorization") if request else None
+                uid = None
+                if auth_header and auth_header.startswith("Bearer "):
+                    try:
+                        decoded_token = auth.verify_id_token(auth_header.split(" ")[1])
+                        uid = decoded_token['uid']
+                    except:
+                        pass
+                        
+                if db:
+                    if not uid or not projectId:
+                        users = db.collection("users").stream()
+                        for u in users:
+                            projs = db.collection("users").document(u.id).collection("projects").stream()
+                            for p in projs:
+                                ex_doc = db.collection("users").document(u.id).collection("projects").document(p.id).collection("executions").document(job_id).get()
+                                if ex_doc.exists:
+                                    uid = u.id
+                                    projectId = p.id
+                                    break
+                            if uid and projectId:
+                                break
+                    if uid and projectId:
+                        db.collection("users").document(uid).collection("projects").document(projectId).collection("executions").document(job_id).set({
+                            "status": "SUCCESS",
+                            "progress": 100,
+                            "step_text": "Video generated successfully!",
+                            "output_file": output_file,
+                            "updatedAt": firestore.SERVER_TIMESTAMP
+                        }, merge=True)
+                        
+                return {"status": "SUCCESS", "output_file": output_file, "job_id": job_id}
+        except Exception as e:
+            print(f"Error checking HF: {e}", flush=True)
+
+    return {"status": "RUNNING", "job_id": job_id}
 
 @app.post("/api/kaggle_log")
 def kaggle_log(req: KaggleLogRequest):
