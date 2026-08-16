@@ -6,14 +6,14 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>EpicSync — Account & Webhook Settings</title>
+    <title>EpicSync — Settings & Credentials</title>
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="style.css?v=20260816_v99">
+    <link rel="stylesheet" href="style.css?v=20260816_v125">
 </head>
 <body>
 
@@ -36,7 +36,7 @@
             </div>
         </header>
 
-        <!-- Real Multi-Page Navigation Bar -->
+        <!-- Navigation Bar -->
         <nav class="nav-bar">
             <a href="index.html" class="nav-link">
                 <span class="nav-icon">🎬</span>
@@ -55,40 +55,60 @@
         <!-- Main Content Area -->
         <main class="main-content">
             
+            <!-- Settings Card -->
             <section class="card settings-card">
                 <div class="card-header">
-                    <h2>⚙️ Account & Webhook Settings</h2>
-                    <p class="subtitle">Configure your YouTube Dispatch Webhook URL (n8n, Make, or Custom Automation API).</p>
+                    <h2>⚙️ Cloud & Automation Settings</h2>
+                    <p class="subtitle">Configure your Kaggle CPU Execution credentials and optional YouTube Automation Webhook.</p>
                 </div>
 
                 <form id="settingsForm">
-                    <div class="form-group">
-                        <label for="webhookUrlSetting">YouTube Dispatch Webhook URL</label>
-                        <input type="url" id="webhookUrlSetting" placeholder="https://your-n8n-instance.com/webhook/youtube-publish">
-                        <span class="input-hint">When you click "Push to YouTube" on any video, the title and direct video download link are sent to this URL.</span>
-                    </div>
+                    
+                    <!-- Kaggle Credentials Section -->
+                    <div style="background: rgba(245, 158, 11, 0.05); border: 1.5px solid rgba(245, 158, 11, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: var(--primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <span>☁️</span> Kaggle Cloud CPU Runner
+                        </h3>
 
-                    <div class="webhook-test-box">
-                        <div class="payload-preview-header">
-                            <strong>Standard Dispatched Payload Format:</strong>
+                        <div class="form-group">
+                            <label for="kaggleUsernameInput">Kaggle Username <span class="required">*</span></label>
+                            <input type="text" id="kaggleUsernameInput" placeholder="e.g. gabrielnjoku or ikechukwuebiringa1" required>
+                            <span class="input-hint">Your exact Kaggle username where CPU kernels are dispatched.</span>
                         </div>
-                        <pre class="code-preview"><code>{
-  "event": "youtube_publish_request",
-  "timestamp": 1786903415000,
-  "count": 2,
-  "videos": [
-    {
-      "title": "Top 5 Productivity Secrets in 2026",
-      "video_download_link": "https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/outputs/epicsync_1786903415_0.mp4",
-      "aspect_ratio": "9:16"
-    }
-  ]
-}</code></pre>
+
+                        <div class="form-group">
+                            <label for="kaggleKeyInput">Kaggle API Token (KGAT_...) <span class="required">*</span></label>
+                            <input type="password" id="kaggleKeyInput" placeholder="KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e" required>
+                            <span class="input-hint">Bearer token generated from your Kaggle Account Settings.</span>
+                        </div>
+
+                        <button type="button" id="testKaggleBtn" class="btn-tool" style="margin-top: 6px;">
+                            🧪 Test Kaggle Connection
+                        </button>
                     </div>
 
+                    <!-- YouTube Webhook Section (Optional) -->
+                    <div style="background: rgba(255, 255, 255, 0.02); border: 1.5px solid var(--border-color); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <span>📺</span> YouTube Dispatch Webhook <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
+                        </h3>
+
+                        <div class="form-group">
+                            <label for="webhookUrlSetting">Webhook Endpoint URL</label>
+                            <input type="url" id="webhookUrlSetting" placeholder="https://your-n8n-instance.com/webhook/youtube-publish">
+                            <span class="input-hint">Leave blank if not publishing via n8n/Make automation.</span>
+                        </div>
+
+                        <button type="button" id="testWebhookBtn" class="btn-tool" style="margin-top: 6px;">
+                            🧪 Test Webhook Connection
+                        </button>
+                    </div>
+
+                    <!-- Save Action -->
                     <div class="form-actions-row">
-                        <button type="button" id="testWebhookBtn" class="btn-tool">🧪 Test Webhook Connection</button>
-                        <button type="submit" id="saveSettingsBtn" class="btn-launch" style="width: auto; padding: 14px 28px;">💾 Save Webhook URL</button>
+                        <button type="submit" id="saveSettingsBtn" class="btn-launch">
+                            💾 Save All Settings
+                        </button>
                     </div>
                     
                     <div id="settingsStatusMsg" class="status-msg" style="display: none;"></div>
@@ -109,7 +129,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl } from "./shared.js?v=20260816_v99";
+        import { initSharedAuth, getUserSettings, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY } from "./shared.js?v=20260816_v125";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -128,52 +148,94 @@
         initSharedAuth(auth, db, utils);
 
         let currentUser = null;
+        const kaggleUsernameInput = document.getElementById('kaggleUsernameInput');
+        const kaggleKeyInput = document.getElementById('kaggleKeyInput');
         const webhookUrlSetting = document.getElementById('webhookUrlSetting');
         const settingsForm = document.getElementById('settingsForm');
         const settingsStatusMsg = document.getElementById('settingsStatusMsg');
+        const testKaggleBtn = document.getElementById('testKaggleBtn');
         const testWebhookBtn = document.getElementById('testWebhookBtn');
 
         auth.onAuthStateChanged(async (user) => {
             currentUser = user;
-            if (user) {
-                const url = await getUserWebhookUrl(db, utils, user.uid);
-                webhookUrlSetting.value = url;
-            } else {
-                webhookUrlSetting.value = localStorage.getItem('epicsync_yt_webhook') || '';
-            }
+            const s = await getUserSettings(db, utils, user?.uid);
+            kaggleUsernameInput.value = s.kaggle_username || DEFAULT_KAGGLE_USERNAME;
+            kaggleKeyInput.value = s.kaggle_key || DEFAULT_KAGGLE_KEY;
+            webhookUrlSetting.value = s.webhook_url || '';
         });
 
+        // 1. Save Settings
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const url = webhookUrlSetting.value.trim();
+            const username = kaggleUsernameInput.value.trim();
+            const key = kaggleKeyInput.value.trim();
+            const webhookUrl = webhookUrlSetting.value.trim();
+
+            if (!username || !key) return alert('Please enter both Kaggle Username and API Token.');
+
+            localStorage.setItem('epicsync_kaggle_username', username);
+            localStorage.setItem('epicsync_kaggle_key', key);
+            localStorage.setItem('epicsync_yt_webhook', webhookUrl);
 
             if (currentUser) {
                 try {
                     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'config'), {
-                        webhook_url: url,
+                        kaggle_username: username,
+                        kaggle_key: key,
+                        webhook_url: webhookUrl,
                         updatedAt: new Date()
                     }, { merge: true });
                     
-                    settingsStatusMsg.innerText = '✅ Webhook URL saved to your account successfully!';
-                    settingsStatusMsg.style.background = 'rgba(16, 185, 129, 0.15)';
-                    settingsStatusMsg.style.border = '1.5px solid rgba(16, 185, 129, 0.4)';
-                    settingsStatusMsg.style.color = '#34d399';
-                    settingsStatusMsg.style.display = 'block';
-                    setTimeout(() => settingsStatusMsg.style.display = 'none', 3500);
+                    showStatusMsg('✅ Settings saved to your account successfully!', true);
                 } catch (err) {
                     alert('Error saving settings: ' + err.message);
                 }
             } else {
-                localStorage.setItem('epicsync_yt_webhook', url);
-                alert('Webhook saved to local browser storage! Sign in to sync across devices.');
+                showStatusMsg('✅ Settings saved locally! (Sign in to sync across devices)', true);
             }
         });
 
+        function showStatusMsg(msg, isSuccess) {
+            settingsStatusMsg.innerText = msg;
+            settingsStatusMsg.style.background = isSuccess ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+            settingsStatusMsg.style.border = isSuccess ? '1.5px solid rgba(16, 185, 129, 0.4)' : '1.5px solid rgba(239, 68, 68, 0.4)';
+            settingsStatusMsg.style.color = isSuccess ? '#34d399' : '#f87171';
+            settingsStatusMsg.style.display = 'block';
+            setTimeout(() => settingsStatusMsg.style.display = 'none', 4000);
+        }
+
+        // 2. Test Kaggle Connection
+        testKaggleBtn.addEventListener('click', async () => {
+            const username = kaggleUsernameInput.value.trim();
+            const key = kaggleKeyInput.value.trim();
+            if (!username || !key) return alert('Please fill in Kaggle Username and Token first.');
+
+            testKaggleBtn.innerText = '🧪 Verifying with Kaggle...';
+            try {
+                const res = await fetch(`https://www.kaggle.com/api/v1/kernels/list?user=${username}`, {
+                    headers: { 'Authorization': `Bearer ${key}` }
+                });
+
+                if (res.ok) {
+                    alert(`✅ Success! Kaggle credentials verified for user: "${username}".`);
+                } else if (res.status === 401) {
+                    alert(`❌ Unauthorized (401): The token "${key.substring(0, 8)}..." is invalid or does not belong to "${username}".`);
+                } else {
+                    alert(`Kaggle API response (${res.status}): ${await res.text()}`);
+                }
+            } catch (err) {
+                alert(`Kaggle verification notice: ${err.message}`);
+            } finally {
+                testKaggleBtn.innerText = '🧪 Test Kaggle Connection';
+            }
+        });
+
+        // 3. Test Webhook Connection
         testWebhookBtn.addEventListener('click', async () => {
             const url = webhookUrlSetting.value.trim();
-            if (!url) return alert('Please enter a Webhook URL to test.');
+            if (!url) return alert('Please enter a Webhook URL to test, or leave it blank if not using one.');
 
-            testWebhookBtn.innerText = '🧪 Testing...';
+            testWebhookBtn.innerText = '🧪 Testing Webhook...';
             try {
                 const res = await fetch(url, {
                     method: 'POST',
@@ -187,7 +249,7 @@
                 });
                 alert(`✅ Webhook test sent successfully! Response status: ${res.status}`);
             } catch (err) {
-                alert(`Webhook connection test notice: ${err.message}\n\n(If you are using n8n or Make, make sure webhook is listening)`);
+                alert(`Webhook notice: ${err.message}`);
             } finally {
                 testWebhookBtn.innerText = '🧪 Test Webhook Connection';
             }

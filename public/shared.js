@@ -1,11 +1,11 @@
-// EpicSync Shared Application Logic & Direct Cloud Dispatcher
+// EpicSync Shared Application Logic & Cloud Dispatcher
 
-const KAGGLE_USERNAME = "ikechukwuebiringa1";
-const KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
-const HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
-const PEXELS_API_KEY = "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d";
+export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
+export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
+export const HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
+export const PEXELS_API_KEY = "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d";
 
-// 1. Check & Initialize Auth Navigation Pill across all pages
+// 1. Initialize Auth Navigation Pill across all pages
 export function initSharedAuth(auth, db, utils) {
     const userEmailDisplay = document.getElementById('userEmailDisplay');
     const signOutBtn = document.getElementById('signOutBtn');
@@ -34,24 +34,39 @@ export function initSharedAuth(auth, db, utils) {
     }
 }
 
-// 2. Fetch User Webhook URL from Firestore
-export async function getUserWebhookUrl(db, utils, uid) {
-    if (!uid || !db || !utils) return localStorage.getItem('epicsync_yt_webhook') || '';
-    try {
-        const snap = await utils.getDoc(utils.doc(db, 'users', uid, 'settings', 'config'));
-        if (snap.exists()) {
-            return snap.data().webhook_url || '';
+// 2. Fetch User Settings from Firestore (or LocalStorage fallback)
+export async function getUserSettings(db, utils, uid) {
+    let settings = {
+        kaggle_username: localStorage.getItem('epicsync_kaggle_username') || DEFAULT_KAGGLE_USERNAME,
+        kaggle_key: localStorage.getItem('epicsync_kaggle_key') || DEFAULT_KAGGLE_KEY,
+        webhook_url: localStorage.getItem('epicsync_yt_webhook') || ''
+    };
+
+    if (uid && db && utils) {
+        try {
+            const snap = await utils.getDoc(utils.doc(db, 'users', uid, 'settings', 'config'));
+            if (snap.exists()) {
+                const data = snap.data();
+                if (data.kaggle_username) settings.kaggle_username = data.kaggle_username;
+                if (data.kaggle_key) settings.kaggle_key = data.kaggle_key;
+                if (data.webhook_url) settings.webhook_url = data.webhook_url;
+            }
+        } catch (e) {
+            console.warn("Could not fetch user settings from Firestore:", e);
         }
-    } catch (e) {
-        console.warn("Could not fetch user webhook from Firestore:", e);
     }
-    return localStorage.getItem('epicsync_yt_webhook') || '';
+    return settings;
+}
+
+export async function getUserWebhookUrl(db, utils, uid) {
+    const s = await getUserSettings(db, utils, uid);
+    return s.webhook_url;
 }
 
 // 3. Dispatch Array of Videos to Webhook
 export async function dispatchToWebhook(webhookUrl, videosList) {
     if (!webhookUrl) {
-        alert('No YouTube Webhook configured! Please go to Settings and set your Webhook URL.');
+        alert('No YouTube Webhook configured! You can configure one in the Settings page whenever you are ready.');
         window.location.href = 'settings.html';
         return false;
     }
@@ -287,12 +302,17 @@ print("\\n[BATCH COMPLETED] All videos generated and uploaded successfully. Work
 `;
 }
 
-// 5. Direct Kaggle Batch Dispatcher (Using Bearer Token Auth)
+// 5. Direct Kaggle Batch Dispatcher (Using User's Configured Credentials)
 export async function launchKaggleBatchDirectly(db, utils, payload) {
     const ts = Math.floor(Date.now() / 1000);
     const batch_id = `batch_${ts}`;
     const titles = payload.titles || [];
     const jobs = [];
+
+    // Get user configured credentials
+    const userSettings = await getUserSettings(db, utils, payload.uid);
+    const kaggleUsername = (payload.kaggle_username || userSettings.kaggle_username || DEFAULT_KAGGLE_USERNAME).trim();
+    const kaggleKey = (payload.kaggle_key || userSettings.kaggle_key || DEFAULT_KAGGLE_KEY).trim();
 
     // Initialize execution documents in Firestore
     for (let idx = 0; idx < titles.length; idx++) {
@@ -340,7 +360,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     const slugName = `epicsync-batch-${ts}`;
 
     const kagglePayload = {
-        slug: `${KAGGLE_USERNAME}/${slugName}`,
+        slug: `${kaggleUsername}/${slugName}`,
         newTitle: `EpicSync Batch ${ts}`,
         text: workerScript,
         language: "python",
@@ -358,7 +378,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
     const res = await fetch('https://www.kaggle.com/api/v1/kernels/push', {
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${KAGGLE_KEY}`,
+            'Authorization': `Bearer ${kaggleKey}`,
             'Content-Type': 'application/json'
         },
         body: JSON.stringify(kagglePayload)
@@ -366,14 +386,17 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
 
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Kaggle API returned ${res.status}: ${errText}`);
+        throw new Error(`Kaggle API (${kaggleUsername}) returned ${res.status}: ${errText}`);
     }
+
+    const resData = await res.json();
 
     return {
         success: true,
         batch_id: batch_id,
         count: jobs.length,
-        jobs: jobs
+        jobs: jobs,
+        kaggle_ref: resData.ref || slugName
     };
 }
 
