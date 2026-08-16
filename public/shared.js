@@ -360,14 +360,29 @@ for idx, job in enumerate(batch_config["jobs"]):
         print("Using procedural visualizer fallback...")
         subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t 30 -c:v libx264 {video_clip_path}", shell=True)
 
-    # Step 4: High-Speed Multi-Threaded FFmpeg Video Assembly
-    update_job(uid, job_id, "RUNNING", 75, "Compiling video via high-speed FFmpeg...")
+    # Step 4: High-Speed Multi-Threaded & GPU-Accelerated Video Assembly
+    update_job(uid, job_id, "RUNNING", 75, "Compiling video via high-speed FFmpeg (NVENC GPU / Fast CPU)...")
 
     output_mp4 = os.path.join(work_dir, f"{job_id}.mp4")
     vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
     scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
 
-    ff_cmd = f'ffmpeg -y -threads 0 -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
+    # Check if NVIDIA NVENC hardware encoder is supported
+    has_nvenc = False
+    try:
+        chk = subprocess.run("ffmpeg -encoders 2>&1 | grep -i h264_nvenc", shell=True, capture_output=True, text=True)
+        if "h264_nvenc" in chk.stdout:
+            has_nvenc = True
+    except Exception:
+        has_nvenc = False
+
+    if has_nvenc:
+        print("⚡ Using NVIDIA GPU NVENC hardware acceleration...")
+        ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
+    else:
+        print("🐢 Using multi-threaded CPU acceleration...")
+        ff_cmd = f'ffmpeg -y -threads 0 -stream_loop -1 -i "{video_clip_path}" -i "{audio_path}" -filter_complex "[0:v]{scale_filter}[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{output_mp4}"'
+
     subprocess.run(ff_cmd, shell=True)
 
     # Step 5: Direct Hugging Face Upload
