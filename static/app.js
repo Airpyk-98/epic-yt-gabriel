@@ -206,39 +206,7 @@ const aiApiKey = document.getElementById('aiApiKey');
 const aiModelSelect = document.getElementById('aiModelSelect');
 const aiSystemPrompt = document.getElementById('aiSystemPrompt');
 const autoPostToggle = document.getElementById('autoPostToggle');
-const fetchModelsBtn = document.getElementById('fetchModelsBtn');
-const fetchModelsStatus = document.getElementById('fetchModelsStatus');
 
-async function loadUserSettings() {
-    const docSnap = await getDoc(doc(db, 'users', currentUser.uid));
-    if (docSnap.exists()) {
-        const data = docSnap.data();
-        aiBaseUrl.value = data.aiBaseUrl || '';
-        aiApiKey.value = data.aiApiKey || '';
-        aiSystemPrompt.value = data.aiSystemPrompt || '';
-        autoPostToggle.checked = data.autoPost === true;
-        
-        if (data.aiBaseUrl && data.aiApiKey) {
-            await fetchModels(data.aiModel);
-        }
-    }
-}
-
-settingsForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const saveBtn = document.getElementById('saveSettingsBtn');
-    saveBtn.innerText = 'Saving...';
-    saveBtn.disabled = true;
-    
-    try {
-        await setDoc(doc(db, 'users', currentUser.uid), {
-            aiBaseUrl: aiBaseUrl.value.trim(),
-            aiApiKey: aiApiKey.value.trim(),
-            aiModel: aiModelSelect.value,
-            aiSystemPrompt: aiSystemPrompt.value,
-            autoPost: autoPostToggle.checked,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
         
         saveBtn.innerText = 'Save Settings';
         saveBtn.disabled = false;

@@ -11,11 +11,11 @@
     
     <!-- Firebase App (the core Firebase SDK) is always required and must be listed first -->
     <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js?v=20260816_1786904181";
       import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
       import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
       
-      // Make Firebase accessible globally for app.js
+      // Make Firebase accessible globally for app.js?v=20260816_1786904181
       window.firebaseConfig = null; // Awaiting user input
       window.FirebaseUtils = {
         initializeApp, getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot
@@ -51,10 +51,6 @@
         <header class="navbar">
             <div class="logo">Epic<span class="accent-text">Sync</span></div>
             <div class="nav-right" style="display: flex; align-items: center; gap: 10px;">
-                <div id="workerStatusBadge" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981;">
-                    <span id="workerStatusDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
-                    <span id="workerStatusText">12h Worker: Active</span>
-                </div>
                 <div class="active-project-badge" id="activeProjectBadge">No Project Selected</div>
                 <button class="hamburger-btn" id="hamburgerBtn">
                     <span></span><span></span><span></span>
@@ -364,22 +360,16 @@
                 <div class="card">
                     <form id="settingsForm">
                         <div class="form-group">
-                            <label>OpenAI-Compatible Base URL (e.g., NVIDIA NIM, Groq)</label>
-                            <input type="url" id="aiBaseUrl" placeholder="https://api.openai.com/v1" required>
+                            <label>AI API Key (NVIDIA NIM / OpenAI / Groq)</label>
+                            <input type="password" id="aiApiKey" placeholder="nvapi-... or sk-...">
                         </div>
                         <div class="form-group">
-                            <label>API Key</label>
-                            <input type="password" id="aiApiKey" placeholder="sk-..." required>
-                        </div>
-                        <div class="form-group flex-row">
-                            <button type="button" class="btn-secondary" id="fetchModelsBtn">Fetch Available Models</button>
-                            <span id="fetchModelsStatus" class="ml-2 text-sm text-muted"></span>
+                            <label>AI Base URL</label>
+                            <input type="url" id="aiBaseUrl" placeholder="https://integrate.api.nvidia.com/v1" value="https://integrate.api.nvidia.com/v1">
                         </div>
                         <div class="form-group">
-                            <label>Selected AI Model</label>
-                            <select id="aiModelSelect" required>
-                                <option value="">-- Fetch models first --</option>
-                            </select>
+                            <label>AI Model Name</label>
+                            <input type="text" id="aiModelInput" placeholder="nvidia/nemotron-4-340b-instruct" value="nvidia/nemotron-4-340b-instruct">
                         </div>
                         <div class="form-group">
                             <label>ElevenLabs API Key (For Custom Voices)</label>
@@ -451,6 +441,6 @@
         </main>
     </div>
 
-    <script src="app.js?v=20260816_1848" type="module"></script>
+    <script src="app.js?v=20260816_1786904181" type="module"></script>
 </body>
 </html>
