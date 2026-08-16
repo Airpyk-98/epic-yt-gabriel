@@ -50,7 +50,11 @@
         <!-- Top Navbar -->
         <header class="navbar">
             <div class="logo">Epic<span class="accent-text">Sync</span></div>
-            <div class="nav-right">
+            <div class="nav-right" style="display: flex; align-items: center; gap: 10px;">
+                <div id="workerStatusBadge" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981;">
+                    <span id="workerStatusDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                    <span id="workerStatusText">12h Worker: Active</span>
+                </div>
                 <div class="active-project-badge" id="activeProjectBadge">No Project Selected</div>
                 <button class="hamburger-btn" id="hamburgerBtn">
                     <span></span><span></span><span></span>

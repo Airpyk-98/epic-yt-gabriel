@@ -44,6 +44,110 @@ async function fetchWithWakeupRetry(url, options = {}, maxRetries = 4) {
 }
 
 
+
+// Duration word counts helper
+function getDurationDirective(targetDuration) {
+    if (targetDuration.includes("15") || targetDuration.includes("30") || targetDuration.includes("Shorts")) {
+        return "\n\nCRITICAL DURATION INSTRUCTION: Target duration is SHORTS (30-45s). Output between 60 to 90 words total.";
+    } else if (targetDuration.includes("3 min") || targetDuration.includes("180")) {
+        return "\n\nCRITICAL DURATION INSTRUCTION: Target duration is 3 MINUTES. Output between 380 to 450 words total.";
+    } else if (targetDuration.includes("5 min") || targetDuration.includes("300")) {
+        return "\n\nCRITICAL DURATION INSTRUCTION: Target duration is 5 MINUTES. Output between 650 to 750 words total.";
+    } else if (targetDuration.includes("10 min") || targetDuration.includes("600")) {
+        return "\n\nCRITICAL DURATION INSTRUCTION: Target duration is 10 MINUTES. Output between 1300 to 1500 words total.";
+    } else {
+        return "\n\nCRITICAL DURATION INSTRUCTION: Target duration is 60 SECONDS. Output between 120 to 150 words total.";
+    }
+}
+
+// Generate script using client AI settings directly
+async function generateScriptDirect(title, videoModel, targetDuration, uid) {
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    if (!userDoc.exists()) throw new Error("User profile not found");
+    const uData = userDoc.data();
+    
+    const baseUrl = uData.aiBaseUrl || "https://api.openai.com/v1";
+    const apiKey = uData.aiApiKey || "";
+    const model = uData.aiModel || "gpt-4";
+    const sysPrompt = uData.aiSystemPrompt || "You are a creative YouTube script writer.";
+    
+    if (!apiKey) throw new Error("Please configure your AI API Key in Settings first.");
+    
+    const durationDirective = getDurationDirective(targetDuration);
+    const ttsDirective = "\n\nCRITICAL FORMAT INSTRUCTION: Output ONLY raw plaintext words that the voice actor speaks. Do NOT include markdown, sound effects, or narrator tags.";
+    const pexelsDirective = videoModel === "pexels" ? "\n\n<PEXELS_SEGMENTS>\n[\n  {\"text\": \"segment text\", \"keyword\": \"office worker\"}\n]\n</PEXELS_SEGMENTS>" : "";
+    const aptavatarDirective = videoModel === "aptavatar" ? "\n\n<APTAVATAR_PROMPT>\n步骤1：*帧 0~30* talking naturally\n</APTAVATAR_PROMPT>" : "";
+    
+    const finalSysPrompt = sysPrompt + ttsDirective + durationDirective + pexelsDirective + aptavatarDirective;
+    
+    const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: model,
+            messages: [
+                { role: "system", content: finalSysPrompt },
+                { role: "user", content: `Write an engaging script for the video title: "${title}"` }
+            ],
+            temperature: 0.7
+        })
+    });
+    
+    if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `AI API returned status ${res.status}`);
+    }
+    
+    const data = await res.json();
+    let raw = data.choices[0]?.message?.content || "";
+    
+    // Clean script
+    let cleanScript = raw.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').replace(/\*\*/g, '').replace(/---/g, '');
+    cleanScript = cleanScript.replace(/^(Narrator|Script|Audio|Voiceover):?\s*/gim, '').trim();
+    return cleanScript;
+}
+
+// Listen to Kaggle Worker Heartbeat
+function initWorkerHeartbeatListener() {
+    onSnapshot(doc(db, 'system', 'worker_status'), (snap) => {
+        const badge = document.getElementById('workerStatusBadge');
+        const dot = document.getElementById('workerStatusDot');
+        const txt = document.getElementById('workerStatusText');
+        if (!badge) return;
+        
+        if (snap.exists()) {
+            const data = snap.data();
+            const lastHb = data.last_heartbeat?.toMillis ? data.last_heartbeat.toMillis() : Date.now();
+            const diffSec = (Date.now() - lastHb) / 1000;
+            
+            if (diffSec < 120) {
+                badge.style.background = "rgba(16, 185, 129, 0.1)";
+                badge.style.borderColor = "rgba(16, 185, 129, 0.3)";
+                badge.style.color = "#10b981";
+                dot.style.background = "#10b981";
+                dot.style.boxShadow = "0 0 8px #10b981";
+                txt.innerText = "12h Worker: Active";
+            } else {
+                badge.style.background = "rgba(245, 158, 11, 0.1)";
+                badge.style.borderColor = "rgba(245, 158, 11, 0.3)";
+                badge.style.color = "#f59e0b";
+                dot.style.background = "#f59e0b";
+                dot.style.boxShadow = "none";
+                txt.innerText = "12h Worker: Idle";
+            }
+        } else {
+            badge.style.background = "rgba(239, 68, 68, 0.1)";
+            badge.style.borderColor = "rgba(239, 68, 68, 0.3)";
+            badge.style.color = "#ef4444";
+            dot.style.background = "#ef4444";
+            txt.innerText = "12h Worker: Offline";
+        }
+    });
+}
+
 // UI Elements
 const authOverlay = document.getElementById('authOverlay');
 const appContainer = document.getElementById('appContainer');
@@ -465,9 +569,12 @@ createContentForm.addEventListener('submit', async (e) => {
     if (!currentProject) return alert('Select a project first!');
     
     let titles = [];
-    if (window.currentPromptMode === 'manual') {
-        const script = document.getElementById('manualScript').value.trim();
-        if (!script) return alert('Please enter your manual script.');
+    let isManual = window.currentPromptMode === 'manual';
+    let manualScript = '';
+    
+    if (isManual) {
+        manualScript = document.getElementById('manualScript').value.trim();
+        if (!manualScript) return alert('Please enter your manual script.');
         titles = ["Manual Video Generation"];
     } else {
         titles = videoTitlesInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -478,228 +585,87 @@ createContentForm.addEventListener('submit', async (e) => {
     const voiceModel = document.getElementById('voiceModelSelect').value;
     const videoModel = document.getElementById('videoModelSelect').value;
     const aspectRatio = document.getElementById('aspectRatioSelect').value;
+    const targetDuration = document.getElementById('targetDurationSelect').value;
+    const resolution = document.getElementById('resolutionSelect').value;
     
-    if (!mediaFile && videoModel !== 'pexels') return alert('Missing source image.');
+    const gridColor = document.getElementById('gridColorInput')?.value || '#ffffff';
+    const captionColor = document.getElementById('captionColorInput')?.value || '#ffffff';
+    const fontSize = document.getElementById('fontSizeInput')?.value || '60';
+    const fontYPos = document.getElementById('fontYPosInput')?.value || '83';
+    const bgmSelect = document.getElementById('bgmSelect')?.value || '';
+    const bgmVolume = document.getElementById('bgmVolumeInput')?.value || '15';
+    const voiceBoost = document.getElementById('voiceBoostInput')?.value || '100';
+    const addCaptions = document.getElementById('addCaptionsToggle')?.checked ? 'true' : 'false';
+    const addGrid = document.getElementById('addGridToggle')?.checked ? 'true' : 'false';
     
-    const token = await currentUser.getIdToken();
-    
-    // CASE A: BATCH QUEUE (More than 1 title)
-    if (titles.length > 1) {
-        submitContentBtn.innerText = 'Queuing Batch...';
-        submitContentBtn.disabled = true;
-        
-        try {
-            const formData = new FormData();
-            formData.append('titles_json', JSON.stringify(titles));
-            formData.append('voice', voiceModel);
-            if (mediaFile) {
-                formData.append('image', mediaFile);
-                formData.append('video', mediaFile);
-            }
-            formData.append('projectId', currentProject);
-            formData.append('resolution', document.getElementById('resolutionSelect').value);
-            formData.append('video_model', videoModel);
-            formData.append('target_duration', document.getElementById('targetDurationSelect').value);
-            formData.append('aspect_ratio', aspectRatio);
-            
-            const gridColorEl = document.getElementById('gridColorInput');
-            if (gridColorEl) formData.append('grid_color', gridColorEl.value);
-            
-            const captionColorEl = document.getElementById('captionColorInput');
-            if (captionColorEl) formData.append('caption_color', captionColorEl.value);
-            
-            const fontSizeEl = document.getElementById('fontSizeInput');
-            if (fontSizeEl) formData.append('font_size', fontSizeEl.value);
-            
-            const fontYPosEl = document.getElementById('fontYPosInput');
-            if (fontYPosEl) formData.append('font_y_pos', fontYPosEl.value);
-            
-            const bgmSelectEl = document.getElementById('bgmSelect');
-            if (bgmSelectEl) formData.append('bgm_select', bgmSelectEl.value);
-            
-            const bgmVolumeEl = document.getElementById('bgmVolumeInput');
-            if (bgmVolumeEl) formData.append('bgm_volume', bgmVolumeEl.value);
-            
-            const voiceBoostEl = document.getElementById('voiceBoostInput');
-            if (voiceBoostEl) formData.append('voice_boost', voiceBoostEl.value);
-            
-            const addCaptionsEl = document.getElementById('addCaptionsToggle');
-            if (addCaptionsEl) formData.append('add_captions', addCaptionsEl.checked ? 'true' : 'false');
-
-            const addGridEl = document.getElementById('addGridToggle');
-            if (addGridEl) formData.append('add_grid', addGridEl.checked ? 'true' : 'false');
-            
-            // Fetch Kaggle credentials for the project
-            const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
-            if (projDoc.exists()) {
-                const pData = projDoc.data();
-                if (pData.kaggleUsername) formData.append('kaggle_user', pData.kaggleUsername);
-                if (pData.kaggleKey) formData.append('kaggle_key', pData.kaggleKey);
-            }
-            
-            const res = await fetchWithWakeupRetry(`${BACKEND_URL}/api/queue_batch`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData
-            });
-            
-            const data = await res.json();
-            if (res.ok) {
-                alert(`🚀 Successfully queued ${titles.length} videos! The backend queue is processing them sequentially. You can monitor progress in Execution Logs.`);
-                document.querySelector('[data-target="view-logs"]').click();
-            } else {
-                alert(`Failed to queue batch: ${data.detail || data.error || 'Server error'}`);
-            }
-        } catch (err) {
-            console.error(err);
-            alert('Failed to connect to batch queue server: ' + err.message);
-        }
-        
-        submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
-        submitContentBtn.disabled = false;
-        return;
-    }
-    
-    // CASE B: SINGLE TITLE GENERATION
-    const isPreviewOn = previewScriptToggle.checked && window.currentPromptMode === 'ai';
-    const title = titles[0];
-    
-    submitContentBtn.innerText = 'Processing...';
+    submitContentBtn.innerText = 'Queuing for 12h Worker...';
     submitContentBtn.disabled = true;
     
-    let scriptText = '';
-    if (window.currentPromptMode === 'manual') {
-        scriptText = document.getElementById('manualScript').value.trim();
-    } else {
-        // 1. Generate Script
-        try {
-            const targetDuration = document.getElementById('targetDurationSelect').value;
-            const res = await fetchWithWakeupRetry(`${BACKEND_URL}/api/generate-script`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ 
-                    titles: title,
-                    video_model: videoModel,
-                    target_duration: targetDuration
-                })
-            });
-            const data = await res.json();
-            if (res.ok) {
-                scriptText = data.script;
-            } else {
-                alert(`Script Generation Failed: ${data.detail || data.error || 'Unknown Error'}`);
+    const batchId = `epicsync_batch_${Date.now()}`;
+    let queuedCount = 0;
+    
+    for (let i = 0; i < titles.length; i++) {
+        const title = titles[i];
+        const jobId = `epicsync_premium_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
+        
+        submitContentBtn.innerText = `Generating script ${i+1}/${titles.length}...`;
+        
+        let scriptText = manualScript;
+        if (!isManual) {
+            try {
+                scriptText = await generateScriptDirect(title, videoModel, targetDuration, currentUser.uid);
+            } catch (err) {
+                console.error("AI Generation Error:", err);
+                alert(`AI Script Generation error on "${title}": ` + err.message);
                 submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
                 submitContentBtn.disabled = false;
                 return;
             }
-        } catch (err) {
-            console.error(err);
-            alert('Script generation failed due to network error: ' + err.message);
-            submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
-            submitContentBtn.disabled = false;
-            return;
         }
-
-        // 2. Handle Preview Mode vs Automatic Mode
-        if (isPreviewOn) {
-            generatedScriptText.value = scriptText;
-            scriptResultArea.style.display = 'block';
-            checkVideoSubmitState();
-            submitContentBtn.innerText = 'Confirm to Launch';
-            submitContentBtn.disabled = false;
-            
-            await new Promise(resolve => {
-                const handler = () => {
-                    continueVideoBtn.removeEventListener('click', handler);
-                    resolve();
-                };
-                continueVideoBtn.addEventListener('click', handler);
+        
+        // Write Job directly to Firestore
+        try {
+            await setDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', jobId), {
+                job_id: jobId,
+                batch_id: batchId,
+                batch_index: i,
+                title: title.length > 40 ? title.substring(0, 37) + '...' : title,
+                script: scriptText,
+                voice: voiceModel,
+                video_model: videoModel,
+                aspect_ratio: aspectRatio,
+                resolution: resolution,
+                target_duration: targetDuration,
+                voice_boost: voiceBoost,
+                bgm_volume: bgmVolume,
+                bgm_select: bgmSelect,
+                add_captions: addCaptions,
+                add_grid: addGrid,
+                grid_color: gridColor,
+                caption_color: captionColor,
+                font_size: fontSize,
+                font_y_pos: fontYPos,
+                status: 'QUEUED',
+                progress: 0,
+                step_text: 'Queued for 12-Hour Kaggle Cloud Worker...',
+                logs: [`[${new Date().toLocaleTimeString()}] Task queued for Kaggle worker execution.`],
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
             });
-            scriptText = generatedScriptText.value.trim();
-            scriptResultArea.style.display = 'none';
-            submitContentBtn.innerText = 'Launching GPU...';
-            submitContentBtn.disabled = true;
+            queuedCount++;
+        } catch (dbErr) {
+            console.error("Firestore Write Error:", dbErr);
+            alert("Database Error: " + dbErr.message);
         }
-    }
-    
-    // 3. Launch Video Generation
-    try {
-        const formData = new FormData();
-        formData.append('script_text', scriptText);
-        formData.append('voice', voiceModel);
-        if (mediaFile) {
-            formData.append('image', mediaFile);
-            formData.append('video', mediaFile);
-        }
-        formData.append('projectId', currentProject);
-        formData.append('resolution', document.getElementById('resolutionSelect').value);
-        formData.append('video_model', videoModel);
-        formData.append('target_duration', document.getElementById('targetDurationSelect').value);
-        formData.append('aspect_ratio', aspectRatio);
-        
-        const gridColorEl = document.getElementById('gridColorInput');
-        if (gridColorEl) formData.append('grid_color', gridColorEl.value);
-        
-        const captionColorEl = document.getElementById('captionColorInput');
-        if (captionColorEl) formData.append('caption_color', captionColorEl.value);
-        
-        const fontSizeEl = document.getElementById('fontSizeInput');
-        if (fontSizeEl) formData.append('font_size', fontSizeEl.value);
-        
-        const fontYPosEl = document.getElementById('fontYPosInput');
-        if (fontYPosEl) formData.append('font_y_pos', fontYPosEl.value);
-        
-        const bgmSelectEl = document.getElementById('bgmSelect');
-        if (bgmSelectEl) formData.append('bgm_select', bgmSelectEl.value);
-        
-        const bgmVolumeEl = document.getElementById('bgmVolumeInput');
-        if (bgmVolumeEl) formData.append('bgm_volume', bgmVolumeEl.value);
-        
-        const voiceBoostEl = document.getElementById('voiceBoostInput');
-        if (voiceBoostEl) formData.append('voice_boost', voiceBoostEl.value);
-        
-        const addCaptionsEl = document.getElementById('addCaptionsToggle');
-        if (addCaptionsEl) formData.append('add_captions', addCaptionsEl.checked ? 'true' : 'false');
-
-        const addGridEl = document.getElementById('addGridToggle');
-        if (addGridEl) formData.append('add_grid', addGridEl.checked ? 'true' : 'false');
-        
-        // Fetch Kaggle credentials for the project
-        const projDoc = await getDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject));
-        if (projDoc.exists()) {
-            const pData = projDoc.data();
-            if (pData.kaggleUsername) formData.append('kaggle_user', pData.kaggleUsername);
-            if (pData.kaggleKey) formData.append('kaggle_key', pData.kaggleKey);
-        }
-        
-        const res = await fetchWithWakeupRetry(`${BACKEND_URL}/api/run_premium`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData
-        });
-        
-        const data = await res.json();
-        if (res.ok) {
-            await setDoc(doc(db, 'users', currentUser.uid, 'projects', currentProject, 'executions', data.job_id), {
-                title: title.substring(0, 30) + '...',
-                status: 'STAGING',
-                job_id: data.job_id,
-                createdAt: serverTimestamp()
-            });
-            document.querySelector('[data-target="view-logs"]').click();
-        } else {
-            alert(`Launch Error: ${data.detail || data.error || 'Unknown'}`);
-        }
-    } catch (err) {
-        console.error(err);
-        alert('Launch failed: ' + err.message);
     }
     
     submitContentBtn.innerText = '🚀 Launch EpicSync GPU';
     submitContentBtn.disabled = false;
+    
+    if (queuedCount > 0) {
+        alert(`🚀 Successfully queued ${queuedCount} video(s)! Your active 12-Hour Kaggle Worker will process them sequentially.`);
+        document.querySelector('[data-target="view-logs"]')?.click();
+    }
 });
 
 function loadLogs() {
@@ -781,9 +747,9 @@ function loadLogs() {
                 ${data.output_file ? `
                 <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
                     <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #4CAF50;">✅ Generation Complete</p>
-                    <video src="${BACKEND_URL}${data.output_file}" controls style="width: 100%; max-width: 300px; border-radius: 8px; margin-bottom: 10px;"></video>
+                    <video src="${data.output_file.startsWith('http') ? data.output_file : `${BACKEND_URL}${data.output_file}`}" controls style="width: 100%; max-width: 300px; border-radius: 8px; margin-bottom: 10px;"></video>
                     <div style="display: flex; gap: 8px;">
-                        <a href="${BACKEND_URL}${data.output_file}" download class="btn-primary" style="text-decoration: none; text-align: center;">⬇️ Download</a>
+                        <a href="${data.output_file.startsWith('http') ? data.output_file : `${BACKEND_URL}${data.output_file}`}" target="_blank" download class="btn-primary" style="text-decoration: none; text-align: center;">⬇️ Download</a>
                         <button class="btn-secondary" onclick="alert('Export to Google Drive coming soon!')">☁️ GDrive</button>
                         <button class="btn-secondary" onclick="alert('Export to Dropbox coming soon!')">☁️ Dropbox</button>
                     </div>
