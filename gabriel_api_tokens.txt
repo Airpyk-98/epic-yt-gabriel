@@ -1,2 +1,0 @@
-kaggle api: KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e
-hf token: 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

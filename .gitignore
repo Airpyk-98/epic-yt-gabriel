@@ -1,6 +1,8 @@
-staging*/
-job_*
+node_modules/
+.firebase/
+.env
+.env.local
 *.log
-__pycache__/
-.env*
+gabriel_api_tokens.txt
+data/outputs/
 data/firebase_admin.json
