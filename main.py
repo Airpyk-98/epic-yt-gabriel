@@ -3310,13 +3310,24 @@ async def sync_job(job_id: str, projectId: Optional[str] = None, request: Reques
                             if uid and projectId:
                                 break
                     if uid and projectId:
-                        db.collection("users").document(uid).collection("projects").document(projectId).collection("executions").document(job_id).set({
+                        ex_doc_ref = db.collection("users").document(uid).collection("projects").document(projectId).collection("executions").document(job_id)
+                        ex_doc_ref.set({
                             "status": "SUCCESS",
                             "progress": 100,
                             "step_text": "Video generated successfully!",
                             "output_file": output_file,
                             "updatedAt": firestore.SERVER_TIMESTAMP
                         }, merge=True)
+                        
+                        # If this job was part of a batch, trigger next batch item upon frontend sync too!
+                        try:
+                            ex_data = ex_doc_ref.get().to_dict() or {}
+                            b_id = ex_data.get("batch_id")
+                            b_idx = ex_data.get("batch_index")
+                            if b_id and b_idx is not None:
+                                threading.Thread(target=advance_batch_queue, args=(b_id, uid, projectId, int(b_idx) + 1)).start()
+                        except Exception as be:
+                            print(f"[SYNC] Batch advance trigger error: {be}")
                         
                 return {"status": "SUCCESS", "output_file": output_file, "job_id": job_id}
         except Exception as e:
