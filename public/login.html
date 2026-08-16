@@ -81,7 +81,7 @@
     <!-- Script Entry -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -131,6 +131,7 @@
             authErrorMsg.style.display = 'none';
 
             try {
+                await setPersistence(auth, browserLocalPersistence);
                 if (isSignUpMode) {
                     await createUserWithEmailAndPassword(auth, email, pass);
                 } else {

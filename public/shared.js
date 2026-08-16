@@ -7,12 +7,15 @@ export const DEFAULT_PEXELS_KEY = "Y6IPbPqNHx9NYlubg8tCenK0jHVg0T8VbvJjuI0ibJU0p
 export const KAGGLE_WORKER_SLUG = "epicsync-production-worker";
 
 // 1. Initialize Auth Navigation Pill across all pages
-export function initSharedAuth(auth, db, utils) {
+export function initSharedAuth(auth, db, utils, authHelpers) {
     const userEmailDisplay = document.getElementById('userEmailDisplay');
     const signOutBtn = document.getElementById('signOutBtn');
     const authPill = document.getElementById('userAuthPill');
 
-    auth.onAuthStateChanged((user) => {
+    const listenAuth = (authHelpers && authHelpers.onAuthStateChanged) || (typeof onAuthStateChanged === 'function' ? onAuthStateChanged : null);
+    const doSignOut = (authHelpers && authHelpers.signOut) || (typeof signOut === 'function' ? signOut : null);
+
+    const handleUser = (user) => {
         if (user) {
             if (userEmailDisplay) userEmailDisplay.innerText = user.email || 'Active Account';
             if (signOutBtn) signOutBtn.style.display = 'block';
@@ -22,13 +25,23 @@ export function initSharedAuth(auth, db, utils) {
             if (signOutBtn) signOutBtn.style.display = 'none';
             if (authPill) authPill.href = 'login.html';
         }
-    });
+    };
+
+    if (listenAuth) {
+        listenAuth(auth, handleUser);
+    } else if (auth && typeof auth.onAuthStateChanged === 'function') {
+        auth.onAuthStateChanged(handleUser);
+    }
 
     if (signOutBtn) {
         signOutBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             if (confirm('Are you sure you want to sign out?')) {
-                await auth.signOut();
+                if (doSignOut) {
+                    await doSignOut(auth);
+                } else if (auth && typeof auth.signOut === 'function') {
+                    await auth.signOut();
+                }
                 window.location.href = 'login.html';
             }
         });
