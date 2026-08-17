@@ -28,6 +28,7 @@
             </a>
             
             <div class="header-right">
+                <button id="themeToggleBtn" class="btn-theme-toggle" type="button" title="Switch Theme">🌙 Dark</button>
                 <a href="login.html" id="userAuthPill" class="btn-auth-pill">
                     <span class="auth-icon">👤</span>
                     <span id="userEmailDisplay">Sign In / Register</span>
@@ -183,9 +184,91 @@
                         </span>
                     </div>
 
-                    <!-- Presets & Styling Accordion -->
+                    <!-- Dynamic Burned-In Captions Card -->
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <div class="toggle-row" style="margin-bottom: 8px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 1.25rem;">💬</span>
+                                <div>
+                                    <label for="enableCaptionsToggle" style="font-weight: 700; font-size: 0.95rem; color: #fff; cursor: pointer; margin: 0;">
+                                        Burn-in Viral Captions (Whisper Word-Level)
+                                    </label>
+                                    <div style="font-size: 0.76rem; color: #fbbf24; font-weight: 600; margin-top: 2px;">
+                                        ⚡ High-retention synchronized 3-4 word cards
+                                    </div>
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="enableCaptionsToggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div id="captionsOptionsArea" style="display: block; margin-top: 10px;">
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="captionColorInput" style="font-size: 0.82rem;">Caption Color</label>
+                                    <input type="color" id="captionColorInput" value="#FFDD00" style="width: 100%; height: 38px; border-radius: 6px; cursor: pointer; background: transparent; border: 1px solid var(--border-color);">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="fontSizeInput" style="font-size: 0.82rem;">Font Size (px)</label>
+                                    <input type="number" id="fontSizeInput" value="55" min="25" max="100" class="form-control" style="height: 38px;">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="fontYPosInput" style="font-size: 0.82rem;">Y-Position (%)</label>
+                                    <div class="slider-val-row" style="height: 38px;">
+                                        <input type="range" id="fontYPosInput" min="20" max="95" value="82">
+                                        <span id="fontYPosVal" style="font-size: 0.82rem; min-width: 36px;">82%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Royalty-Free Background Music (BGM) Suite -->
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <div class="toggle-row" style="margin-bottom: 8px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 1.25rem;">🎵</span>
+                                <div>
+                                    <label for="enableBgmToggle" style="font-weight: 700; font-size: 0.95rem; color: #fff; cursor: pointer; margin: 0;">
+                                        Background Music (BGM Suite)
+                                    </label>
+                                    <div style="font-size: 0.76rem; color: #60a5fa; font-weight: 600; margin-top: 2px;">
+                                        🎧 Royalty-free atmospheric tracks auto-ducked under voice
+                                    </div>
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="enableBgmToggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div id="bgmOptionsArea" style="display: block; margin-top: 10px;">
+                            <div class="form-row">
+                                <div class="form-group flex-2">
+                                    <label for="bgmTrackSelect" style="font-size: 0.82rem;">Select Music Track</label>
+                                    <select id="bgmTrackSelect" class="form-select" style="height: 38px;">
+                                        <option value="lofi_chill">🎵 Lo-Fi Chill & Focus (Subtle beat)</option>
+                                        <option value="dramatic_piano">🎹 Dramatic Piano & Cinematic (Epic storytelling)</option>
+                                        <option value="dark_suspense">🕵️ Dark Suspense & Mystery (True crime / Secrets)</option>
+                                        <option value="upbeat_tech">⚡ Upbeat Tech & Modern (High energy)</option>
+                                        <option value="ambient_synth">🌌 Ambient Synth Atmospheric (Deep focus)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="bgmVolumeInput" style="font-size: 0.82rem;">BGM Volume (%)</label>
+                                    <div class="slider-val-row" style="height: 38px;">
+                                        <input type="range" id="bgmVolumeInput" min="0" max="60" value="15">
+                                        <span id="bgmVolumeVal" style="font-size: 0.82rem; min-width: 36px;">15%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Presets & Advanced Styling Accordion -->
                     <details class="advanced-accordion">
-                        <summary>🎨 Visual Styling & Audio Presets</summary>
+                        <summary>🎨 Advanced Audio & Video Presets</summary>
                         <div class="accordion-content">
                             
                             <div class="form-row">
@@ -194,38 +277,10 @@
                                     <input type="color" id="gridColorInput" value="#ffffff">
                                 </div>
                                 <div class="form-group flex-1">
-                                    <label for="captionColorInput">Caption Color</label>
-                                    <input type="color" id="captionColorInput" value="#ffffff">
-                                </div>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group flex-1">
-                                    <label for="fontSizeInput">Caption Font Size</label>
-                                    <input type="number" id="fontSizeInput" value="60" min="20" max="120">
-                                </div>
-                                <div class="form-group flex-1">
-                                    <label for="fontYPosInput">Caption Y-Position (%)</label>
-                                    <div class="slider-val-row">
-                                        <input type="range" id="fontYPosInput" min="10" max="95" value="83">
-                                        <span id="fontYPosVal">83%</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group flex-1">
                                     <label for="voiceBoostInput">Voice Boost (%)</label>
                                     <div class="slider-val-row">
                                         <input type="range" id="voiceBoostInput" min="50" max="250" value="120">
                                         <span id="voiceBoostVal">120%</span>
-                                    </div>
-                                </div>
-                                <div class="form-group flex-1">
-                                    <label for="bgmVolumeInput">BGM Volume (%)</label>
-                                    <div class="slider-val-row">
-                                        <input type="range" id="bgmVolumeInput" min="0" max="100" value="15">
-                                        <span id="bgmVolumeVal">15%</span>
                                     </div>
                                 </div>
                             </div>
@@ -234,7 +289,7 @@
                                 <div class="toggle-row">
                                     <label for="addGridToggle">Enable 9:16 Focus Grid Rectangle</label>
                                     <label class="switch">
-                                        <input type="checkbox" id="addGridToggle" checked>
+                                        <input type="checkbox" id="addGridToggle">
                                         <span class="slider round"></span>
                                     </label>
                                 </div>
@@ -279,7 +334,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml } from "./shared.js?v=20260817_v400";
+        import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml } from "./shared.js?v=20260817_v410";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -295,6 +350,7 @@
         const db = getFirestore(app);
         const utils = { doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit };
         initSharedAuth(auth, db, utils, { onAuthStateChanged, signOut });
+        initThemeToggle();
 
         let currentUser = null;
         let activeWatchdogId = null;
@@ -384,7 +440,23 @@
             updateGpuModeUI();
         }
 
-        // 4. UI Sliders & Manual Script Toggle
+        // 4. UI Sliders & Dynamic Options Toggles
+        const enableCaptionsToggle = document.getElementById('enableCaptionsToggle');
+        const captionsOptionsArea = document.getElementById('captionsOptionsArea');
+        if (enableCaptionsToggle && captionsOptionsArea) {
+            enableCaptionsToggle.addEventListener('change', (e) => {
+                captionsOptionsArea.style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
+
+        const enableBgmToggle = document.getElementById('enableBgmToggle');
+        const bgmOptionsArea = document.getElementById('bgmOptionsArea');
+        if (enableBgmToggle && bgmOptionsArea) {
+            enableBgmToggle.addEventListener('change', (e) => {
+                bgmOptionsArea.style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
+
         const fontYPosInput = document.getElementById('fontYPosInput');
         const fontYPosVal = document.getElementById('fontYPosVal');
         if (fontYPosInput && fontYPosVal) {
@@ -650,6 +722,10 @@
             const selectedAspect = document.querySelector('input[name="aspectRatio"]:checked')?.value || '9:16';
             const isGpu = enableGpuToggle ? enableGpuToggle.checked : true;
 
+            const isCaptions = document.getElementById('enableCaptionsToggle')?.checked !== false;
+            const isBgm = document.getElementById('enableBgmToggle')?.checked !== false;
+            const bgmTrack = document.getElementById('bgmTrackSelect')?.value || 'lofi_chill';
+
             const payload = {
                 uid: currentUser?.uid || '',
                 titles: titles,
@@ -659,14 +735,16 @@
                 enable_gpu: isGpu,
                 tts_engine: currentTtsEngine,
                 voice: voiceSelect.value,
-                grid_color: document.getElementById('gridColorInput').value,
-                caption_color: document.getElementById('captionColorInput').value,
-                font_size: document.getElementById('fontSizeInput').value,
-                font_y_pos: document.getElementById('fontYPosInput').value,
-                voice_boost: document.getElementById('voiceBoostInput').value,
-                bgm_volume: document.getElementById('bgmVolumeInput').value,
-                add_grid: document.getElementById('addGridToggle').checked ? 'true' : 'false',
-                add_captions: 'true'
+                grid_color: document.getElementById('gridColorInput')?.value || '#ffffff',
+                enable_captions: isCaptions,
+                caption_color: document.getElementById('captionColorInput')?.value || '#FFDD00',
+                caption_font_size: document.getElementById('fontSizeInput')?.value || '55',
+                caption_y_pos: document.getElementById('fontYPosInput')?.value || '82',
+                enable_bgm: isBgm,
+                bgm_track: bgmTrack,
+                bgm_volume: document.getElementById('bgmVolumeInput')?.value || '15',
+                voice_boost: document.getElementById('voiceBoostInput')?.value || '120',
+                add_grid: document.getElementById('addGridToggle')?.checked ? 'true' : 'false'
             };
 
             submitBatchBtn.innerText = `🚀 Launching (${isGpu ? 'Turbo GPU' : 'CPU'})...`;

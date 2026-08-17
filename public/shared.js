@@ -268,7 +268,13 @@ for idx, job in enumerate(batch_config["jobs"]):
     aspect_ratio = job.get("aspect_ratio", "9:16")
     target_dur = job.get("target_duration", "45 seconds")
     voice_boost = job.get("voice_boost", "120")
-    bgm_volume = job.get("bgm_volume", "15")
+    enable_bgm = job.get("enable_bgm", False)
+    bgm_track = job.get("bgm_track", "lofi_chill")
+    bgm_volume = float(job.get("bgm_volume", 15)) / 100.0
+    enable_captions = job.get("enable_captions", True)
+    caption_color = job.get("caption_color", "#FFDD00")
+    caption_font_size = int(job.get("caption_font_size", 55))
+    caption_y_pos = int(job.get("caption_y_pos", 82))
     pexels_key = job.get("pexels_api_key") or DEFAULT_PEXELS_KEY
 
     print(f"\\n========================================================")
@@ -544,8 +550,8 @@ Respond with valid JSON ONLY:
         audio_dur = float(r_dur.stdout.strip()) if r_dur.stdout.strip() else 20.0
         print(f"Exact Audio Duration: {audio_dur:.3f}s")
 
-        # Step 2b: Whisper Word-Level Transcription & Midpoint Boundary Bridging
-        update_job(uid, job_id, "RUNNING", 45, "Running Whisper word-level alignment & midpoint bridging...")
+        # Step 2b: Whisper Word-Level Transcription & Subtitle File Generation
+        update_job(uid, job_id, "RUNNING", 45, "Running Whisper word-level alignment & subtitle generation...")
         device = "cuda" if torch.cuda.is_available() else "cpu"
         whisper_model = whisper.load_model("tiny.en", device=device)
         whisper_res = whisper_model.transcribe(wav_path, word_timestamps=True)
@@ -566,6 +572,75 @@ Respond with valid JSON ONLY:
 
         if not raw_scenes:
             raw_scenes = [{"text": title, "start": 0.0, "end": audio_dur}]
+
+        # Generate ASS Subtitles file
+        ass_path = os.path.join(work_dir, "subs.ass")
+        if enable_captions and all_segments:
+            margin_v = int(h * (100 - caption_y_pos) / 100)
+            hex_c = caption_color.lstrip('#')
+            if len(hex_c) == 6:
+                ass_c = f"&H00{hex_c[4:6]}{hex_c[2:4]}{hex_c[0:2]}"
+            else:
+                ass_c = "&H0000FFFF"
+
+            ass_header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {w}
+PlayResY: {h}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial Black,{caption_font_size},{ass_c},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,5,3,2,40,40,{margin_v},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+            def fmt_t(sec):
+                hrs = int(sec // 3600)
+                mins = int((sec % 3600) // 60)
+                s = sec % 60
+                return f"{hrs:01d}:{mins:02d}:{s:05.2f}"
+
+            all_w = []
+            for seg in all_segments:
+                if "words" in seg and seg["words"]:
+                    for w_obj in seg["words"]:
+                        w_txt = str(w_obj.get("word", "")).strip()
+                        if w_txt:
+                            all_w.append({
+                                "word": w_txt,
+                                "start": float(w_obj.get("start", 0)),
+                                "end": float(w_obj.get("end", 0))
+                            })
+                else:
+                    t_str = str(seg.get("text", "")).strip()
+                    st_val = float(seg.get("start", 0))
+                    et_val = float(seg.get("end", st_val + 2.0))
+                    spl = t_str.split()
+                    if spl:
+                        pw = (et_val - st_val) / len(spl)
+                        for i_w, wrd in enumerate(spl):
+                            all_w.append({"word": wrd, "start": st_val + i_w * pw, "end": st_val + (i_w + 1) * pw})
+
+            d_lines = []
+            c_size = 4
+            for i in range(0, len(all_w), c_size):
+                chk = all_w[i:i+c_size]
+                if not chk:
+                    continue
+                cs = chk[0]["start"]
+                ce = chk[-1]["end"]
+                if ce <= cs:
+                    ce = cs + 0.8
+                txt = " ".join([w["word"] for w in chk]).upper()
+                txt = txt.replace("{", "(").replace("}", ")").replace(chr(92), "/")
+                d_lines.append(f"Dialogue: 0,{fmt_t(cs)},{fmt_t(ce)},Default,,0,0,0,,{txt}")
+
+            with open(ass_path, "w", encoding="utf-8") as f_ass:
+                f_ass.write(ass_header + "\\n".join(d_lines) + "\\n")
+            print(f"✅ Generated {len(d_lines)} ASS subtitle cards")
 
         # Midpoint Boundary Bridging (ensuring sum of scene durations == exact audio duration)
         bridged_scenes = []
@@ -685,6 +760,27 @@ Respond with valid JSON ONLY:
             discarded = max(0, len(candidate_urls) - c_idx)
             print(f"   Candidate clips discarded: {discarded}")
 
+        # BGM Background Music preparation
+        bgm_path = os.path.join(work_dir, "bgm.mp3")
+        has_bgm = False
+        if enable_bgm:
+            bgm_url = f"https://raw.githubusercontent.com/Airpyk-98/epic-yt-gabriel/main/public/audio/{bgm_track}.mp3"
+            try:
+                r_bgm = requests.get(bgm_url, timeout=15)
+                if r_bgm.ok and len(r_bgm.content) > 5000:
+                    with open(bgm_path, "wb") as f_b:
+                        f_b.write(r_bgm.content)
+                    has_bgm = True
+                    print(f"✅ Loaded BGM track: {bgm_track}")
+            except Exception as b_err:
+                print(f"BGM download notice: {b_err}")
+            
+            # Procedural harmonic fallback if offline
+            if not has_bgm:
+                subprocess.run(f'ffmpeg -y -f lavfi -i "anoisesrc=d=90:c=pink:r=44100:a=0.03,lowpass=f=800" -c:a mp3 "{bgm_path}"', shell=True, capture_output=True)
+                if os.path.exists(bgm_path) and os.path.getsize(bgm_path) > 1000:
+                    has_bgm = True
+
         # Step 4: High-Speed Multi-Threaded & GPU-Accelerated Final Video Assembly
         update_job(uid, job_id, "RUNNING", 80, "Compiling seamless multi-scene video via high-speed FFmpeg...")
 
@@ -700,13 +796,23 @@ Respond with valid JSON ONLY:
         manifest_p = concat_manifest.replace("\\\\", "/")
         wav_p = os.path.abspath(wav_path).replace("\\\\", "/")
         out_p = os.path.abspath(output_mp4).replace("\\\\", "/")
+        ass_clean = os.path.abspath(ass_path).replace("\\\\", "/")
+        sub_filter = f",subtitles='{ass_clean}'" if (enable_captions and os.path.exists(ass_path)) else ""
+        bgm_clean = os.path.abspath(bgm_path).replace("\\\\", "/")
+
+        if has_bgm and os.path.exists(bgm_path):
+            filter_str = f"[0:v]setsar=1{sub_filter}[vout];[1:a]volume={vb_float}[voice];[2:a]volume={bgm_volume}[bgm];[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            input_args = f'-i "{manifest_p}" -i "{wav_p}" -i "{bgm_clean}"'
+        else:
+            filter_str = f"[0:v]setsar=1{sub_filter}[vout];[1:a]volume={vb_float}[aout]"
+            input_args = f'-i "{manifest_p}" -i "{wav_p}"'
 
         if has_nvenc:
-            print("⚡ Using NVIDIA GPU NVENC hardware acceleration with midpoint bridged cuts...")
-            ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+            print("⚡ Using NVIDIA GPU NVENC hardware acceleration with captions & audio mixing...")
+            ff_cmd = f'ffmpeg -y -f concat -safe 0 {input_args} -t {audio_dur:.3f} -filter_complex "{filter_str}" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
         else:
-            print("🐢 Using multi-threaded CPU acceleration with midpoint bridged cuts...")
-            ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+            print("🐢 Using multi-threaded CPU acceleration with captions & audio mixing...")
+            ff_cmd = f'ffmpeg -y -f concat -safe 0 {input_args} -t {audio_dur:.3f} -filter_complex "{filter_str}" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
 
         subprocess.run(ff_cmd, shell=True)
 
@@ -777,11 +883,18 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
             batch_id: batch_id,
             batch_index: idx,
             title: title,
+            script: payload.script || '',
             aspect_ratio: payload.aspect_ratio || '9:16',
             target_duration: payload.target_duration || '45 seconds',
             voice: payload.voice || 'relationship-male',
             voice_boost: payload.voice_boost || '120',
+            enable_bgm: payload.enable_bgm === true || payload.enable_bgm === 'true',
+            bgm_track: payload.bgm_track || 'lofi_chill',
             bgm_volume: payload.bgm_volume || '15',
+            enable_captions: payload.enable_captions !== false && payload.enable_captions !== 'false',
+            caption_color: payload.caption_color || '#FFDD00',
+            caption_font_size: payload.caption_font_size || '55',
+            caption_y_pos: payload.caption_y_pos || '82',
             accelerator: enableGpu ? 'GPU (Turbo)' : 'CPU (Saver)',
             status: 'QUEUED',
             progress: 0,
@@ -947,8 +1060,166 @@ export function startKaggleBatchWatchdog(db, utils, uid, batchId, kaggleUsername
     return intervalId;
 }
 
+// 8. Universal Light / Dark Theme Manager
+export function initThemeToggle() {
+    const saved = localStorage.getItem('epicsync_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', saved);
+
+    const updateBtns = (t) => {
+        document.querySelectorAll('.btn-theme-toggle').forEach(btn => {
+            btn.innerHTML = t === 'light' ? '☀️ Light' : '🌙 Dark';
+            btn.title = `Switch to ${t === 'light' ? 'Dark' : 'Light'} Mode`;
+        });
+    };
+    updateBtns(saved);
+
+    document.querySelectorAll('.btn-theme-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const curr = document.documentElement.getAttribute('data-theme') || 'dark';
+            const nxt = curr === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', nxt);
+            localStorage.setItem('epicsync_theme', nxt);
+            updateBtns(nxt);
+        });
+    });
+}
+
+// 9. Direct YouTube Upload Client & Google OAuth Helper
+let googleTokenClient = null;
+let currentYtAccessToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('epicsync_yt_access_token') : null) || null;
+
+export function initGoogleYtAuth(clientId, callback) {
+    if (typeof window.google === 'undefined' || !window.google.accounts || !window.google.accounts.oauth2) {
+        console.warn("Google Identity Services script not yet loaded.");
+        return;
+    }
+    try {
+        const cId = clientId || localStorage.getItem('epicsync_google_client_id') || '113535246997-web.apps.googleusercontent.com';
+        googleTokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: cId,
+            scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
+            callback: (tokenResponse) => {
+                if (tokenResponse && tokenResponse.access_token) {
+                    currentYtAccessToken = tokenResponse.access_token;
+                    localStorage.setItem('epicsync_yt_access_token', currentYtAccessToken);
+                    if (callback) callback(currentYtAccessToken);
+                }
+            },
+        });
+    } catch (e) {
+        console.warn("Google Auth Init notice:", e);
+    }
+}
+
+export function requestGoogleYtLogin(callback) {
+    if (callback) {
+        const cId = localStorage.getItem('epicsync_google_client_id') || '113535246997-web.apps.googleusercontent.com';
+        initGoogleYtAuth(cId, callback);
+    }
+    if (googleTokenClient) {
+        googleTokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        alert('Google Identity Client is initializing. If this persists, please ensure Google scripts are loaded or provide your Google Client ID in Settings.');
+    }
+}
+
+export function getYtAccessToken() {
+    return currentYtAccessToken || localStorage.getItem('epicsync_yt_access_token') || null;
+}
+
+export function clearYtAccessToken() {
+    currentYtAccessToken = null;
+    localStorage.removeItem('epicsync_yt_access_token');
+}
+
+export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onProgress) {
+    if (!accessToken) throw new Error("No YouTube OAuth access token available. Please sign in to YouTube first.");
+
+    if (onProgress) onProgress(5, "Downloading generated video from cloud storage...");
+    const videoRes = await fetch(videoUrl);
+    if (!videoRes.ok) throw new Error(`Could not fetch video file (${videoRes.status})`);
+    const videoBlob = await videoRes.blob();
+
+    if (onProgress) onProgress(15, "Initiating YouTube upload session...");
+    const title = (metadata.title || "Untitled Video").slice(0, 100);
+    const rawDesc = metadata.description || "";
+    const hashtags = metadata.hashtags || "";
+    const fullDesc = hashtags ? `${rawDesc}\n\n${hashtags}`.trim() : rawDesc;
+    const privacy = metadata.privacy || "public";
+
+    const tagsList = hashtags ? hashtags.split(/[\s,]+/).map(t => t.replace('#', '').trim()).filter(Boolean) : ["Shorts", "Viral"];
+
+    const initRes = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Type": "video/mp4",
+            "X-Upload-Content-Length": videoBlob.size.toString()
+        },
+        body: JSON.stringify({
+            snippet: {
+                title: title,
+                description: fullDesc,
+                tags: tagsList,
+                categoryId: "22"
+            },
+            status: {
+                privacyStatus: privacy,
+                selfDeclaredMadeForKids: false
+            }
+        })
+    });
+
+    if (!initRes.ok) {
+        const errJson = await initRes.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `YouTube upload session creation failed (${initRes.status})`);
+    }
+
+    const uploadUrl = initRes.headers.get("Location");
+    if (!uploadUrl) throw new Error("No resumable upload URL returned by YouTube endpoint.");
+
+    if (onProgress) onProgress(30, "Uploading video binary to YouTube...");
+
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", "video/mp4");
+
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && onProgress) {
+                const pct = Math.round(30 + (e.loaded / e.total) * 65);
+                onProgress(pct, `Uploading to YouTube (${Math.round((e.loaded / e.total) * 100)}%)...`);
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const resp = JSON.parse(xhr.responseText);
+                    if (onProgress) onProgress(100, "Published successfully to YouTube!");
+                    resolve({
+                        success: true,
+                        videoId: resp.id,
+                        url: `https://youtube.com/shorts/${resp.id}`
+                    });
+                } catch (e) {
+                    resolve({ success: true, url: "https://studio.youtube.com" });
+                }
+            } else {
+                reject(new Error(`YouTube binary upload failed with HTTP ${xhr.status}: ${xhr.responseText}`));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error("Network error during YouTube video upload."));
+        xhr.send(videoBlob);
+    });
+}
+
 export function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
+

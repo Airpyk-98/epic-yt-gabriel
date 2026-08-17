@@ -28,6 +28,7 @@
             </a>
             
             <div class="header-right">
+                <button id="themeToggleBtn" class="btn-theme-toggle" type="button" title="Switch Theme">🌙 Dark</button>
                 <a href="login.html" id="userAuthPill" class="btn-auth-pill">
                     <span class="auth-icon">👤</span>
                     <span id="userEmailDisplay">Sign In / Register</span>
@@ -134,6 +135,19 @@
                         </div>
                     </div>
 
+                    <!-- Google Identity & YouTube OAuth Client ID Section -->
+                    <div style="background: rgba(239, 68, 68, 0.05); border: 1.5px solid rgba(239, 68, 68, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #f87171; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <span>🔑</span> Google OAuth Client ID (Direct YouTube Uploads) <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
+                        </h3>
+
+                        <div class="form-group">
+                            <label for="googleClientIdInput">Google OAuth Web Client ID</label>
+                            <input type="text" id="googleClientIdInput" placeholder="113535246997-web.apps.googleusercontent.com">
+                            <span class="input-hint">Default client is built-in. Provide your custom OAuth 2.0 Web Client ID from Google Cloud Console if needed.</span>
+                        </div>
+                    </div>
+
                     <!-- YouTube Webhook Section (Optional) -->
                     <div style="background: rgba(255, 255, 255, 0.02); border: 1.5px solid var(--border-color); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
                         <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
@@ -176,7 +190,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserSettings, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, DEFAULT_HF_TOKEN, DEFAULT_PEXELS_KEY, DEFAULT_AI_KEY } from "./shared.js?v=20260817_v400";
+        import { initSharedAuth, initThemeToggle, getUserSettings, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, DEFAULT_HF_TOKEN, DEFAULT_PEXELS_KEY, DEFAULT_AI_KEY } from "./shared.js?v=20260817_v410";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -193,6 +207,7 @@
         const utils = { doc, setDoc, getDoc };
 
         initSharedAuth(auth, db, utils, { onAuthStateChanged, signOut });
+        initThemeToggle();
 
         let currentUser = null;
         const kaggleUsernameInput = document.getElementById('kaggleUsernameInput');
@@ -200,6 +215,7 @@
         const pexelsKeyInput = document.getElementById('pexelsKeyInput');
         const hfTokenInput = document.getElementById('hfTokenInput');
         const aiKeyInput = document.getElementById('aiKeyInput');
+        const googleClientIdInput = document.getElementById('googleClientIdInput');
         const webhookUrlSetting = document.getElementById('webhookUrlSetting');
         const settingsForm = document.getElementById('settingsForm');
         const settingsStatusMsg = document.getElementById('settingsStatusMsg');
@@ -216,6 +232,7 @@
             pexelsKeyInput.value = s.pexels_key || DEFAULT_PEXELS_KEY;
             hfTokenInput.value = s.hf_token || DEFAULT_HF_TOKEN;
             aiKeyInput.value = s.ai_api_key || DEFAULT_AI_KEY;
+            googleClientIdInput.value = s.google_client_id || localStorage.getItem('epicsync_google_client_id') || '';
             webhookUrlSetting.value = s.webhook_url || '';
         });
 
@@ -227,6 +244,7 @@
             const pexKey = pexelsKeyInput.value.trim() || DEFAULT_PEXELS_KEY;
             const hfToken = hfTokenInput.value.trim() || DEFAULT_HF_TOKEN;
             const aiKey = aiKeyInput.value.trim();
+            const googleClientId = googleClientIdInput.value.trim();
             const webhookUrl = webhookUrlSetting.value.trim();
 
             if (!username || !key) return alert('Please enter both Kaggle Username and API Token.');
@@ -236,6 +254,7 @@
             localStorage.setItem('epicsync_pexels_key', pexKey);
             localStorage.setItem('epicsync_hf_token', hfToken);
             localStorage.setItem('epicsync_ai_key', aiKey);
+            localStorage.setItem('epicsync_google_client_id', googleClientId);
             localStorage.setItem('epicsync_yt_webhook', webhookUrl);
 
             if (currentUser) {
@@ -246,6 +265,7 @@
                         pexels_key: pexKey,
                         hf_token: hfToken,
                         ai_api_key: aiKey,
+                        google_client_id: googleClientId,
                         webhook_url: webhookUrl,
                         updatedAt: new Date()
                     }, { merge: true });
