@@ -1,5 +1,5 @@
 // EpicSync Shared Application Logic & Cloud Dispatcher
-import { GoogleAuthProvider, signInWithPopup, linkWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
@@ -1142,57 +1142,181 @@ export function initThemeToggle() {
     });
 }
 
-// 9. Direct YouTube Upload Client & Google OAuth Helper
+// 9. Direct YouTube Upload Client & Google OAuth Helper with Firestore Persistence
 let currentYtAccessToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('epicsync_yt_access_token') : null) || null;
 
 export function initGoogleYtAuth() {
-    // Handled seamlessly via Firebase GoogleAuthProvider
+    // Handled seamlessly via Firebase GoogleAuthProvider + Firestore sync
 }
 
-export async function requestGoogleYtLogin(auth) {
+/**
+ * Check if a Google OAuth redirect operation has just finished, and recover the token.
+ */
+export async function checkAndProcessYtRedirectResult(auth, db, utils) {
+    if (!auth) return null;
+    try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+            console.log("Firebase getRedirectResult completed:", result);
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            const token = credential?.accessToken || 
+                          result?._tokenResponse?.oauthAccessToken || 
+                          result?.credential?.accessToken || 
+                          result?._tokenResponse?.accessToken ||
+                          null;
+
+            const email = result.user?.email || result?._tokenResponse?.email || '';
+
+            if (token) {
+                currentYtAccessToken = token;
+                localStorage.setItem('epicsync_yt_access_token', token);
+                localStorage.setItem('epicsync_yt_token_time', Date.now().toString());
+                if (email) {
+                    localStorage.setItem('epicsync_yt_user_email', email);
+                }
+
+                // Persist to user's Firestore settings
+                const uid = auth.currentUser?.uid || result.user?.uid;
+                if (uid && db && utils) {
+                    try {
+                        await utils.setDoc(utils.doc(db, 'users', uid, 'settings', 'youtube'), {
+                            yt_access_token: token,
+                            yt_user_email: email,
+                            updated_at: new Date()
+                        }, { merge: true });
+                    } catch (fsErr) {
+                        console.warn("Could not save YouTube token to Firestore:", fsErr);
+                    }
+                }
+                return { token, email };
+            }
+        }
+    } catch (err) {
+        console.error("Error in getRedirectResult:", err);
+    }
+    return null;
+}
+
+/**
+ * Load user's YouTube OAuth state from Redirect Result -> LocalStorage -> Firestore
+ */
+export async function loadUserYtAuth(auth, db, utils) {
+    // 1. Process any pending redirect result first
+    const redirectData = await checkAndProcessYtRedirectResult(auth, db, utils);
+    if (redirectData && redirectData.token) {
+        return redirectData.token;
+    }
+
+    // 2. Check in-memory / LocalStorage
+    let token = localStorage.getItem('epicsync_yt_access_token');
+    if (token) {
+        currentYtAccessToken = token;
+        return token;
+    }
+
+    // 3. Check Firestore user settings
+    const uid = auth?.currentUser?.uid;
+    if (uid && db && utils) {
+        try {
+            const snap = await utils.getDoc(utils.doc(db, 'users', uid, 'settings', 'youtube'));
+            if (snap.exists()) {
+                const data = snap.data();
+                if (data.yt_access_token) {
+                    currentYtAccessToken = data.yt_access_token;
+                    localStorage.setItem('epicsync_yt_access_token', data.yt_access_token);
+                    if (data.yt_user_email) {
+                        localStorage.setItem('epicsync_yt_user_email', data.yt_user_email);
+                    }
+                    return data.yt_access_token;
+                }
+            }
+        } catch (e) {
+            console.warn("Could not load YouTube auth from Firestore:", e);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Request YouTube OAuth login with popup and seamless redirect fallback.
+ */
+export async function requestGoogleYtLogin(auth, db, utils, forceRedirect = false) {
     if (!auth) {
         alert("Authentication system is initializing. Please try again in a moment.");
         return null;
     }
 
+    const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/youtube.upload');
+    provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
+    provider.setCustomParameters({ prompt: 'select_account consent' });
+
     try {
-        const provider = new GoogleAuthProvider();
-        provider.addScope('https://www.googleapis.com/auth/youtube.upload');
-        provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
-        provider.setCustomParameters({ prompt: 'select_account consent' });
+        let result = null;
 
-        const result = await signInWithPopup(auth, provider);
-        console.log("Firebase Google Auth Result:", result);
+        if (forceRedirect) {
+            sessionStorage.setItem('epicsync_yt_oauth_in_progress', 'true');
+            await signInWithRedirect(auth, provider);
+            return null;
+        }
 
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential?.accessToken || 
-                      result?._tokenResponse?.oauthAccessToken || 
-                      result?.credential?.accessToken || 
-                      result?._tokenResponse?.accessToken ||
-                      null;
-
-        console.log("Extracted YouTube OAuth Token:", token ? `Token present (${token.slice(0, 8)}...)` : "Null/Undefined");
-
-        if (token) {
-            currentYtAccessToken = token;
-            localStorage.setItem('epicsync_yt_access_token', token);
-            localStorage.setItem('epicsync_yt_token_time', Date.now().toString());
-            const email = result.user?.email || result?._tokenResponse?.email || '';
-            if (email) {
-                localStorage.setItem('epicsync_yt_user_email', email);
+        try {
+            result = await signInWithPopup(auth, provider);
+            console.log("Firebase Google Auth Result (Popup):", result);
+        } catch (popupErr) {
+            console.warn("signInWithPopup failed or popup was blocked, falling back to signInWithRedirect:", popupErr);
+            if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request' || popupErr.code === 'auth/internal-error') {
+                sessionStorage.setItem('epicsync_yt_oauth_in_progress', 'true');
+                await signInWithRedirect(auth, provider);
+                return null;
+            } else if (popupErr.code === 'auth/popup-closed-by-user') {
+                return null;
+            } else {
+                throw popupErr;
             }
-            return token;
-        } else {
-            console.error("Token extraction failed from result:", result);
-            throw new Error("Could not extract Google OAuth access token from login result. Please try again.");
+        }
+
+        if (result) {
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            const token = credential?.accessToken || 
+                          result?._tokenResponse?.oauthAccessToken || 
+                          result?.credential?.accessToken || 
+                          result?._tokenResponse?.accessToken ||
+                          null;
+
+            const email = result.user?.email || result?._tokenResponse?.email || '';
+
+            if (token) {
+                currentYtAccessToken = token;
+                localStorage.setItem('epicsync_yt_access_token', token);
+                localStorage.setItem('epicsync_yt_token_time', Date.now().toString());
+                if (email) {
+                    localStorage.setItem('epicsync_yt_user_email', email);
+                }
+
+                // Persist to user Firestore document
+                const uid = auth.currentUser?.uid || result.user?.uid;
+                if (uid && db && utils) {
+                    try {
+                        await utils.setDoc(utils.doc(db, 'users', uid, 'settings', 'youtube'), {
+                            yt_access_token: token,
+                            yt_user_email: email,
+                            updated_at: new Date()
+                        }, { merge: true });
+                    } catch (fsErr) {
+                        console.warn("Could not save YouTube token to Firestore:", fsErr);
+                    }
+                }
+                return token;
+            } else {
+                console.error("Token extraction failed from popup result:", result);
+                throw new Error("Could not extract Google OAuth access token from login result. Please try again.");
+            }
         }
     } catch (err) {
         console.error("Google YouTube Auth Error:", err);
         if (err.code === 'auth/popup-closed-by-user') {
-            return null;
-        }
-        if (err.code === 'auth/popup-blocked') {
-            alert("The Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.");
             return null;
         }
         if (err.code === 'auth/unauthorized-domain') {
@@ -1204,18 +1328,57 @@ export async function requestGoogleYtLogin(auth) {
     }
 }
 
-
 export function getYtAccessToken() {
     return currentYtAccessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('epicsync_yt_access_token') : null) || null;
 }
 
-export function clearYtAccessToken() {
+export async function clearYtAccessToken(auth, db, utils) {
     currentYtAccessToken = null;
     if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('epicsync_yt_access_token');
         localStorage.removeItem('epicsync_yt_user_email');
+        localStorage.removeItem('epicsync_yt_token_time');
+    }
+
+    const uid = auth?.currentUser?.uid;
+    if (uid && db && utils) {
+        try {
+            await utils.setDoc(utils.doc(db, 'users', uid, 'settings', 'youtube'), {
+                yt_access_token: null,
+                yt_user_email: null,
+                updated_at: new Date()
+            }, { merge: true });
+        } catch (e) {
+            console.warn("Could not clear YouTube auth in Firestore:", e);
+        }
     }
 }
+
+export async function saveManualYtToken(token, email, auth, db, utils) {
+    if (!token || !token.trim()) return false;
+    const cleanToken = token.trim();
+    currentYtAccessToken = cleanToken;
+    localStorage.setItem('epicsync_yt_access_token', cleanToken);
+    localStorage.setItem('epicsync_yt_token_time', Date.now().toString());
+    if (email) {
+        localStorage.setItem('epicsync_yt_user_email', email.trim());
+    }
+
+    const uid = auth?.currentUser?.uid;
+    if (uid && db && utils) {
+        try {
+            await utils.setDoc(utils.doc(db, 'users', uid, 'settings', 'youtube'), {
+                yt_access_token: cleanToken,
+                yt_user_email: email ? email.trim() : 'Manual Token',
+                updated_at: new Date()
+            }, { merge: true });
+        } catch (e) {
+            console.warn("Could not save manual YouTube token in Firestore:", e);
+        }
+    }
+    return true;
+}
+
 
 export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onProgress) {
     if (!accessToken) throw new Error("No YouTube OAuth access token available. Please sign in to YouTube first.");

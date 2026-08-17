@@ -122,9 +122,14 @@
                                 <div id="ytAuthSubText" style="font-size: 0.74rem; color: var(--text-muted);">Sign in with Google to grant upload permissions</div>
                             </div>
                         </div>
-                        <button id="signInYtBtn" type="button" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444; font-weight: 700; padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; cursor: pointer; white-space: nowrap;">
-                            🔑 Sign In
-                        </button>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <button id="signInYtBtn" type="button" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444; font-weight: 700; padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; cursor: pointer; white-space: nowrap;">
+                                🔑 Sign In
+                            </button>
+                            <button id="disconnectYtBtn" type="button" class="btn-tool" style="display: none; background: var(--bg-subtle); border-color: var(--border-color); color: var(--text-muted); font-weight: 600; padding: 6px 10px; font-size: 0.78rem; border-radius: 6px; cursor: pointer; white-space: nowrap;" title="Disconnect YouTube Channel">
+                                ❌
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Video Title Input (Single Mode) -->
@@ -231,7 +236,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml, requestGoogleYtLogin, getYtAccessToken, uploadVideoToYouTube } from "./shared.js?v=20260817_v510";
+        import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml, requestGoogleYtLogin, getYtAccessToken, uploadVideoToYouTube, loadUserYtAuth, clearYtAccessToken, saveManualYtToken } from "./shared.js?v=20260817_v520";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -265,6 +270,7 @@
         const tabYtDirectContent = document.getElementById('tabYtDirectContent');
         const tabN8nContent = document.getElementById('tabN8nContent');
         const signInYtBtn = document.getElementById('signInYtBtn');
+        const disconnectYtBtn = document.getElementById('disconnectYtBtn');
         const startDirectYtUploadBtn = document.getElementById('startDirectYtUploadBtn');
         const dispatchN8nBtn = document.getElementById('dispatchN8nBtn');
         const modalVideoTitle = document.getElementById('modalVideoTitle');
@@ -300,6 +306,7 @@
                     signInYtBtn.style.borderColor = 'var(--border-color)';
                     signInYtBtn.style.background = 'var(--bg-subtle)';
                 }
+                if (disconnectYtBtn) disconnectYtBtn.style.display = 'inline-flex';
             } else {
                 if (dot) dot.innerText = '⚪';
                 if (statusText) {
@@ -313,15 +320,26 @@
                     signInYtBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
                     signInYtBtn.style.background = 'rgba(239, 68, 68, 0.12)';
                 }
+                if (disconnectYtBtn) disconnectYtBtn.style.display = 'none';
             }
         }
 
         if (signInYtBtn) {
             signInYtBtn.addEventListener('click', async () => {
-                const token = await requestGoogleYtLogin(auth);
+                const token = await requestGoogleYtLogin(auth, db, utils);
                 updateYtAuthUI(token);
             });
         }
+
+        if (disconnectYtBtn) {
+            disconnectYtBtn.addEventListener('click', async () => {
+                if (confirm("Disconnect your YouTube account?")) {
+                    await clearYtAccessToken(auth, db, utils);
+                    updateYtAuthUI(null);
+                }
+            });
+        }
+
 
         // Modal Tab Switching
         function setModalTab(tab) {
@@ -390,8 +408,9 @@
             startDirectYtUploadBtn.disabled = false;
             startDirectYtUploadBtn.innerText = `📺 Push ${count === 1 ? 'Video' : count + ' Videos'} to YouTube Now`;
 
-            // Check current auth status
-            updateYtAuthUI(getYtAccessToken());
+            // Check and refresh current auth status
+            const token = await loadUserYtAuth(auth, db, utils);
+            updateYtAuthUI(token);
 
             setModalTab('youtube');
             ytPushModal.style.display = 'flex';
@@ -412,7 +431,7 @@
         startDirectYtUploadBtn.addEventListener('click', async () => {
             let token = getYtAccessToken();
             if (!token) {
-                token = await requestGoogleYtLogin(auth);
+                token = await requestGoogleYtLogin(auth, db, utils);
                 updateYtAuthUI(token);
             }
             if (token) {
@@ -455,18 +474,27 @@
                     );
 
                     const successRow = document.createElement('div');
-                    successRow.style.color = '#34d399';
+                    successRow.style.color = '#10b981';
+                    successRow.style.fontWeight = '600';
                     successRow.style.margin = '4px 0';
-                    successRow.innerHTML = `✅ <strong>${escapeHtml(vTitle)}</strong> uploaded! <a href="${uploadResult.url}" target="_blank" style="color: #60a5fa; text-decoration: underline; margin-left: 6px;">View on YouTube ↗</a>`;
+                    successRow.innerHTML = `✅ <strong>${escapeHtml(vTitle)}</strong> uploaded! <a href="${uploadResult.url}" target="_blank" style="color: #3b82f6; text-decoration: underline; margin-left: 6px; font-weight: 700;">View on YouTube ↗</a>`;
                     modalUploadResultLinks.appendChild(successRow);
 
                 } catch (err) {
                     console.error("YouTube upload error:", err);
                     const errRow = document.createElement('div');
-                    errRow.style.color = '#f87171';
+                    errRow.style.color = '#ef4444';
+                    errRow.style.fontWeight = '600';
                     errRow.style.margin = '4px 0';
                     errRow.innerHTML = `❌ <strong>${escapeHtml(vTitle)}</strong>: ${escapeHtml(err.message)}`;
                     modalUploadResultLinks.appendChild(errRow);
+
+                    if (err.message && (err.message.includes('401') || err.message.includes('authorization expired') || err.message.includes('UNAUTHENTICATED'))) {
+                        await clearYtAccessToken(auth, db, utils);
+                        updateYtAuthUI(null);
+                        alert("YouTube authorization expired. Please click 'Sign In' to reconnect and try again.");
+                        break;
+                    }
                 }
             }
 
@@ -497,9 +525,23 @@
 
         let unsubscribeAllLogs = null;
 
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             currentUser = user;
             listenToAllLogs(user ? user.uid : null);
+
+            // Load and restore YouTube connection from Redirect / LocalStorage / Firestore
+            const ytToken = await loadUserYtAuth(auth, db, utils);
+            updateYtAuthUI(ytToken);
+
+            if (sessionStorage.getItem('epicsync_yt_oauth_in_progress') === 'true') {
+                sessionStorage.removeItem('epicsync_yt_oauth_in_progress');
+                const pendingJobId = sessionStorage.getItem('epicsync_yt_pending_job');
+                if (pendingJobId) {
+                    sessionStorage.removeItem('epicsync_yt_pending_job');
+                    const targetJob = allLogsList.find(j => (j.job_id || j.id) === pendingJobId);
+                    if (targetJob) openYtModalForJob(pendingJobId, targetJob);
+                }
+            }
         });
 
         function listenToAllLogs(uid) {
