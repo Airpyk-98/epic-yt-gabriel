@@ -1,5 +1,5 @@
 // EpicSync Shared Application Logic & Cloud Dispatcher
-import { GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { GoogleAuthProvider, signInWithPopup, linkWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
@@ -1145,6 +1145,10 @@ export function initThemeToggle() {
 // 9. Direct YouTube Upload Client & Google OAuth Helper
 let currentYtAccessToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('epicsync_yt_access_token') : null) || null;
 
+export function initGoogleYtAuth() {
+    // Handled seamlessly via Firebase GoogleAuthProvider
+}
+
 export async function requestGoogleYtLogin(auth) {
     if (!auth) {
         alert("Authentication system is initializing. Please try again in a moment.");
@@ -1157,13 +1161,37 @@ export async function requestGoogleYtLogin(auth) {
         provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
         provider.setCustomParameters({ prompt: 'select_account consent' });
 
-        const result = await signInWithPopup(auth, provider);
+        let result = null;
+        if (auth.currentUser) {
+            try {
+                result = await linkWithPopup(auth.currentUser, provider);
+            } catch (linkErr) {
+                if (linkErr.code === 'auth/credential-already-in-use' || 
+                    linkErr.code === 'auth/provider-already-linked' || 
+                    linkErr.code === 'auth/account-exists-with-different-credential') {
+                    result = await signInWithPopup(auth, provider);
+                } else if (linkErr.code === 'auth/popup-closed-by-user') {
+                    return null;
+                } else if (linkErr.code === 'auth/popup-blocked') {
+                    alert("The Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.");
+                    return null;
+                } else {
+                    result = await signInWithPopup(auth, provider);
+                }
+            }
+        } else {
+            result = await signInWithPopup(auth, provider);
+        }
+
         const credential = GoogleAuthProvider.credentialFromResult(result);
         const token = credential?.accessToken;
 
         if (token) {
             currentYtAccessToken = token;
             localStorage.setItem('epicsync_yt_access_token', token);
+            if (result.user?.email) {
+                localStorage.setItem('epicsync_yt_user_email', result.user.email);
+            }
             return token;
         } else {
             throw new Error("Could not retrieve Google OAuth access token for YouTube.");
@@ -1187,12 +1215,15 @@ export async function requestGoogleYtLogin(auth) {
 }
 
 export function getYtAccessToken() {
-    return currentYtAccessToken || localStorage.getItem('epicsync_yt_access_token') || null;
+    return currentYtAccessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('epicsync_yt_access_token') : null) || null;
 }
 
 export function clearYtAccessToken() {
     currentYtAccessToken = null;
-    localStorage.removeItem('epicsync_yt_access_token');
+    if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('epicsync_yt_access_token');
+        localStorage.removeItem('epicsync_yt_user_email');
+    }
 }
 
 export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onProgress) {
@@ -1212,61 +1243,56 @@ export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onPr
         throw new Error("Video file is empty or corrupted.");
     }
 
-    if (onProgress) onProgress(15, "Initiating YouTube upload session...");
+    if (onProgress) onProgress(20, "Packaging video metadata...");
     const title = (metadata.title || "Untitled Video").slice(0, 100);
     const rawDesc = metadata.description || "";
     const hashtags = metadata.hashtags || "";
     const fullDesc = hashtags ? `${rawDesc}\n\n${hashtags}`.trim() : rawDesc;
     const privacy = metadata.privacy || "public";
-
     const tagsList = hashtags ? hashtags.split(/[\s,]+/).map(t => t.replace('#', '').trim()).filter(Boolean) : ["Shorts", "Viral"];
 
-    const initRes = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json; charset=UTF-8",
-            "X-Upload-Content-Type": "video/mp4",
-            "X-Upload-Content-Length": videoBlob.size.toString()
+    const metadataPart = {
+        snippet: {
+            title: title,
+            description: fullDesc,
+            tags: tagsList,
+            categoryId: "22"
         },
-        body: JSON.stringify({
-            snippet: {
-                title: title,
-                description: fullDesc,
-                tags: tagsList,
-                categoryId: "22"
-            },
-            status: {
-                privacyStatus: privacy,
-                selfDeclaredMadeForKids: false
-            }
-        })
-    });
-
-    if (!initRes.ok) {
-        const errJson = await initRes.json().catch(() => ({}));
-        const msg = errJson.error?.message || `YouTube upload session creation failed (${initRes.status})`;
-        if (initRes.status === 401) {
-            clearYtAccessToken();
-            throw new Error("YouTube authentication session expired. Please sign in again.");
+        status: {
+            privacyStatus: privacy,
+            selfDeclaredMadeForKids: false
         }
-        throw new Error(msg);
-    }
+    };
 
-    const uploadUrl = initRes.headers.get("Location");
-    if (!uploadUrl) throw new Error("No resumable upload URL returned by YouTube endpoint.");
+    const boundary = "-------314159265358979323846";
+    const delimiter = "\r\n--" + boundary + "\r\n";
+    const close_delim = "\r\n--" + boundary + "--";
 
-    if (onProgress) onProgress(30, "Uploading video binary to YouTube...");
+    const metadataBlob = new Blob([
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadataPart) +
+        delimiter +
+        'Content-Type: video/mp4\r\n\r\n'
+    ], { type: 'text/plain' });
+
+    const endBlob = new Blob([close_delim], { type: 'text/plain' });
+    const multipartBody = new Blob([metadataBlob, videoBlob, endBlob]);
+
+    if (onProgress) onProgress(30, "Uploading video directly to YouTube channel...");
 
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("PUT", uploadUrl);
-        xhr.setRequestHeader("Content-Type", "video/mp4");
+        xhr.open("POST", "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status");
+        xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+        xhr.setRequestHeader("Content-Type", `multipart/related; boundary=${boundary}`);
 
         xhr.upload.onprogress = (e) => {
             if (e.lengthComputable && onProgress) {
                 const pct = Math.round(30 + (e.loaded / e.total) * 65);
-                onProgress(pct, `Uploading to YouTube (${Math.round((e.loaded / e.total) * 100)}%)...`);
+                const loadedMB = (e.loaded / (1024 * 1024)).toFixed(1);
+                const totalMB = (e.total / (1024 * 1024)).toFixed(1);
+                onProgress(pct, `Uploading to YouTube: ${loadedMB}MB / ${totalMB}MB (${pct}%)...`);
             }
         };
 
@@ -1285,12 +1311,22 @@ export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onPr
                     resolve({ success: true, url: "https://studio.youtube.com" });
                 }
             } else {
-                reject(new Error(`YouTube binary upload failed with HTTP ${xhr.status}: ${xhr.responseText}`));
+                let errMsg = `YouTube upload failed with HTTP ${xhr.status}`;
+                try {
+                    const errObj = JSON.parse(xhr.responseText);
+                    errMsg = errObj.error?.message || errMsg;
+                } catch (_) {}
+                if (xhr.status === 401) {
+                    clearYtAccessToken();
+                    errMsg = "YouTube authorization expired. Please click 'Sign In' and try again.";
+                }
+                reject(new Error(errMsg));
             }
         };
 
         xhr.onerror = () => reject(new Error("Network error during YouTube video upload."));
-        xhr.send(videoBlob);
+        xhr.ontimeout = () => reject(new Error("YouTube upload request timed out."));
+        xhr.send(multipartBody);
     });
 }
 
@@ -1299,4 +1335,5 @@ export function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
 
