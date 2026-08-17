@@ -137,14 +137,25 @@
                         </div>
                     </div>
 
-                    <!-- Voice Model -->
-                    <div class="form-group">
-                        <label for="voiceSelect">Narrator Voice</label>
-                        <select id="voiceSelect">
-                            <option value="relationship-male" selected>🎙️ Guy (Confident & Storyteller)</option>
-                            <option value="energetic-male">🔥 Christopher (Energetic & Dynamic)</option>
-                            <option value="soft-female">🌸 Jenny (Warm & Narrative Female)</option>
-                            <option value="professional-female">✨ Aria (Professional & Clean Female)</option>
+                    <!-- Voice Engine & Narrator Voice Selector -->
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: 600; font-size: 0.92rem; color: #fff;">🎙️ Voice Synthesis Engine</span>
+                            <span id="activeEngineBadge" style="font-size: 0.74rem; color: var(--accent-light); font-weight: 600; background: rgba(99,102,241,0.12); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.3);">⚡ Edge-TTS (Microsoft Neural)</span>
+                        </label>
+                        
+                        <div class="engine-toggle-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                            <button type="button" id="engineEdgeBtn" style="padding: 9px 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-size: 0.84rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease;">
+                                ⚡ Edge-TTS (Cloud Neural)
+                            </button>
+                            <button type="button" id="engineKokoroBtn" style="padding: 9px 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 0.84rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease;">
+                                💎 Kokoro-82M (Local Neural)
+                            </button>
+                        </div>
+
+                        <label for="voiceSelect" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 5px;">Speaker Voice</label>
+                        <select id="voiceSelect" class="form-select">
+                            <!-- Populated dynamically via JS -->
                         </select>
                     </div>
 
@@ -268,7 +279,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml } from "./shared.js?v=20260817_v340";
+        import { initSharedAuth, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml } from "./shared.js?v=20260817_v350";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -557,7 +568,67 @@
             document.getElementById('currentBatchSubtitle').innerText = 'Feed cleared.';
         });
 
-        // 6. Submit Batch Creation (With Dynamic GPU / CPU Selection)
+        // 6. Voice Engine & Dynamic Voice Library Switching
+        const VOICE_LIBRARIES = {
+            edge: [
+                { id: "en-US-GuyNeural", label: "🎙️ Guy (Confident & Storyteller Male)" },
+                { id: "en-US-JennyNeural", label: "🌸 Jenny (Warm & Narrative Female)" },
+                { id: "en-US-ChristopherNeural", label: "🔥 Christopher (Energetic & Dynamic Male)" },
+                { id: "en-US-AriaNeural", label: "✨ Aria (Professional & Clean Female)" },
+                { id: "en-US-EricNeural", label: "🎬 Eric (Documentary & Deep Male)" },
+                { id: "en-US-AnaNeural", label: "💫 Ana (Friendly & Modern Female)" }
+            ],
+            kokoro: [
+                { id: "am_adam", label: "🎙️ Adam (Deep Conversational Male)" },
+                { id: "af_bella", label: "🌸 Bella (Warm Storyteller Female)" },
+                { id: "am_michael", label: "🔥 Michael (Punchy Explainer Male)" },
+                { id: "af_sarah", label: "✨ Sarah (Clear Professional Female)" },
+                { id: "af_nicole", label: "💫 Nicole (Expressive Gossip Female)" },
+                { id: "am_fenrir", label: "🎬 Fenrir (Cinematic Drama Male)" }
+            ]
+        };
+
+        let currentTtsEngine = 'edge';
+        const engineEdgeBtn = document.getElementById('engineEdgeBtn');
+        const engineKokoroBtn = document.getElementById('engineKokoroBtn');
+        const voiceSelect = document.getElementById('voiceSelect');
+        const activeEngineBadge = document.getElementById('activeEngineBadge');
+
+        function setVoiceEngine(engine) {
+            currentTtsEngine = engine;
+            voiceSelect.innerHTML = '';
+            const list = VOICE_LIBRARIES[engine] || VOICE_LIBRARIES.edge;
+            list.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.id;
+                opt.textContent = v.label;
+                voiceSelect.appendChild(opt);
+            });
+
+            if (engine === 'kokoro') {
+                engineKokoroBtn.style.background = 'rgba(99,102,241,0.2)';
+                engineKokoroBtn.style.borderColor = 'var(--accent)';
+                engineKokoroBtn.style.color = '#fff';
+                engineEdgeBtn.style.background = 'rgba(255,255,255,0.03)';
+                engineEdgeBtn.style.borderColor = 'rgba(255,255,255,0.1)';
+                engineEdgeBtn.style.color = 'var(--text-muted)';
+                if (activeEngineBadge) activeEngineBadge.innerText = '💎 Kokoro-82M (Local Neural)';
+            } else {
+                engineEdgeBtn.style.background = 'rgba(99,102,241,0.2)';
+                engineEdgeBtn.style.borderColor = 'var(--accent)';
+                engineEdgeBtn.style.color = '#fff';
+                engineKokoroBtn.style.background = 'rgba(255,255,255,0.03)';
+                engineKokoroBtn.style.borderColor = 'rgba(255,255,255,0.1)';
+                engineKokoroBtn.style.color = 'var(--text-muted)';
+                if (activeEngineBadge) activeEngineBadge.innerText = '⚡ Edge-TTS (Microsoft Neural)';
+            }
+        }
+
+        if (engineEdgeBtn) engineEdgeBtn.addEventListener('click', () => setVoiceEngine('edge'));
+        if (engineKokoroBtn) engineKokoroBtn.addEventListener('click', () => setVoiceEngine('kokoro'));
+        setVoiceEngine('edge');
+
+        // 7. Submit Batch Creation (With Dynamic GPU / CPU & Voice Engine Selection)
         const createBatchForm = document.getElementById('createBatchForm');
         const submitBatchBtn = document.getElementById('submitBatchBtn');
 
@@ -586,7 +657,8 @@
                 aspect_ratio: selectedAspect,
                 target_duration: formattedDuration,
                 enable_gpu: isGpu,
-                voice: document.getElementById('voiceSelect').value,
+                tts_engine: currentTtsEngine,
+                voice: voiceSelect.value,
                 grid_color: document.getElementById('gridColorInput').value,
                 caption_color: document.getElementById('captionColorInput').value,
                 font_size: document.getElementById('fontSizeInput').value,

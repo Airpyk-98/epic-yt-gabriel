@@ -4,6 +4,7 @@ export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
 export const DEFAULT_HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
 export const DEFAULT_PEXELS_KEY = "Y6IPbPqNHx9NYlubg8tCenK0jHVg0T8VbvJjuI0ibJU0pTGf9ED0QU3x";
+export const DEFAULT_AI_KEY = "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";
 export const KAGGLE_WORKER_SLUG = "epicsync-production-worker";
 
 // 1. Initialize Auth Navigation Pill across all pages
@@ -55,7 +56,7 @@ export async function getUserSettings(db, utils, uid) {
         kaggle_key: localStorage.getItem('epicsync_kaggle_key') || DEFAULT_KAGGLE_KEY,
         hf_token: localStorage.getItem('epicsync_hf_token') || DEFAULT_HF_TOKEN,
         pexels_key: localStorage.getItem('epicsync_pexels_key') || DEFAULT_PEXELS_KEY,
-        ai_api_key: localStorage.getItem('epicsync_ai_key') || '',
+        ai_api_key: localStorage.getItem('epicsync_ai_key') || DEFAULT_AI_KEY,
         webhook_url: localStorage.getItem('epicsync_yt_webhook') || ''
     };
 
@@ -200,7 +201,7 @@ import sys
 import subprocess
 
 print("Installing required packages...")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "huggingface-hub", "firebase-admin", "edge-tts", "requests", "openai-whisper"], check=False)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "huggingface-hub", "firebase-admin", "edge-tts", "requests", "openai-whisper", "kokoro>=0.8.4", "soundfile"], check=False)
 
 import json
 import re
@@ -448,29 +449,59 @@ You MUST respond with valid JSON ONLY matching this exact JSON structure:
             continue
 
         # Step 2: Audio Synthesis & Word-Level Whisper Transcription
-        update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS & Whisper timestamps...")
+        tts_engine = job.get("tts_engine", "edge").lower()
+        update_job(uid, job_id, "RUNNING", 30, f"Synthesizing voiceover with {tts_engine.upper()} & Whisper timestamps...")
 
         work_dir = f"/kaggle/working/job_{job_id}"
         os.makedirs(work_dir, exist_ok=True)
         audio_path = os.path.join(work_dir, "audio.mp3")
         wav_path = os.path.join(work_dir, "audio.wav")
 
-        import asyncio, edge_tts
-        edge_voice = "en-US-GuyNeural"
-        if "female" in voice:
-            edge_voice = "en-US-JennyNeural"
-        elif "energetic" in voice:
-            edge_voice = "en-US-ChristopherNeural"
-        elif "professional" in voice:
-            edge_voice = "en-US-AriaNeural"
+        synthesized = False
 
-        async def make_audio():
-            comm = edge_tts.Communicate(script_text, edge_voice)
-            await comm.save(audio_path)
-        asyncio.run(make_audio())
+        # Attempt Kokoro synthesis if selected or voice is a Kokoro voice ID
+        if tts_engine == "kokoro" or voice.startswith("af_") or voice.startswith("am_") or voice.startswith("bf_") or voice.startswith("bm_"):
+            try:
+                print(f"🎙️ Running Kokoro-82M Local Neural Synthesis with voice: {voice}...")
+                import soundfile as sf
+                from kokoro import KPipeline
+                lang = "b" if voice.startswith("b") else "a"
+                k_pipe = KPipeline(lang_code=lang)
+                generator = k_pipe(script_text, voice=voice, speed=1.0)
+                all_audio = []
+                for _, _, audio in generator:
+                    all_audio.append(audio)
+                if all_audio:
+                    import numpy as np
+                    full_audio = np.concatenate(all_audio)
+                    sf.write(wav_path, full_audio, 24000)
+                    synthesized = True
+                    print(f"✅ Kokoro generated {len(full_audio)} audio samples.")
+            except Exception as k_err:
+                print(f"Kokoro synthesis notice: {k_err}, falling back to Edge-TTS...")
 
-        # Convert to uncompressed WAV for zero-jitter Whisper & FFmpeg decoding
-        subprocess.run(f'ffmpeg -y -i "{audio_path}" -c:a pcm_s16le -ar 44100 "{wav_path}"', shell=True, check=True)
+        # Fallback / Default: Edge-TTS Microsoft Neural
+        if not synthesized:
+            import asyncio, edge_tts
+            edge_voice = "en-US-GuyNeural"
+            if "female" in voice or "jenny" in voice or "bella" in voice or "sarah" in voice or "nicole" in voice or "ana" in voice or "aria" in voice:
+                edge_voice = "en-US-JennyNeural"
+            elif "energetic" in voice or "christopher" in voice or "michael" in voice:
+                edge_voice = "en-US-ChristopherNeural"
+            elif "professional" in voice or "aria" in voice or "eric" in voice:
+                edge_voice = "en-US-AriaNeural"
+            elif "male" in voice or "guy" in voice or "adam" in voice or "fenrir" in voice:
+                edge_voice = "en-US-GuyNeural"
+            elif voice and "-" in voice:
+                edge_voice = voice
+
+            async def make_audio():
+                comm = edge_tts.Communicate(script_text, edge_voice)
+                await comm.save(audio_path)
+            asyncio.run(make_audio())
+
+            # Convert to uncompressed WAV for zero-jitter Whisper & FFmpeg decoding
+            subprocess.run(f'ffmpeg -y -i "{audio_path}" -c:a pcm_s16le -ar 44100 "{wav_path}"', shell=True, check=True)
 
         # Get exact audio duration
         r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{wav_path}"', shell=True, capture_output=True, text=True)
