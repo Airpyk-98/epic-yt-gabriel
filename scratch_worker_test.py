@@ -14,7 +14,7 @@ import torch
 import whisper
 from huggingface_hub import HfApi
 
-batch_config = json.loads("{\"batch_id\":\"test_batch_123\",\"created_at\":\"2026-08-17T02:04:45.621Z\",\"ai_api_key\":\"nvapi-test\",\"jobs\":[{\"job_id\":\"job_0\",\"uid\":\"user_123\",\"title\":\"8 signs someone is secretly jealous of you.\",\"script\":\"\",\"voice\":\"en-US-GuyNeural\",\"tts_engine\":\"edge\",\"aspect_ratio\":\"9:16\",\"target_duration\":\"45 seconds\",\"enable_gpu\":true}]}")
+batch_config = json.loads("{\"batch_id\":\"test_batch_123\",\"created_at\":\"2026-08-17T02:17:23.844Z\",\"ai_api_key\":\"nvapi-test\",\"jobs\":[{\"job_id\":\"job_0\",\"uid\":\"user_123\",\"title\":\"8 signs someone is secretly jealous of you.\",\"script\":\"\",\"voice\":\"en-US-GuyNeural\",\"tts_engine\":\"edge\",\"aspect_ratio\":\"9:16\",\"target_duration\":\"45 seconds\",\"enable_gpu\":true}]}")
 HF_TOKEN = "hf_token_mock"
 DEFAULT_PEXELS_KEY = "pexels_key_mock"
 hf_api = HfApi(token=HF_TOKEN)
@@ -111,35 +111,36 @@ for idx, job in enumerate(batch_config["jobs"]):
                 q = "+".join([w for w in w_list if len(w) > 3][:3]) or "lifestyle"
                 ai_scenes.append({"line": ml, "pexels_query": q})
         else:
-            sys_prompt = f"""You are an elite viral YouTube Shorts scriptwriter and visual director.
-Write a completely original, high-retention, psychology-backed video narration script for the title: "{title}".
+            sys_prompt = f"""You are a master viral YouTube Shorts storyteller and visual director.
+Write a gripping, 100% natural, psychology-driven short-form video narration script for the title: "{title}".
 
-TARGET TIMING & LENGTH CONSTRAINTS:
-- TARGET VIDEO DURATION: {target_dur} (~{int(t_secs)} seconds)
-- REQUIRED WORD COUNT: STRICTLY between {min_words} and {max_words} total spoken words across ALL lines combined.
-- TARGET SCENE COUNT: Exactly {target_scenes_count} distinct thought beats / scene cuts.
+TARGET TIMING & LENGTH:
+- Target Video Duration: {target_dur} (~{int(t_secs)} seconds)
+- Required Spoken Word Count: STRICTLY between {min_words} and {max_words} total spoken words across all lines combined.
+- Scene Cuts: Exactly {target_scenes_count} distinct visual scenes.
 
-VIRAL HOOK & ATTENTION RETENTION RULES:
-1. BANNED: Never use greetings, channel plugs, introductions, or phrases like "In this video", "Here is what you need to know", "Did you know".
-2. HOOK (Scene 1): Open with an immediate pattern interrupt — a contrarian claim, a shocking statistic, or a vivid scenario that makes the viewer feel personally called out. Must hook in under 3 seconds.
-3. BODY CHAIN: Each scene MUST causally connect to the next using transitions like "but", "therefore", "meanwhile", "which is why", "and yet". Never use numbered lists or "Next," / "Also,".
-4. CLIFFHANGER: Before the final scene, tease an unresolved idea that makes the viewer feel they MUST hear the last line.
-5. TONE: 6th-grade reading level, conversational gossip whisperer, active voice, always addressing the viewer as "you".
-6. Every line must be a COMPLETE spoken sentence with subject-verb structure. No fragments, no labels.
+NARRATION & VOICE STYLE GUIDELINES (Conversational & Natural):
+1. IMMEDIATE HOOK: The first sentence must be an irresistible pattern interrupt or bold, relatable statement that grips the viewer within 2 seconds.
+2. NATURAL HUMAN CADENCE: Talk like a sharp, observant friend sharing an eye-opening realization. Vary your sentence structure and lengths naturally.
+3. BANNED ROBOTIC CLICHÉS:
+   - NEVER repeat robotic transition formulas like "Meanwhile", "Therefore", "Which is why", "And yet" at the beginning of lines.
+   - Do NOT sound like an essay, a bulleted list, or an AI template. Speak with genuine human flow.
+   - Never use "In this video", "Welcome back", "Here is what you need to know", or "Did you know".
+4. PUNCHY STORYTELLING: Describe real human behaviors, subtle micro-actions, and vivid everyday scenarios that the viewer instantly recognizes.
+5. FINAL PAYOFF: End on an insightful, memorable punchline or thought-provoking takeaway.
 
 PEXELS STOCK B-ROLL QUERY RULES:
-For EVERY scene line, provide a tailored 'pexels_query' (2 to 4 keywords) optimized for the Pexels Stock Video Search API.
-- Describe TANGIBLE, CONCRETE, real-world visuals a camera could actually film.
-- GOOD examples: "stressed office businessman", "luxury sports car night", "woman whispering secret", "counting money cash", "friends laughing cafe".
-- BAD examples (NEVER use): "jealousy concept", "efficiency", "betrayal", "success". These return zero results.
-- Each query MUST be unique — never repeat the same query across scenes.
+For EVERY scene line, provide a tailored 'pexels_query' (2 to 4 keywords) optimized for high-quality stock video footage.
+- Describe real, tangible visuals a camera can film (e.g., "woman checking phone secretly", "luxury sports car city night", "person smirking cafe", "man walking away in shadows").
+- NEVER use abstract words like "concept", "jealousy", "idea".
+- Keep every search query unique and visually distinct.
 
 OUTPUT FORMAT:
-Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
+Respond with valid JSON ONLY:
 {{
   "scenes": [
-    {{"line": "First spoken sentence...", "pexels_query": "concrete visual query"}},
-    {{"line": "Second spoken sentence...", "pexels_query": "different visual query"}}
+    {{"line": "First natural spoken sentence...", "pexels_query": "concrete visual search query"}},
+    {{"line": "Second natural spoken sentence...", "pexels_query": "different visual search query"}}
   ]
 }}"""
 
