@@ -1343,9 +1343,18 @@ input[type="color"] {
 
 .modal-tab-btn.active {
     background: rgba(239, 68, 68, 0.15);
-    color: var(--yt-red);
-    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    border: 1.5px solid rgba(239, 68, 68, 0.5);
+    font-weight: 700;
 }
+
+[data-theme="light"] .modal-tab-btn.active {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1.5px solid #ef4444;
+    font-weight: 800;
+}
+
 
 .modal-footer {
     display: flex;

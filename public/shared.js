@@ -1161,40 +1161,30 @@ export async function requestGoogleYtLogin(auth) {
         provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
         provider.setCustomParameters({ prompt: 'select_account consent' });
 
-        let result = null;
-        if (auth.currentUser) {
-            try {
-                result = await linkWithPopup(auth.currentUser, provider);
-            } catch (linkErr) {
-                if (linkErr.code === 'auth/credential-already-in-use' || 
-                    linkErr.code === 'auth/provider-already-linked' || 
-                    linkErr.code === 'auth/account-exists-with-different-credential') {
-                    result = await signInWithPopup(auth, provider);
-                } else if (linkErr.code === 'auth/popup-closed-by-user') {
-                    return null;
-                } else if (linkErr.code === 'auth/popup-blocked') {
-                    alert("The Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.");
-                    return null;
-                } else {
-                    result = await signInWithPopup(auth, provider);
-                }
-            }
-        } else {
-            result = await signInWithPopup(auth, provider);
-        }
+        const result = await signInWithPopup(auth, provider);
+        console.log("Firebase Google Auth Result:", result);
 
         const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential?.accessToken;
+        const token = credential?.accessToken || 
+                      result?._tokenResponse?.oauthAccessToken || 
+                      result?.credential?.accessToken || 
+                      result?._tokenResponse?.accessToken ||
+                      null;
+
+        console.log("Extracted YouTube OAuth Token:", token ? `Token present (${token.slice(0, 8)}...)` : "Null/Undefined");
 
         if (token) {
             currentYtAccessToken = token;
             localStorage.setItem('epicsync_yt_access_token', token);
-            if (result.user?.email) {
-                localStorage.setItem('epicsync_yt_user_email', result.user.email);
+            localStorage.setItem('epicsync_yt_token_time', Date.now().toString());
+            const email = result.user?.email || result?._tokenResponse?.email || '';
+            if (email) {
+                localStorage.setItem('epicsync_yt_user_email', email);
             }
             return token;
         } else {
-            throw new Error("Could not retrieve Google OAuth access token for YouTube.");
+            console.error("Token extraction failed from result:", result);
+            throw new Error("Could not extract Google OAuth access token from login result. Please try again.");
         }
     } catch (err) {
         console.error("Google YouTube Auth Error:", err);
@@ -1213,6 +1203,7 @@ export async function requestGoogleYtLogin(auth) {
         return null;
     }
 }
+
 
 export function getYtAccessToken() {
     return currentYtAccessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('epicsync_yt_access_token') : null) || null;
