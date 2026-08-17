@@ -348,7 +348,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                 nvidia_models = ["MiniMax-Text-01"]
                 if api_key.startswith("nvapi-"):
                     base_url = "https://integrate.api.nvidia.com/v1"
-                    nvidia_models = ["z-ai/glm-5.2", "meta/llama-3.1-70b-instruct"]
+                    nvidia_models = ["z-ai/glm-5.2", "nvidia/nemotron-3-super-120b-a12b"]
                 elif api_key.startswith("gsk_"):
                     base_url = "https://api.groq.com/openai/v1"
                     nvidia_models = ["llama-3.3-70b-versatile"]
@@ -361,23 +361,31 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                         break
                     try:
                         print(f"Calling {model_name} at {base_url}...")
+                        req_body = {
+                            "model": model_name,
+                            "messages": [
+                                {"role": "system", "content": sys_prompt},
+                                {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
+                            ],
+                            "max_tokens": 2500,
+                            "temperature": 0.85
+                        }
+                        if "glm" in model_name.lower():
+                            req_body["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
                         r_ai = requests.post(
                             f"{base_url}/chat/completions",
                             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                            json={
-                                "model": model_name,
-                                "messages": [
-                                    {"role": "system", "content": sys_prompt},
-                                    {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
-                                ],
-                                "max_tokens": 1500,
-                                "temperature": 0.85
-                            },
+                            json=req_body,
                             timeout=90
                         )
                         if r_ai.ok:
-                            resp_c = r_ai.json()["choices"][0]["message"]["content"]
-                            print(f"AI raw response length: {len(resp_c)} chars")
+                            resp_data = r_ai.json()
+                            resp_c = resp_data["choices"][0]["message"]["content"] or ""
+                            finish_reason = resp_data["choices"][0].get("finish_reason", "unknown")
+                            print(f"AI response: {len(resp_c)} chars, finish_reason={finish_reason}")
+                            if finish_reason == "length":
+                                print(f"{model_name} response was TRUNCATED (hit token limit), trying next model...")
+                                continue
                             resp_c = re.sub(r'\x60\x60\x60(?:json)?\s*', '', resp_c).strip()
                             json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
                             if json_match:
@@ -390,7 +398,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                                 if ai_scenes:
                                     print(f"AI generated {len(ai_scenes)} unique scenes via {model_name}")
                             else:
-                                print(f"Could not parse JSON from {model_name}: {resp_c[:200]}")
+                                print(f"Could not parse JSON from {model_name}: {resp_c[:300]}")
                         else:
                             print(f"{model_name} returned {r_ai.status_code}, trying next model... ({r_ai.text[:150]})")
                     except Exception as e:
