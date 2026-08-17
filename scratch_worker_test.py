@@ -1,201 +1,4 @@
-// EpicSync Shared Application Logic & Cloud Dispatcher
-
-export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
-export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
-export const DEFAULT_HF_TOKEN = "hf_" + "RJEvcSee" + "wujeaDPsip" + "srCXkLNFtd" + "KMRwDp";
-export const DEFAULT_PEXELS_KEY = "Y6IPbPqNHx9NYlubg8tCenK0jHVg0T8VbvJjuI0ibJU0pTGf9ED0QU3x";
-export const DEFAULT_AI_KEY = "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";
-export const KAGGLE_WORKER_SLUG = "epicsync-production-worker";
-
-// 1. Initialize Auth Navigation Pill across all pages
-export function initSharedAuth(auth, db, utils, authHelpers) {
-    const userEmailDisplay = document.getElementById('userEmailDisplay');
-    const signOutBtn = document.getElementById('signOutBtn');
-    const authPill = document.getElementById('userAuthPill');
-
-    const listenAuth = (authHelpers && authHelpers.onAuthStateChanged) || (typeof onAuthStateChanged === 'function' ? onAuthStateChanged : null);
-    const doSignOut = (authHelpers && authHelpers.signOut) || (typeof signOut === 'function' ? signOut : null);
-
-    const handleUser = (user) => {
-        if (user) {
-            if (userEmailDisplay) userEmailDisplay.innerText = user.email || 'Active Account';
-            if (signOutBtn) signOutBtn.style.display = 'block';
-            if (authPill) authPill.href = '#';
-        } else {
-            if (userEmailDisplay) userEmailDisplay.innerText = 'Sign In / Register';
-            if (signOutBtn) signOutBtn.style.display = 'none';
-            if (authPill) authPill.href = 'login.html';
-        }
-    };
-
-    if (listenAuth) {
-        listenAuth(auth, handleUser);
-    } else if (auth && typeof auth.onAuthStateChanged === 'function') {
-        auth.onAuthStateChanged(handleUser);
-    }
-
-    if (signOutBtn) {
-        signOutBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            if (confirm('Are you sure you want to sign out?')) {
-                if (doSignOut) {
-                    await doSignOut(auth);
-                } else if (auth && typeof auth.signOut === 'function') {
-                    await auth.signOut();
-                }
-                window.location.href = 'login.html';
-            }
-        });
-    }
-}
-
-// 2. Fetch User Settings from Firestore (or LocalStorage fallback)
-export async function getUserSettings(db, utils, uid) {
-    let settings = {
-        kaggle_username: localStorage.getItem('epicsync_kaggle_username') || DEFAULT_KAGGLE_USERNAME,
-        kaggle_key: localStorage.getItem('epicsync_kaggle_key') || DEFAULT_KAGGLE_KEY,
-        hf_token: localStorage.getItem('epicsync_hf_token') || DEFAULT_HF_TOKEN,
-        pexels_key: localStorage.getItem('epicsync_pexels_key') || DEFAULT_PEXELS_KEY,
-        ai_api_key: localStorage.getItem('epicsync_ai_key') || DEFAULT_AI_KEY,
-        webhook_url: localStorage.getItem('epicsync_yt_webhook') || ''
-    };
-
-    if (uid && db && utils) {
-        try {
-            const snap = await utils.getDoc(utils.doc(db, 'users', uid, 'settings', 'config'));
-            if (snap.exists()) {
-                const data = snap.data();
-                if (data.kaggle_username) settings.kaggle_username = data.kaggle_username;
-                if (data.kaggle_key) settings.kaggle_key = data.kaggle_key;
-                if (data.hf_token) settings.hf_token = data.hf_token;
-                if (data.pexels_key) settings.pexels_key = data.pexels_key;
-                if (data.ai_api_key) settings.ai_api_key = data.ai_api_key;
-                if (data.webhook_url) settings.webhook_url = data.webhook_url;
-            }
-        } catch (e) {
-            console.warn("Could not fetch user settings from Firestore:", e);
-        }
-    }
-    return settings;
-}
-
-export async function getUserWebhookUrl(db, utils, uid) {
-    const s = await getUserSettings(db, utils, uid);
-    return s.webhook_url;
-}
-
-// 3. Dispatch Array of Videos to Webhook
-export async function dispatchToWebhook(webhookUrl, videosList) {
-    if (!webhookUrl) {
-        alert('No YouTube Webhook configured! You can configure one in the Settings page whenever you are ready.');
-        window.location.href = 'settings.html';
-        return false;
-    }
-
-    const payload = {
-        event: 'youtube_publish_request',
-        timestamp: Date.now(),
-        count: videosList.length,
-        videos: videosList.map(v => ({
-            title: v.title,
-            video_download_link: v.video_download_link || v.output_file,
-            aspect_ratio: v.aspect_ratio || '9:16'
-        }))
-    };
-
-    try {
-        const res = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-            alert(`✅ Successfully pushed ${videosList.length} video(s) to YouTube Webhook!`);
-            return true;
-        } else {
-            alert(`Webhook returned status ${res.status}: ${await res.text()}`);
-            return false;
-        }
-    } catch (err) {
-        console.error("Webhook error:", err);
-        alert(`Payload generated for ${videosList.length} video(s):\n\n` + JSON.stringify(payload, null, 2));
-        return true;
-    }
-}
-
-// 4. Cancel Individual or All Running Execution Jobs in Firestore & Kaggle
-export async function cancelExecutionJob(db, utils, uid, jobId) {
-    const cancelData = {
-        status: 'CANCELLED',
-        step_text: 'Cancelled by user',
-        updatedAt: new Date()
-    };
-
-    try {
-        if (uid) {
-            await utils.setDoc(utils.doc(db, 'users', uid, 'executions', jobId), cancelData, { merge: true });
-        }
-        await utils.setDoc(utils.doc(db, 'executions', jobId), cancelData, { merge: true });
-        return true;
-    } catch (err) {
-        console.error("Error cancelling job:", err);
-        throw err;
-    }
-}
-
-export async function cancelAllActiveJobs(db, utils, uid, jobsList, kaggleUsername, kaggleKey) {
-    const activeJobs = jobsList.filter(j => j.status === 'RUNNING' || j.status === 'QUEUED');
-    if (activeJobs.length === 0) return 0;
-
-    for (const j of activeJobs) {
-        const jobId = j.job_id || j.id;
-        await cancelExecutionJob(db, utils, uid, jobId);
-    }
-
-    if (kaggleUsername && kaggleKey) {
-        await stopKaggleKernelDirectly(kaggleUsername, kaggleKey);
-    }
-
-    return activeJobs.length;
-}
-
-export async function stopKaggleKernelDirectly(kaggleUsername, kaggleKey) {
-    if (!kaggleUsername || !kaggleKey) return false;
-    try {
-        const stopScript = `# EpicSync Immediate Cancellation\nimport sys\nprint("Batch cancelled by user. Terminating worker.")\nsys.exit(0)\n`;
-        await fetch('https://www.kaggle.com/api/v1/kernels/push', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${kaggleKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                slug: `${kaggleUsername}/${KAGGLE_WORKER_SLUG}`,
-                newTitle: "EpicSync Production Worker",
-                text: stopScript,
-                language: "python",
-                kernelType: "script",
-                isPrivate: true,
-                enableGpu: false,
-                enableTpu: false,
-                enableInternet: false
-            })
-        });
-        return true;
-    } catch (e) {
-        console.warn("Could not push stop script to Kaggle:", e);
-        return false;
-    }
-}
-
-// 5. Generate Self-Contained Kaggle Worker Python Code
-export function buildWorkerCode(batchConfig, hfToken, pexelsKey) {
-    const jsonStr = JSON.stringify(batchConfig).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const tokenToUse = hfToken || DEFAULT_HF_TOKEN;
-    const pexKeyToUse = pexelsKey || DEFAULT_PEXELS_KEY;
-    
-    return `# EpicSync On-Demand Dedicated Production Worker
+# EpicSync On-Demand Dedicated Production Worker
 import os
 import sys
 import subprocess
@@ -211,9 +14,9 @@ import torch
 import whisper
 from huggingface_hub import HfApi
 
-batch_config = json.loads("${jsonStr}")
-HF_TOKEN = "${tokenToUse}"
-DEFAULT_PEXELS_KEY = "${pexKeyToUse}"
+batch_config = json.loads("{\"batch_id\":\"test_batch_123\",\"created_at\":\"2026-08-17T01:58:26.611Z\",\"ai_api_key\":\"nvapi-test\",\"jobs\":[{\"job_id\":\"job_0\",\"uid\":\"user_123\",\"title\":\"8 signs someone is secretly jealous of you.\",\"script\":\"\",\"voice\":\"en-US-GuyNeural\",\"tts_engine\":\"edge\",\"aspect_ratio\":\"9:16\",\"target_duration\":\"45 seconds\",\"enable_gpu\":true}]}")
+HF_TOKEN = "hf_token_mock"
+DEFAULT_PEXELS_KEY = "pexels_key_mock"
 hf_api = HfApi(token=HF_TOKEN)
 
 def is_job_cancelled(uid, job_id):
@@ -271,7 +74,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     bgm_volume = job.get("bgm_volume", "15")
     pexels_key = job.get("pexels_api_key") or DEFAULT_PEXELS_KEY
 
-    print(f"\\n========================================================")
+    print(f"\n========================================================")
     print(f" Processing Video {idx+1}/{len(batch_config['jobs'])}: {title} (ID: {job_id})")
     print(f"========================================================")
 
@@ -302,7 +105,7 @@ for idx, job in enumerate(batch_config["jobs"]):
 
         if script_text and script_text.strip():
             # User provided manual script: split into sentences and generate Pexels queries
-            manual_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', script_text) if len(l.strip()) > 5]
+            manual_lines = [l.strip() for l in re.split(r'(?<=[.!?])s+', script_text) if len(l.strip()) > 5]
             for ml in manual_lines:
                 w_list = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in ml.split()]
                 q = "+".join([w for w in w_list if len(w) > 3][:3]) or "lifestyle"
@@ -383,10 +186,10 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                             resp_c = resp_data["choices"][0]["message"]["content"] or ""
                             finish_reason = resp_data["choices"][0].get("finish_reason", "unknown")
                             print(f"AI response: {len(resp_c)} chars, finish_reason={finish_reason}")
-                            resp_c = re.sub(r'\x60\x60\x60(?:json)?\s*', '', resp_c).strip()
+                            resp_c = re.sub(r'```(?:json)?s*', '', resp_c).strip()
 
                             # 1. Full JSON parse
-                            json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
+                            json_match = re.search(r'{[sS]*"scenes"[sS]*}', resp_c)
                             if json_match:
                                 try:
                                     parsed_j = json.loads(json_match.group(0))
@@ -402,10 +205,10 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
 
                             # 2. Regex repair if JSON was partially truncated
                             if not ai_scenes:
-                                items = re.findall(r'\{\s*"line"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"pexels_query"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}', resp_c)
+                                items = re.findall(r'{s*"line"s*:s*"((?:\.|[^"\])*)"s*,s*"pexels_query"s*:s*"((?:\.|[^"\])*)"s*}', resp_c)
                                 for line_val, query_val in items:
-                                    line_val = line_val.replace('\\"', '"').replace('\\n', ' ').strip()
-                                    query_val = query_val.replace('\\"', '"').strip()
+                                    line_val = line_val.replace('\"', '"').replace('\n', ' ').strip()
+                                    query_val = query_val.replace('\"', '"').strip()
                                     if line_val:
                                         ai_scenes.append({"line": line_val, "pexels_query": query_val})
                                 if ai_scenes:
@@ -432,7 +235,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                                 temperature=0.7
                             )
                             resp_c = resp.choices[0].message.content
-                            json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
+                            json_match = re.search(r'{[sS]*"scenes"[sS]*}', resp_c)
                             if json_match:
                                 parsed_j = json.loads(json_match.group(0))
                                 for sc_item in parsed_j.get("scenes", []):
@@ -469,7 +272,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                 ]
 
         script_text = " ".join([s["line"] for s in ai_scenes])
-        print(f"\\nGenerated Script ({len(ai_scenes)} scenes, {len(script_text.split())} words):")
+        print(f"\nGenerated Script ({len(ai_scenes)} scenes, {len(script_text.split())} words):")
         for s_idx, sc_obj in enumerate(ai_scenes):
             print(f"  [{s_idx+1}] Pexels Query: '{sc_obj.get('pexels_query', '')}' | Line: '{sc_obj.get('line', '')}'")
 
@@ -611,7 +414,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
         for idx, sc in enumerate(bridged_scenes):
             sc_dur = sc["duration"]
             search_q = "+".join(sc.get("pexels_query", "lifestyle").split())
-            print(f"\\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
+            print(f"\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
 
             # Fetch up to 4 candidate Pexels clips using AI Director Query
             candidate_urls = []
@@ -668,7 +471,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                 trim_cmd = f'ffmpeg -y -ss 0 -t {slot_dur:.3f} -i "{raw_clip}" -vf "{scale_filter}" -c:v {enc_v} -r 30 -an "{trimmed_clip}"'
                 subprocess.run(trim_cmd, shell=True, capture_output=True)
                 if os.path.exists(trimmed_clip) and os.path.getsize(trimmed_clip) > 1000:
-                    clean_p = os.path.abspath(trimmed_clip).replace('\\\\', '/')
+                    clean_p = os.path.abspath(trimmed_clip).replace('\\', '/')
                     all_trimmed_clips.append(clean_p)
                     print(f"   [Slot {c_idx+1}] Added {slot_dur:.3f}s clip -> {trimmed_clip}")
 
@@ -689,11 +492,11 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
         concat_manifest = os.path.abspath(os.path.join(work_dir, "concat_list.txt"))
         with open(concat_manifest, "w") as f:
             for tc in all_trimmed_clips:
-                f.write(f"file '{tc}'\\n")
+                f.write(f"file '{tc}'\n")
 
-        manifest_p = concat_manifest.replace("\\\\", "/")
-        wav_p = os.path.abspath(wav_path).replace("\\\\", "/")
-        out_p = os.path.abspath(output_mp4).replace("\\\\", "/")
+        manifest_p = concat_manifest.replace("\\", "/")
+        wav_p = os.path.abspath(wav_path).replace("\\", "/")
+        out_p = os.path.abspath(output_mp4).replace("\\", "/")
 
         if has_nvenc:
             print("⚡ Using NVIDIA GPU NVENC hardware acceleration with midpoint bridged cuts...")
@@ -742,207 +545,4 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
             update_job(rem_uid, rem_id, "CANCELLED", 100, f"Batch stopped due to error in '{title}'")
         break
 
-print("\\n[BATCH COMPLETED] All videos processed. Worker exiting.")
-`;
-}
-
-// 6. Direct Kaggle Batch Dispatcher (Single Reusable Production Kernel)
-export async function launchKaggleBatchDirectly(db, utils, payload) {
-    const ts = Math.floor(Date.now() / 1000);
-    const batch_id = `batch_${ts}`;
-    const titles = payload.titles || [];
-    const jobs = [];
-    const enableGpu = payload.enable_gpu === true || payload.enable_gpu === 'true';
-
-    // Get user configured credentials
-    const userSettings = await getUserSettings(db, utils, payload.uid);
-    const kaggleUsername = (payload.kaggle_username || userSettings.kaggle_username || DEFAULT_KAGGLE_USERNAME).trim();
-    const kaggleKey = (payload.kaggle_key || userSettings.kaggle_key || DEFAULT_KAGGLE_KEY).trim();
-    const hfToken = (payload.hf_token || userSettings.hf_token || DEFAULT_HF_TOKEN).trim();
-    const pexelsKey = (payload.pexels_api_key || userSettings.pexels_key || DEFAULT_PEXELS_KEY).trim();
-
-    // Initialize execution documents in Firestore
-    for (let idx = 0; idx < titles.length; idx++) {
-        const title = titles[idx];
-        const job_id = `epicsync_${ts}_${idx}`;
-        const jobData = {
-            job_id: job_id,
-            uid: payload.uid || '',
-            batch_id: batch_id,
-            batch_index: idx,
-            title: title,
-            aspect_ratio: payload.aspect_ratio || '9:16',
-            target_duration: payload.target_duration || '45 seconds',
-            voice: payload.voice || 'relationship-male',
-            voice_boost: payload.voice_boost || '120',
-            bgm_volume: payload.bgm_volume || '15',
-            accelerator: enableGpu ? 'GPU (Turbo)' : 'CPU (Saver)',
-            status: 'QUEUED',
-            progress: 0,
-            step_text: `Queued for Kaggle ${enableGpu ? 'Turbo GPU' : 'CPU'} Worker...`,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
-
-        jobs.push(jobData);
-
-        try {
-            if (payload.uid) {
-                await utils.setDoc(utils.doc(db, 'users', payload.uid, 'executions', job_id), jobData);
-            }
-            await utils.setDoc(utils.doc(db, 'executions', job_id), jobData);
-        } catch (err) {
-            console.warn("Firestore job doc init notice:", err);
-        }
-    }
-
-    // Build the Kaggle worker script
-    const batchConfig = {
-        batch_id: batch_id,
-        jobs: jobs,
-        ai_api_key: payload.ai_api_key || userSettings.ai_api_key || ''
-    };
-    const workerScript = buildWorkerCode(batchConfig, hfToken, pexelsKey);
-
-    // Push new version to the single persistent production worker kernel
-    const kagglePayload = {
-        slug: `${kaggleUsername}/${KAGGLE_WORKER_SLUG}`,
-        newTitle: "EpicSync Production Worker",
-        text: workerScript,
-        language: "python",
-        kernelType: "script",
-        isPrivate: true,
-        enableGpu: enableGpu,
-        enableTpu: false,
-        enableInternet: true,
-        machineShape: enableGpu ? "NvidiaTeslaT4" : "None",
-        accelerator: enableGpu ? "NvidiaTeslaT4" : "None",
-        gpuType: enableGpu ? "T4" : "None",
-        datasetDataSources: [],
-        competitionDataSources: [],
-        kernelDataSources: [],
-        modelDataSources: []
-    };
-
-    const res = await fetch('https://www.kaggle.com/api/v1/kernels/push', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${kaggleKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(kagglePayload)
-    });
-
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Kaggle API (${kaggleUsername}) returned ${res.status}: ${errText}`);
-    }
-
-    const resData = await res.json();
-
-    // Start background status watchdog to sync Kaggle errors/cancellations to Firestore
-    startKaggleBatchWatchdog(db, utils, payload.uid, batch_id, kaggleUsername, kaggleKey);
-
-    return {
-        success: true,
-        batch_id: batch_id,
-        enable_gpu: enableGpu,
-        count: jobs.length,
-        jobs: jobs,
-        kaggle_ref: resData.ref || KAGGLE_WORKER_SLUG
-    };
-}
-
-// 7. Kaggle Status Watchdog (Two-way failure & cancellation synchronization)
-export function startKaggleBatchWatchdog(db, utils, uid, batchId, kaggleUsername, kaggleKey) {
-    if (!kaggleUsername || !kaggleKey) return null;
-
-    const intervalId = setInterval(async () => {
-        try {
-            const res = await fetch(`https://www.kaggle.com/api/v1/kernels/status?userName=${kaggleUsername}&kernelSlug=${KAGGLE_WORKER_SLUG}`, {
-                headers: { 'Authorization': `Bearer ${kaggleKey}` }
-            });
-            if (!res.ok) return;
-
-            const data = await res.json();
-            const kStatus = (data.status || '').toLowerCase();
-            const failureMsg = data.failureMessage || '';
-
-            const colRef = uid 
-                ? utils.collection(db, 'users', uid, 'executions')
-                : utils.collection(db, 'executions');
-
-            if (kStatus === 'error' || kStatus === 'failed') {
-                const snap = await utils.getDocs(colRef);
-                snap.forEach(async (docSnap) => {
-                    const d = docSnap.data();
-                    if ((!batchId || d.batch_id === batchId) && (d.status === 'RUNNING' || d.status === 'QUEUED')) {
-                        const updateData = {
-                            status: 'FAILED',
-                            progress: 100,
-                            step_text: `Kaggle Worker Failed: ${failureMsg || 'Kernel runtime error or OOM'}`,
-                            updatedAt: new Date()
-                        };
-                        if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
-                        await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
-                    }
-                });
-                clearInterval(intervalId);
-            } else if (kStatus === 'canceled' || kStatus === 'cancelacknowledged') {
-                const snap = await utils.getDocs(colRef);
-                snap.forEach(async (docSnap) => {
-                    const d = docSnap.data();
-                    if ((!batchId || d.batch_id === batchId) && (d.status === 'RUNNING' || d.status === 'QUEUED')) {
-                        const updateData = {
-                            status: 'CANCELLED',
-                            progress: 100,
-                            step_text: 'Cancelled on Kaggle',
-                            updatedAt: new Date()
-                        };
-                        if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
-                        await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
-                    }
-                });
-                clearInterval(intervalId);
-            } else if (kStatus === 'complete') {
-                // Check if any job in this batch was stranded or marked SUCCESS without video
-                const snap = await utils.getDocs(colRef);
-                snap.forEach(async (docSnap) => {
-                    const d = docSnap.data();
-                    if (!batchId || d.batch_id === batchId) {
-                        if (d.status === 'RUNNING' || d.status === 'QUEUED') {
-                            const updateData = {
-                                status: 'FAILED',
-                                progress: 100,
-                                step_text: 'Kaggle worker finished without producing this video',
-                                updatedAt: new Date()
-                            };
-                            if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
-                            await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
-                        } else if (d.status === 'SUCCESS' && (!d.output_file || d.output_file.length < 5)) {
-                            const updateData = {
-                                status: 'FAILED',
-                                progress: 100,
-                                step_text: 'Kaggle finished but video output is missing',
-                                updatedAt: new Date()
-                            };
-                            if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
-                            await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
-                        }
-                    }
-                });
-                clearInterval(intervalId);
-            }
-        } catch (err) {
-            console.warn("Kaggle watchdog notice:", err);
-        }
-    }, 5000);
-
-    return intervalId;
-}
-
-export function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+print("\n[BATCH COMPLETED] All videos processed. Worker exiting.")
