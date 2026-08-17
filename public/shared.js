@@ -281,8 +281,8 @@ for idx, job in enumerate(batch_config["jobs"]):
         continue
 
     try:
-        # Step 1: AI Script & Visual Direction Generation (MiniMax M3 / NVIDIA / Groq / OpenAI)
-        update_job(uid, job_id, "RUNNING", 10, f"Generating MiniMax M3 script & Pexels director queries for '{title}'...")
+        # Step 1: AI Script & Visual Direction Generation (GLM 5.2 / Llama 3.1 / HF Qwen)
+        update_job(uid, job_id, "RUNNING", 10, f"Generating AI script & Pexels director queries for '{title}'...")
 
         ai_scenes = []
 
@@ -308,83 +308,92 @@ for idx, job in enumerate(batch_config["jobs"]):
                 q = "+".join([w for w in w_list if len(w) > 3][:3]) or "lifestyle"
                 ai_scenes.append({"line": ml, "pexels_query": q})
         else:
-            sys_prompt = f"""You are an elite viral YouTube scriptwriter and visual director using MiniMax M3 reasoning.
-Write a high-retention, psychology-backed video script for the title: "{title}".
+            sys_prompt = f"""You are an elite viral YouTube Shorts scriptwriter and visual director.
+Write a completely original, high-retention, psychology-backed video narration script for the title: "{title}".
 
 TARGET TIMING & LENGTH CONSTRAINTS:
 - TARGET VIDEO DURATION: {target_dur} (~{int(t_secs)} seconds)
-- REQUIRED WORD COUNT: STRICTLY between {min_words} and {max_words} total spoken words across all lines combined. (Never under {min_words} words; never over {max_words} words).
+- REQUIRED WORD COUNT: STRICTLY between {min_words} and {max_words} total spoken words across ALL lines combined.
 - TARGET SCENE COUNT: Exactly {target_scenes_count} distinct thought beats / scene cuts.
 
-VIRAL HOOK & ATTENTION RETENTION RULES (Addictive Script System):
-1. BANNED: Never use greetings, introductions, rhetorical throat-clearing, or phrases like "In this video", "Here is what you need to know".
-2. HOOK (Scene 1): The first 3 seconds MUST be an immediate pattern interrupt or contrarian truth that attacks a common assumption (relevance + curiosity).
-3. BODY CHAIN: Connect every subsequent scene using causal connectors ("therefore", "but", "meanwhile", "which is why") instead of flat lists. Open a new curiosity loop before closing the last one.
-4. TONE: 6th grade reading level, conversational gossip whisperer, active voice, addressing the viewer as "you".
+VIRAL HOOK & ATTENTION RETENTION RULES:
+1. BANNED: Never use greetings, channel plugs, introductions, or phrases like "In this video", "Here is what you need to know", "Did you know".
+2. HOOK (Scene 1): Open with an immediate pattern interrupt — a contrarian claim, a shocking statistic, or a vivid scenario that makes the viewer feel personally called out. Must hook in under 3 seconds.
+3. BODY CHAIN: Each scene MUST causally connect to the next using transitions like "but", "therefore", "meanwhile", "which is why", "and yet". Never use numbered lists or "Next," / "Also,".
+4. CLIFFHANGER: Before the final scene, tease an unresolved idea that makes the viewer feel they MUST hear the last line.
+5. TONE: 6th-grade reading level, conversational gossip whisperer, active voice, always addressing the viewer as "you".
+6. Every line must be a COMPLETE spoken sentence with subject-verb structure. No fragments, no labels.
 
-PEXELS STOCK B-ROLL PROMPT RULES:
-For EVERY single scene line, provide a tailored 'pexels_query' (2 to 4 keywords) designed specifically for the Pexels Stock Video Search API.
-- Must describe tangible, concrete real-world visuals (e.g., "stressed office businessman", "luxury sports car night", "mountain drone aerial", "counting money cash", "whispering secret shadow").
-- NEVER use abstract concepts (do NOT write "jealousy concept" or "efficiency"). Use what the camera actually sees!
+PEXELS STOCK B-ROLL QUERY RULES:
+For EVERY scene line, provide a tailored 'pexels_query' (2 to 4 keywords) optimized for the Pexels Stock Video Search API.
+- Describe TANGIBLE, CONCRETE, real-world visuals a camera could actually film.
+- GOOD examples: "stressed office businessman", "luxury sports car night", "woman whispering secret", "counting money cash", "friends laughing cafe".
+- BAD examples (NEVER use): "jealousy concept", "efficiency", "betrayal", "success". These return zero results.
+- Each query MUST be unique — never repeat the same query across scenes.
 
 OUTPUT FORMAT:
-You MUST respond with valid JSON ONLY matching this exact JSON structure:
+Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
 {{
   "scenes": [
-    {{
-      "line": "Spoken sentence or thought beat 1...",
-      "pexels_query": "specific visual pexels search query 1"
-    }},
-    {{
-      "line": "Spoken sentence or thought beat 2...",
-      "pexels_query": "specific visual pexels search query 2"
-    }}
+    {{"line": "First spoken sentence...", "pexels_query": "concrete visual query"}},
+    {{"line": "Second spoken sentence...", "pexels_query": "different visual query"}}
   ]
 }}"""
 
-            # Tier 1: User-configured API Key (MiniMax / NVIDIA / Groq / OpenAI)
+            # Tier 1: User-configured API Key (NVIDIA GLM 5.2 / MiniMax / Groq / OpenAI)
             api_key = batch_config.get("ai_api_key") or os.environ.get("MINIMAX_API_KEY", "") or os.environ.get("NVIDIA_API_KEY", "")
 
             if api_key:
-                try:
-                    base_url = "https://api.minimax.chat/v1"
-                    model_name = "MiniMax-Text-01"
-                    if api_key.startswith("nvapi-"):
-                        base_url = "https://integrate.api.nvidia.com/v1"
-                        model_name = "meta/llama-3.3-70b-instruct"
-                    elif api_key.startswith("gsk_"):
-                        base_url = "https://api.groq.com/openai/v1"
-                        model_name = "llama-3.3-70b-versatile"
-                    elif api_key.startswith("sk-") and not api_key.startswith("sk-minimax"):
-                        base_url = "https://api.openai.com/v1"
-                        model_name = "gpt-4o-mini"
+                base_url = "https://api.minimax.chat/v1"
+                nvidia_models = ["MiniMax-Text-01"]
+                if api_key.startswith("nvapi-"):
+                    base_url = "https://integrate.api.nvidia.com/v1"
+                    nvidia_models = ["z-ai/glm-5.2", "meta/llama-3.1-70b-instruct"]
+                elif api_key.startswith("gsk_"):
+                    base_url = "https://api.groq.com/openai/v1"
+                    nvidia_models = ["llama-3.3-70b-versatile"]
+                elif api_key.startswith("sk-") and not api_key.startswith("sk-minimax"):
+                    base_url = "https://api.openai.com/v1"
+                    nvidia_models = ["gpt-4o-mini"]
 
-                    r_ai = requests.post(
-                        f"{base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                        json={
-                            "model": model_name,
-                            "messages": [
-                                {"role": "system", "content": sys_prompt},
-                                {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
-                            ],
-                            "max_tokens": 1500,
-                            "temperature": 0.7
-                        },
-                        timeout=35
-                    )
-                    if r_ai.ok:
-                        resp_c = r_ai.json()["choices"][0]["message"]["content"]
-                        json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
-                        if json_match:
-                            parsed_j = json.loads(json_match.group(0))
-                            for sc_item in parsed_j.get("scenes", []):
-                                l_val = str(sc_item.get("line", "")).strip()
-                                q_val = str(sc_item.get("pexels_query", "")).strip()
-                                if l_val:
-                                    ai_scenes.append({"line": l_val, "pexels_query": q_val})
-                except Exception as e:
-                    print(f"Tier 1 AI API notice: {e}")
+                for model_name in nvidia_models:
+                    if ai_scenes:
+                        break
+                    try:
+                        print(f"Calling {model_name} at {base_url}...")
+                        r_ai = requests.post(
+                            f"{base_url}/chat/completions",
+                            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                            json={
+                                "model": model_name,
+                                "messages": [
+                                    {"role": "system", "content": sys_prompt},
+                                    {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
+                                ],
+                                "max_tokens": 1500,
+                                "temperature": 0.85
+                            },
+                            timeout=90
+                        )
+                        if r_ai.ok:
+                            resp_c = r_ai.json()["choices"][0]["message"]["content"]
+                            print(f"AI raw response length: {len(resp_c)} chars")
+                            json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
+                            if json_match:
+                                parsed_j = json.loads(json_match.group(0))
+                                for sc_item in parsed_j.get("scenes", []):
+                                    l_val = str(sc_item.get("line", "")).strip()
+                                    q_val = str(sc_item.get("pexels_query", "")).strip()
+                                    if l_val:
+                                        ai_scenes.append({"line": l_val, "pexels_query": q_val})
+                                if ai_scenes:
+                                    print(f"AI generated {len(ai_scenes)} unique scenes via {model_name}")
+                            else:
+                                print(f"Could not parse JSON from {model_name}: {resp_c[:200]}")
+                        else:
+                            print(f"{model_name} returned {r_ai.status_code}, trying next model... ({r_ai.text[:150]})")
+                    except Exception as e:
+                        print(f"{model_name} notice: {e}, trying next model...")
 
             # Tier 2: Hugging Face Serverless Qwen 72B / Llama 3.3 (High Intelligence, 0 Cost)
             if not ai_scenes and HF_TOKEN:
