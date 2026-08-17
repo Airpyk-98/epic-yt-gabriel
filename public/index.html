@@ -413,6 +413,32 @@
             </div>
         </div>
 
+        <!-- Video Preview Modal -->
+        <div id="videoPreviewModal" class="modal-overlay" style="display: none; z-index: 1100;">
+            <div class="modal-card" style="max-width: 580px; width: 95%; padding: 20px;">
+                <div class="modal-header" style="margin-bottom: 12px;">
+                    <div>
+                        <h3 id="previewModalTitle" style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff;">Video Preview</h3>
+                        <p id="previewModalSubtitle" style="font-size: 0.78rem; color: var(--text-muted); margin: 3px 0 0 0;">Streaming directly on-demand</p>
+                    </div>
+                    <button id="closePreviewModalBtn" class="btn-close-modal" type="button" style="background: transparent; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; padding: 0 4px;">&times;</button>
+                </div>
+
+                <div style="margin: 8px 0 16px 0; background: #000; border-radius: 10px; overflow: hidden; display: flex; justify-content: center; align-items: center; min-height: 260px; max-height: 65vh; border: 1px solid var(--border-color);">
+                    <video id="previewModalPlayer" controls playsinline preload="auto" style="width: 100%; max-height: 65vh; object-fit: contain;"></video>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                    <a id="previewModalDownloadBtn" href="#" target="_blank" download class="btn-download" style="padding: 10px 16px; font-size: 0.85rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                        ⬇️ Download MP4
+                    </a>
+                    <button id="previewModalPushYtBtn" type="button" class="btn-launch" style="padding: 10px 18px; font-size: 0.85rem; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                        📺 Push to YouTube
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Footer -->
         <footer class="app-footer">
             <p>EpicSync &bull; AI Video Studio</p>
@@ -684,12 +710,16 @@
                     <div class="step-text">${escapeHtml(stepText)} (${progress}%)</div>
                     
                     ${outputUrl ? `
-                        <div class="player-container">
-                            <video src="${outputUrl}" controls playsinline preload="metadata"></video>
-                            <div class="player-actions">
-                                <a href="${outputUrl}" target="_blank" download class="btn-download">⬇️ Download MP4</a>
-                                <button class="btn-yt-single" data-job-id="${jobId}">📺 Push to YouTube</button>
-                            </div>
+                        <div class="player-actions" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <button class="btn-view-preview" type="button" style="background: rgba(99,102,241,0.18); border: 1.5px solid var(--accent); color: #fff; font-weight: 700; padding: 7px 14px; border-radius: 6px; font-size: 0.82rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                                👁️ View Preview
+                            </button>
+                            <a href="${outputUrl}" target="_blank" download class="btn-download" style="padding: 7px 12px; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 5px;">
+                                ⬇️ Download MP4
+                            </a>
+                            <button class="btn-yt-single" data-job-id="${jobId}" type="button" style="padding: 7px 12px; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 5px;">
+                                📺 Push to YouTube
+                            </button>
                         </div>
                     ` : ''}
                 `;
@@ -707,9 +737,19 @@
                     });
                 }
 
+                // Individual Preview Button -> Opens Video Preview Modal!
+                const previewBtn = card.querySelector('.btn-view-preview');
+                if (previewBtn) {
+                    previewBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openVideoPreviewModal(data);
+                    });
+                }
+
                 const ytBtn = card.querySelector('.btn-yt-single');
                 if (ytBtn) {
-                    ytBtn.addEventListener('click', () => {
+                    ytBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
                         openYtPushModal([data]);
                     });
                 }
@@ -717,6 +757,62 @@
                 container.appendChild(card);
             });
         }
+
+        // Dedicated On-Demand Video Preview Modal Controller
+        const videoPreviewModal = document.getElementById('videoPreviewModal');
+        const previewModalTitle = document.getElementById('previewModalTitle');
+        const previewModalPlayer = document.getElementById('previewModalPlayer');
+        const previewModalDownloadBtn = document.getElementById('previewModalDownloadBtn');
+        const previewModalPushYtBtn = document.getElementById('previewModalPushYtBtn');
+        const closePreviewModalBtn = document.getElementById('closePreviewModalBtn');
+
+        let currentPreviewVideoData = null;
+
+        function openVideoPreviewModal(data) {
+            currentPreviewVideoData = data;
+            const url = data.video_download_link || data.output_file;
+            if (!url) return alert('Video stream is not ready yet.');
+
+            previewModalTitle.innerText = data.title || 'Video Preview';
+            previewModalPlayer.src = url;
+            previewModalDownloadBtn.href = url;
+            videoPreviewModal.style.display = 'flex';
+            previewModalPlayer.load();
+            previewModalPlayer.play().catch(() => {});
+        }
+
+        function closeVideoPreviewModal() {
+            if (previewModalPlayer) {
+                previewModalPlayer.pause();
+                previewModalPlayer.removeAttribute('src');
+                previewModalPlayer.load();
+            }
+            if (videoPreviewModal) {
+                videoPreviewModal.style.display = 'none';
+            }
+            currentPreviewVideoData = null;
+        }
+
+        if (closePreviewModalBtn) closePreviewModalBtn.addEventListener('click', closeVideoPreviewModal);
+        if (videoPreviewModal) {
+            videoPreviewModal.addEventListener('click', (e) => {
+                if (e.target === videoPreviewModal) closeVideoPreviewModal();
+            });
+        }
+        if (previewModalPushYtBtn) {
+            previewModalPushYtBtn.addEventListener('click', () => {
+                if (currentPreviewVideoData) {
+                    const d = currentPreviewVideoData;
+                    closeVideoPreviewModal();
+                    openYtPushModal([d]);
+                }
+            });
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && videoPreviewModal && videoPreviewModal.style.display === 'flex') {
+                closeVideoPreviewModal();
+            }
+        });
 
         // Dual YouTube Push Modal State & Logic
         let modalVideosToPush = [];
