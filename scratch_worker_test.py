@@ -14,7 +14,7 @@ import torch
 import whisper
 from huggingface_hub import HfApi
 
-batch_config = json.loads("{\"batch_id\":\"test_batch_123\",\"created_at\":\"2026-08-17T01:10:15.671Z\",\"ai_api_key\":\"nvapi-test\",\"jobs\":[{\"job_id\":\"job_0\",\"uid\":\"user_123\",\"title\":\"8 signs someone is secretly jealous of you.\",\"script\":\"\",\"voice\":\"en-US-GuyNeural\",\"tts_engine\":\"edge\",\"aspect_ratio\":\"9:16\",\"target_duration\":\"45 seconds\",\"enable_gpu\":true}]}")
+batch_config = json.loads("{\"batch_id\":\"test_batch_123\",\"created_at\":\"2026-08-17T01:18:28.736Z\",\"ai_api_key\":\"nvapi-test\",\"jobs\":[{\"job_id\":\"job_0\",\"uid\":\"user_123\",\"title\":\"8 signs someone is secretly jealous of you.\",\"script\":\"\",\"voice\":\"en-US-GuyNeural\",\"tts_engine\":\"edge\",\"aspect_ratio\":\"9:16\",\"target_duration\":\"45 seconds\",\"enable_gpu\":true}]}")
 HF_TOKEN = "hf_token_mock"
 DEFAULT_PEXELS_KEY = "pexels_key_mock"
 hf_api = HfApi(token=HF_TOKEN)
@@ -181,6 +181,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                         if r_ai.ok:
                             resp_c = r_ai.json()["choices"][0]["message"]["content"]
                             print(f"AI raw response length: {len(resp_c)} chars")
+                            resp_c = re.sub(r'```(?:json)?s*', '', resp_c).strip()
                             json_match = re.search(r'{[sS]*"scenes"[sS]*}', resp_c)
                             if json_match:
                                 parsed_j = json.loads(json_match.group(0))

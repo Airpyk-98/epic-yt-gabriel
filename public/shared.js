@@ -378,6 +378,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                         if r_ai.ok:
                             resp_c = r_ai.json()["choices"][0]["message"]["content"]
                             print(f"AI raw response length: {len(resp_c)} chars")
+                            resp_c = re.sub(r'\x60\x60\x60(?:json)?\s*', '', resp_c).strip()
                             json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
                             if json_match:
                                 parsed_j = json.loads(json_match.group(0))
