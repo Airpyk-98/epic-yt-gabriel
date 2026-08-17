@@ -1,4 +1,5 @@
 // EpicSync Shared Application Logic & Cloud Dispatcher
+import { GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
@@ -264,7 +265,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     uid = job.get("uid", "")
     title = job["title"]
     script_text = job.get("script", "")
-    voice = job.get("voice", "relationship-male")
+    voice = job.get("voice", "am_adam")
     aspect_ratio = job.get("aspect_ratio", "9:16")
     w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
     orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
@@ -495,7 +496,7 @@ Respond with valid JSON ONLY:
             continue
 
         # Step 2: Audio Synthesis & Word-Level Whisper Transcription
-        tts_engine = job.get("tts_engine", "edge").lower()
+        tts_engine = job.get("tts_engine", "kokoro").lower()
         update_job(uid, job_id, "RUNNING", 30, f"Synthesizing voiceover with {tts_engine.upper()} & Whisper timestamps...")
 
         work_dir = f"/kaggle/working/job_{job_id}"
@@ -505,7 +506,7 @@ Respond with valid JSON ONLY:
 
         synthesized = False
 
-        # Attempt Kokoro synthesis if selected or voice is a Kokoro voice ID
+        # Attempt Kokoro synthesis if selected (Default) or voice is a Kokoro voice ID
         if tts_engine == "kokoro" or voice.startswith("af_") or voice.startswith("am_") or voice.startswith("bf_") or voice.startswith("bm_"):
             try:
                 print(f"🎙️ Running Kokoro-82M Local Neural Synthesis with voice: {voice}...")
@@ -526,7 +527,7 @@ Respond with valid JSON ONLY:
             except Exception as k_err:
                 print(f"Kokoro synthesis notice: {k_err}, falling back to Edge-TTS...")
 
-        # Fallback / Default: Edge-TTS Microsoft Neural
+        # Fallback: Edge-TTS Microsoft Neural
         if not synthesized:
             import asyncio, edge_tts
             edge_voice = "en-US-GuyNeural"
@@ -577,10 +578,12 @@ Respond with valid JSON ONLY:
         if not raw_scenes:
             raw_scenes = [{"text": title, "start": 0.0, "end": audio_dur}]
 
-        # Generate ASS Subtitles file
+        # Generate Anti-Overflow ASS Subtitles
         ass_path = os.path.join(work_dir, "subs.ass")
         if enable_captions and all_segments:
             margin_v = int(h * (100 - caption_y_pos) / 100)
+            margin_h = int(w * 0.08)  # 8% left & right margin to prevent edge clipping
+            safe_font_size = min(54, caption_font_size) if aspect_ratio == "9:16" else min(62, caption_font_size)
             hex_c = caption_color.lstrip('#')
             if len(hex_c) == 6:
                 ass_c = f"&H00{hex_c[4:6]}{hex_c[2:4]}{hex_c[0:2]}"
@@ -596,7 +599,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial Black,{caption_font_size},{ass_c},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,5,3,2,40,40,{margin_v},1
+Style: Default,Arial Black,{safe_font_size},{ass_c},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,5,3,2,{margin_h},{margin_h},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -628,23 +631,42 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         for i_w, wrd in enumerate(spl):
                             all_w.append({"word": wrd, "start": st_val + i_w * pw, "end": st_val + (i_w + 1) * pw})
 
+            # Anti-Overflow Chunking: 2-3 words (max 16 chars) for 9:16, 3-4 words (max 28 chars) for 16:9
             d_lines = []
-            c_size = 4
-            for i in range(0, len(all_w), c_size):
-                chk = all_w[i:i+c_size]
+            chunk_word_limit = 3 if aspect_ratio == "9:16" else 4
+            max_char_limit = 16 if aspect_ratio == "9:16" else 28
+            w_ptr = 0
+
+            while w_ptr < len(all_w):
+                chk = []
+                cur_chars = 0
+                while w_ptr < len(all_w) and len(chk) < chunk_word_limit:
+                    next_word = all_w[w_ptr]
+                    w_len = len(next_word["word"])
+                    if chk and (cur_chars + w_len > max_char_limit):
+                        break
+                    chk.append(next_word)
+                    cur_chars += w_len + 1
+                    w_ptr += 1
+
                 if not chk:
-                    continue
+                    if w_ptr < len(all_w):
+                        chk = [all_w[w_ptr]]
+                        w_ptr += 1
+                    else:
+                        break
+
                 cs = chk[0]["start"]
                 ce = chk[-1]["end"]
                 if ce <= cs:
-                    ce = cs + 0.8
+                    ce = cs + 0.75
                 txt = " ".join([w["word"] for w in chk]).upper()
                 txt = txt.replace("{", "(").replace("}", ")").replace(chr(92), "/")
                 d_lines.append(f"Dialogue: 0,{fmt_t(cs)},{fmt_t(ce)},Default,,0,0,0,,{txt}")
 
             with open(ass_path, "w", encoding="utf-8") as f_ass:
                 f_ass.write(ass_header + "\\n".join(d_lines) + "\\n")
-            print(f"✅ Generated {len(d_lines)} ASS subtitle cards")
+            print(f"✅ Generated {len(d_lines)} anti-overflow ASS subtitle cards")
 
         # Midpoint Boundary Bridging (ensuring sum of scene durations == exact audio duration)
         bridged_scenes = []
@@ -715,7 +737,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         v_list = pex_res.json().get("videos", [])
                         for v_entry in v_list:
                             files = v_entry.get("video_files", [])
-                            # Find best quality MP4 link
                             best_link = None
                             for f in files:
                                 link = f.get("link")
@@ -748,7 +769,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 raw_clip = os.path.join(work_dir, f"raw_sc{idx}_c{c_idx}.mp4")
                 trimmed_clip = os.path.join(work_dir, f"trimmed_sc{idx}_c{c_idx}.mp4")
 
-                # Try candidate clip download
                 downloaded = False
                 if c_idx < len(candidate_urls):
                     try:
@@ -762,7 +782,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     except Exception as err:
                         print(f"   Download error on candidate {c_idx+1}: {err}")
 
-                # If download failed, fallback to cycling candidate 0 or previous scene clip if available
                 if not downloaded and len(candidate_urls) > 0 and c_idx > 0:
                     try:
                         first_clip = os.path.join(work_dir, f"raw_sc{idx}_c0.mp4")
@@ -773,13 +792,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     except Exception:
                         pass
 
-                # If still no clip, generate a sleek, elegant cinematic dark motion background (never test countdown bars)
                 if not os.path.exists(raw_clip) or os.path.getsize(raw_clip) < 1000:
                     print(f"   Using cinematic dark background generator for slot {c_idx+1} ({slot_dur:.2f}s)")
                     bg_cmd = f'ffmpeg -y -f lavfi -i "color=c=0x070a14:s={w}x{h}:r=30" -vf "drawbox=x=0:y=0:w={w}:h={h}:color=0x0f172a@0.8:t=fill" -t {slot_dur:.3f} -c:v {enc_v} "{raw_clip}"'
                     subprocess.run(bg_cmd, shell=True, capture_output=True)
 
-                # Standardize and trim clip to exact slot_dur
                 trim_cmd = f'ffmpeg -y -ss 0 -t {slot_dur:.3f} -i "{raw_clip}" -vf "{scale_filter}" -c:v {enc_v} -r 30 -an "{trimmed_clip}"'
                 subprocess.run(trim_cmd, shell=True, capture_output=True)
                 if os.path.exists(trimmed_clip) and os.path.getsize(trimmed_clip) > 1000:
@@ -790,25 +807,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 rem_dur -= slot_dur
                 c_idx += 1
 
-            # Discard any remaining candidate videos
             discarded = max(0, len(candidate_urls) - c_idx)
             if discarded > 0:
                 print(f"   Candidate clips discarded: {discarded}")
 
-        # BGM Background Music preparation
+        # BGM Background Music preparation (with Firebase Hosting & GitHub CDN fallbacks)
         bgm_path = os.path.join(work_dir, "bgm.mp3")
         has_bgm = False
         if enable_bgm:
-            bgm_url = f"https://raw.githubusercontent.com/Airpyk-98/epic-yt-gabriel/main/public/audio/{bgm_track}.mp3"
-            try:
-                r_bgm = requests.get(bgm_url, timeout=15)
-                if r_bgm.ok and len(r_bgm.content) > 5000:
-                    with open(bgm_path, "wb") as f_b:
-                        f_b.write(r_bgm.content)
-                    has_bgm = True
-                    print(f"✅ Loaded BGM track: {bgm_track}")
-            except Exception as b_err:
-                print(f"BGM download notice: {b_err}")
+            bgm_urls = [
+                f"https://epic-yt-gab.web.app/audio/{bgm_track}.mp3",
+                f"https://raw.githubusercontent.com/Airpyk-98/epic-yt-gabriel/main/public/audio/{bgm_track}.mp3"
+            ]
+            for b_url in bgm_urls:
+                try:
+                    r_bgm = requests.get(b_url, timeout=12)
+                    if r_bgm.ok and len(r_bgm.content) > 5000:
+                        with open(bgm_path, "wb") as f_b:
+                            f_b.write(r_bgm.content)
+                        has_bgm = True
+                        print(f"✅ Loaded BGM track from {b_url}: {bgm_track}")
+                        break
+                except Exception as b_err:
+                    print(f"BGM download notice for {b_url}: {b_err}")
             
             # Procedural harmonic fallback if offline
             if not has_bgm:
@@ -837,17 +858,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if has_bgm and os.path.exists(bgm_path):
             filter_str = f"[0:v]setsar=1{sub_filter}[vout];[1:a]volume={vb_float}[voice];[2:a]volume={bgm_volume}[bgm];[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
-            input_args = f'-i "{manifest_p}" -i "{wav_p}" -i "{bgm_clean}"'
+            input_args = f'-f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -stream_loop -1 -i "{bgm_clean}"'
         else:
             filter_str = f"[0:v]setsar=1{sub_filter}[vout];[1:a]volume={vb_float}[aout]"
-            input_args = f'-i "{manifest_p}" -i "{wav_p}"'
+            input_args = f'-f concat -safe 0 -i "{manifest_p}" -i "{wav_p}"'
 
         if has_nvenc:
             print("⚡ Using NVIDIA GPU NVENC hardware acceleration with captions & audio mixing...")
-            ff_cmd = f'ffmpeg -y -f concat -safe 0 {input_args} -t {audio_dur:.3f} -filter_complex "{filter_str}" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+            ff_cmd = f'ffmpeg -y {input_args} -t {audio_dur:.3f} -filter_complex "{filter_str}" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
         else:
             print("🐢 Using multi-threaded CPU acceleration with captions & audio mixing...")
-            ff_cmd = f'ffmpeg -y -f concat -safe 0 {input_args} -t {audio_dur:.3f} -filter_complex "{filter_str}" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+            ff_cmd = f'ffmpeg -y {input_args} -t {audio_dur:.3f} -filter_complex "{filter_str}" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
 
         subprocess.run(ff_cmd, shell=True)
 
@@ -921,7 +942,8 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
             script: payload.script || '',
             aspect_ratio: payload.aspect_ratio || '9:16',
             target_duration: payload.target_duration || '45 seconds',
-            voice: payload.voice || 'relationship-male',
+            tts_engine: payload.tts_engine || 'kokoro',
+            voice: payload.voice || 'am_adam',
             voice_boost: payload.voice_boost || '120',
             enable_bgm: payload.enable_bgm === true || payload.enable_bgm === 'true',
             bgm_track: payload.bgm_track || 'lofi_chill',
@@ -1126,11 +1148,10 @@ let currentYtAccessToken = (typeof localStorage !== 'undefined' ? localStorage.g
 
 export function initGoogleYtAuth(clientId, callback) {
     if (typeof window.google === 'undefined' || !window.google.accounts || !window.google.accounts.oauth2) {
-        console.warn("Google Identity Services script not yet loaded.");
         return;
     }
     try {
-        const cId = clientId || localStorage.getItem('epicsync_google_client_id') || '113535246997-web.apps.googleusercontent.com';
+        const cId = clientId || '113535246997-web.apps.googleusercontent.com';
         googleTokenClient = window.google.accounts.oauth2.initTokenClient({
             client_id: cId,
             scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
@@ -1143,20 +1164,63 @@ export function initGoogleYtAuth(clientId, callback) {
             },
         });
     } catch (e) {
-        console.warn("Google Auth Init notice:", e);
+        console.warn("Google GSI Auth notice:", e);
     }
 }
 
-export function requestGoogleYtLogin(callback) {
-    if (callback) {
-        const cId = localStorage.getItem('epicsync_google_client_id') || '113535246997-web.apps.googleusercontent.com';
-        initGoogleYtAuth(cId, callback);
-    }
-    if (googleTokenClient) {
-        googleTokenClient.requestAccessToken({ prompt: 'consent' });
+export async function requestGoogleYtLogin(authOrCb, maybeCb) {
+    let auth = null;
+    let callback = null;
+
+    if (typeof authOrCb === 'function') {
+        callback = authOrCb;
     } else {
-        alert('Google Identity Client is initializing. If this persists, please ensure Google scripts are loaded or provide your Google Client ID in Settings.');
+        auth = authOrCb;
+        callback = maybeCb;
     }
+
+    // 1. First Attempt: Firebase Auth Google Provider with YouTube Scopes
+    if (auth) {
+        try {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/youtube.upload');
+            provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
+            provider.setCustomParameters({ prompt: 'consent', access_type: 'offline' });
+
+            const result = await signInWithPopup(auth, provider);
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            const token = credential?.accessToken;
+
+            if (token) {
+                currentYtAccessToken = token;
+                localStorage.setItem('epicsync_yt_access_token', token);
+                if (callback) callback(token);
+                return token;
+            }
+        } catch (err) {
+            console.warn("Firebase Google popup notice:", err);
+            if (err.code === 'auth/popup-closed-by-user') {
+                return null;
+            }
+        }
+    }
+
+    // 2. Second Attempt: Google Identity Services (GSI) Token Client
+    if (window.google?.accounts?.oauth2) {
+        return new Promise((resolve) => {
+            initGoogleYtAuth('113535246997-web.apps.googleusercontent.com', (token) => {
+                resolve(token);
+            });
+            if (googleTokenClient) {
+                googleTokenClient.requestAccessToken({ prompt: 'consent' });
+            } else {
+                resolve(null);
+            }
+        });
+    }
+
+    alert('Unable to initialize Google Sign-In. Please check your internet connection.');
+    return null;
 }
 
 export function getYtAccessToken() {

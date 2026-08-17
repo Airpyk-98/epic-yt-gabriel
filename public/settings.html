@@ -129,20 +129,6 @@
                             <span class="input-hint">Powers script generation and automatic scene queries.</span>
                         </div>
                     </div>
-
-                    <!-- Google YouTube OAuth Client ID Section -->
-                    <div style="background: rgba(239, 68, 68, 0.05); border: 1.5px solid rgba(239, 68, 68, 0.22); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
-                        <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: #f87171; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                            <span>🔑</span> Google YouTube Client ID <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
-                        </h3>
-
-                        <div class="form-group">
-                            <label for="googleClientIdInput">Google OAuth Web Client ID</label>
-                            <input type="text" id="googleClientIdInput" placeholder="113535246997-web.apps.googleusercontent.com">
-                            <span class="input-hint">Built-in default is provided. Add your own client ID if preferred.</span>
-                        </div>
-                    </div>
-
                     <!-- YouTube Webhook Section -->
                     <div style="background: rgba(255, 255, 255, 0.02); border: 1.5px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
                         <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: #fff; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
@@ -210,7 +196,6 @@
         const pexelsKeyInput = document.getElementById('pexelsKeyInput');
         const hfTokenInput = document.getElementById('hfTokenInput');
         const aiKeyInput = document.getElementById('aiKeyInput');
-        const googleClientIdInput = document.getElementById('googleClientIdInput');
         const webhookUrlSetting = document.getElementById('webhookUrlSetting');
         const settingsForm = document.getElementById('settingsForm');
         const settingsStatusMsg = document.getElementById('settingsStatusMsg');
@@ -227,7 +212,6 @@
             pexelsKeyInput.value = s.pexels_key || DEFAULT_PEXELS_KEY;
             hfTokenInput.value = s.hf_token || DEFAULT_HF_TOKEN;
             aiKeyInput.value = s.ai_api_key || DEFAULT_AI_KEY;
-            googleClientIdInput.value = s.google_client_id || localStorage.getItem('epicsync_google_client_id') || '';
             webhookUrlSetting.value = s.webhook_url || '';
         });
 
@@ -239,7 +223,6 @@
             const pexKey = pexelsKeyInput.value.trim() || DEFAULT_PEXELS_KEY;
             const hfToken = hfTokenInput.value.trim() || DEFAULT_HF_TOKEN;
             const aiKey = aiKeyInput.value.trim();
-            const googleClientId = googleClientIdInput.value.trim();
             const webhookUrl = webhookUrlSetting.value.trim();
 
             if (!username || !key) return alert('Please enter both Kaggle Username and API Token.');
@@ -249,7 +232,6 @@
             localStorage.setItem('epicsync_pexels_key', pexKey);
             localStorage.setItem('epicsync_hf_token', hfToken);
             localStorage.setItem('epicsync_ai_key', aiKey);
-            localStorage.setItem('epicsync_google_client_id', googleClientId);
             localStorage.setItem('epicsync_yt_webhook', webhookUrl);
 
             if (currentUser) {
@@ -260,7 +242,6 @@
                         pexels_key: pexKey,
                         hf_token: hfToken,
                         ai_api_key: aiKey,
-                        google_client_id: googleClientId,
                         webhook_url: webhookUrl,
                         updatedAt: new Date()
                     }, { merge: true });

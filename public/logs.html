@@ -291,10 +291,11 @@
         }
 
         if (signInYtBtn) {
-            signInYtBtn.addEventListener('click', () => {
-                requestGoogleYtLogin((newToken) => {
+            signInYtBtn.addEventListener('click', async () => {
+                const token = await requestGoogleYtLogin(auth, (newToken) => {
                     updateYtAuthUI(newToken);
                 });
+                if (token) updateYtAuthUI(token);
             });
         }
 
@@ -387,10 +388,12 @@
         startDirectYtUploadBtn.addEventListener('click', async () => {
             let token = getYtAccessToken();
             if (!token) {
-                return requestGoogleYtLogin(async (freshToken) => {
+                token = await requestGoogleYtLogin(auth, async (freshToken) => {
                     updateYtAuthUI(freshToken);
                     if (freshToken) startUploadSequence(freshToken);
                 });
+                if (token) startUploadSequence(token);
+                return;
             }
             startUploadSequence(token);
         });

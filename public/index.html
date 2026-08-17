@@ -142,15 +142,15 @@
                     <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
                         <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-weight: 600; font-size: 0.92rem; color: #fff;">🎙️ Narrator Voice</span>
-                            <span id="activeEngineBadge" style="font-size: 0.74rem; color: var(--accent-light); font-weight: 600; background: rgba(99,102,241,0.12); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.3);">⚡ Cloud Neural</span>
+                            <span id="activeEngineBadge" style="font-size: 0.74rem; color: var(--accent-light); font-weight: 600; background: rgba(99,102,241,0.12); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.3);">💎 Kokoro-82M (Neural Studio)</span>
                         </label>
                         
                         <div class="engine-toggle-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
-                            <button type="button" id="engineEdgeBtn" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                                ⚡ Cloud Neural
-                            </button>
-                            <button type="button" id="engineKokoroBtn" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <button type="button" id="engineKokoroBtn" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
                                 💎 Local Studio (Kokoro)
+                            </button>
+                            <button type="button" id="engineEdgeBtn" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                ⚡ Cloud Neural
                             </button>
                         </div>
 
@@ -315,6 +315,104 @@
 
         </main>
         
+        <!-- Push to YouTube / Automation Modal -->
+        <div id="ytPushModal" class="modal-overlay" style="display: none;">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff;">📺 Publish to YouTube</h3>
+                        <p id="modalVideoCountSubtitle" style="font-size: 0.8rem; color: var(--text-muted); margin: 3px 0 0 0;">Upload to your channel or send to automation.</p>
+                    </div>
+                    <button id="closeYtModalBtn" class="btn-close-modal" type="button" style="background: transparent; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; padding: 0 4px;">&times;</button>
+                </div>
+
+                <div class="modal-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 16px;">
+                    <button id="tabYtDirectBtn" class="modal-tab-btn active" type="button" style="flex: 1; padding: 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-weight: 600; font-size: 0.84rem; cursor: pointer;">🔴 Direct YouTube Upload</button>
+                    <button id="tabN8nBtn" class="modal-tab-btn" type="button" style="flex: 1; padding: 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-weight: 600; font-size: 0.84rem; cursor: pointer;">⚡ n8n Webhook</button>
+                </div>
+
+                <!-- Tab 1 Content: Direct YouTube Upload -->
+                <div id="tabYtDirectContent" class="modal-tab-content">
+                    <!-- Google Sign-In Status Card -->
+                    <div id="ytAuthStatusCard" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span id="ytAuthDot" style="font-size: 1.1rem;">⚪</span>
+                            <div>
+                                <div id="ytAuthStatusText" style="font-weight: 600; font-size: 0.86rem; color: #fff;">Checking YouTube Account...</div>
+                                <div id="ytAuthSubText" style="font-size: 0.74rem; color: var(--text-muted);">Sign in with Google to grant upload permissions</div>
+                            </div>
+                        </div>
+                        <button id="signInYtBtn" type="button" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-weight: 600; padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; cursor: pointer; white-space: nowrap;">
+                            🔑 Sign In
+                        </button>
+                    </div>
+
+                    <!-- Video Title Input (Single Mode) -->
+                    <div class="form-group" id="modalTitleGroup" style="margin-bottom: 12px;">
+                        <label for="modalVideoTitle" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Video Title</label>
+                        <input type="text" id="modalVideoTitle" class="form-control" placeholder="Enter video title..." maxlength="100" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
+                    </div>
+
+                    <!-- Bulk Titles Note (Bulk Mode) -->
+                    <div id="modalBulkTitleNote" class="form-group" style="display: none; margin-bottom: 12px;">
+                        <label style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Video Titles</label>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 8px 10px; border-radius: 6px;">
+                            ✅ Each video will use its own title.
+                        </div>
+                    </div>
+
+                    <!-- Privacy Status Selection -->
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="modalPrivacySelect" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Privacy</label>
+                        <select id="modalPrivacySelect" class="form-select" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
+                            <option value="public">🌐 Public (Instant Live)</option>
+                            <option value="unlisted">🔗 Unlisted (Link only)</option>
+                            <option value="private" selected>🔒 Private (YouTube Studio)</option>
+                        </select>
+                    </div>
+
+                    <!-- Global Hashtags -->
+                    <div class="form-group" style="margin-bottom: 14px;">
+                        <label for="modalHashtagsInput" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Hashtags</label>
+                        <input type="text" id="modalHashtagsInput" class="form-control" placeholder="#Shorts #Viral" value="#Shorts #Viral" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
+                    </div>
+
+                    <!-- Live Upload Progress -->
+                    <div id="modalUploadProgressWrap" style="display: none; margin: 14px 0;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+                            <span id="modalProgressStatus" style="color: #60a5fa;">Uploading to YouTube...</span>
+                            <span id="modalProgressPct" style="font-weight: 700; color: #fff;">0%</span>
+                        </div>
+                        <div class="progress-bar-wrap" style="height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden;">
+                            <div id="modalProgressBarFill" class="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #ef4444, #f97316); transition: width 0.3s ease;"></div>
+                        </div>
+                        <div id="modalUploadResultLinks" style="margin-top: 10px; font-size: 0.82rem; line-height: 1.5;"></div>
+                    </div>
+
+                    <!-- Upload Action Button -->
+                    <button id="startDirectYtUploadBtn" type="button" class="btn-launch" style="margin-top: 6px; width: 100%; padding: 12px; font-weight: 700; border-radius: 8px; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; cursor: pointer;">
+                        📺 Publish to YouTube
+                    </button>
+                </div>
+
+                <!-- Tab 2 Content: n8n Webhook -->
+                <div id="tabN8nContent" class="modal-tab-content" style="display: none;">
+                    <div class="form-group" style="margin-bottom: 14px;">
+                        <label for="modalN8nWebhookUrl" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Automation Webhook URL</label>
+                        <input type="url" id="modalN8nWebhookUrl" class="form-control" placeholder="https://your-n8n-instance.com/webhook/..." style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
+                    </div>
+
+                    <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+                        ⚡ <strong>Payload:</strong> <span id="modalN8nTargetCount">1 video</span> will be sent to this webhook.
+                    </div>
+
+                    <button id="dispatchN8nBtn" type="button" class="btn-launch" style="background: linear-gradient(135deg, #f97316, #ea580c); width: 100%; padding: 12px; font-weight: 700; border-radius: 8px; color: #fff; border: none; cursor: pointer;">
+                        ⚡ Send to Automation
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Footer -->
         <footer class="app-footer">
             <p>EpicSync &bull; AI Video Studio</p>
@@ -327,7 +425,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml } from "./shared.js?v=20260817_v410";
+        import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml, initGoogleYtAuth, requestGoogleYtLogin, getYtAccessToken, uploadVideoToYouTube } from "./shared.js?v=20260817_v410";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -611,9 +709,8 @@
 
                 const ytBtn = card.querySelector('.btn-yt-single');
                 if (ytBtn) {
-                    ytBtn.addEventListener('click', async () => {
-                        const webhookUrl = await getUserWebhookUrl(db, utils, currentUser?.uid);
-                        dispatchToWebhook(webhookUrl, [data]);
+                    ytBtn.addEventListener('click', () => {
+                        openYtPushModal([data]);
                     });
                 }
 
@@ -621,7 +718,241 @@
             });
         }
 
-        // Clear Current Feed Button (with Yes/No Confirmation Choice)
+        // Dual YouTube Push Modal State & Logic
+        let modalVideosToPush = [];
+        const ytPushModal = document.getElementById('ytPushModal');
+        const closeYtModalBtn = document.getElementById('closeYtModalBtn');
+        const tabYtDirectBtn = document.getElementById('tabYtDirectBtn');
+        const tabN8nBtn = document.getElementById('tabN8nBtn');
+        const tabYtDirectContent = document.getElementById('tabYtDirectContent');
+        const tabN8nContent = document.getElementById('tabN8nContent');
+        const signInYtBtn = document.getElementById('signInYtBtn');
+        const startDirectYtUploadBtn = document.getElementById('startDirectYtUploadBtn');
+        const dispatchN8nBtn = document.getElementById('dispatchN8nBtn');
+        const modalVideoTitle = document.getElementById('modalVideoTitle');
+        const modalTitleGroup = document.getElementById('modalTitleGroup');
+        const modalBulkTitleNote = document.getElementById('modalBulkTitleNote');
+        const modalVideoCountSubtitle = document.getElementById('modalVideoCountSubtitle');
+        const modalN8nTargetCount = document.getElementById('modalN8nTargetCount');
+        const modalN8nWebhookUrl = document.getElementById('modalN8nWebhookUrl');
+        const modalPrivacySelect = document.getElementById('modalPrivacySelect');
+        const modalHashtagsInput = document.getElementById('modalHashtagsInput');
+        const modalUploadProgressWrap = document.getElementById('modalUploadProgressWrap');
+        const modalProgressStatus = document.getElementById('modalProgressStatus');
+        const modalProgressPct = document.getElementById('modalProgressPct');
+        const modalProgressBarFill = document.getElementById('modalProgressBarFill');
+        const modalUploadResultLinks = document.getElementById('modalUploadResultLinks');
+
+        function updateYtAuthUI(token) {
+            const dot = document.getElementById('ytAuthDot');
+            const statusText = document.getElementById('ytAuthStatusText');
+            const subText = document.getElementById('ytAuthSubText');
+
+            if (token) {
+                if (dot) dot.innerText = '🟢';
+                if (statusText) {
+                    statusText.innerText = 'YouTube Connected';
+                    statusText.style.color = '#34d399';
+                }
+                if (subText) subText.innerText = 'Authenticated & ready to upload directly';
+                if (signInYtBtn) {
+                    signInYtBtn.innerText = '🔄 Switch Account';
+                    signInYtBtn.style.color = '#cbd5e1';
+                    signInYtBtn.style.borderColor = 'rgba(255,255,255,0.2)';
+                    signInYtBtn.style.background = 'rgba(255,255,255,0.05)';
+                }
+            } else {
+                if (dot) dot.innerText = '⚪';
+                if (statusText) {
+                    statusText.innerText = 'Not Signed In';
+                    statusText.style.color = '#fff';
+                }
+                if (subText) subText.innerText = 'Sign in with Google to grant upload permissions';
+                if (signInYtBtn) {
+                    signInYtBtn.innerText = '🔑 Sign In to YouTube';
+                    signInYtBtn.style.color = '#f87171';
+                    signInYtBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                    signInYtBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+                }
+            }
+        }
+
+        if (signInYtBtn) {
+            signInYtBtn.addEventListener('click', async () => {
+                const token = await requestGoogleYtLogin(auth, (newToken) => {
+                    updateYtAuthUI(newToken);
+                });
+                if (token) updateYtAuthUI(token);
+            });
+        }
+
+        function setModalTab(tab) {
+            if (tab === 'youtube') {
+                tabYtDirectBtn.classList.add('active');
+                tabYtDirectBtn.style.background = 'rgba(99,102,241,0.18)';
+                tabYtDirectBtn.style.borderColor = 'var(--accent)';
+                tabYtDirectBtn.style.color = '#fff';
+
+                tabN8nBtn.classList.remove('active');
+                tabN8nBtn.style.background = 'rgba(255,255,255,0.03)';
+                tabN8nBtn.style.borderColor = 'rgba(255,255,255,0.1)';
+                tabN8nBtn.style.color = 'var(--text-muted)';
+
+                tabYtDirectContent.style.display = 'block';
+                tabN8nContent.style.display = 'none';
+            } else {
+                tabN8nBtn.classList.add('active');
+                tabN8nBtn.style.background = 'rgba(249,115,22,0.18)';
+                tabN8nBtn.style.borderColor = 'var(--warning)';
+                tabN8nBtn.style.color = '#fff';
+
+                tabYtDirectBtn.classList.remove('active');
+                tabYtDirectBtn.style.background = 'rgba(255,255,255,0.03)';
+                tabYtDirectBtn.style.borderColor = 'rgba(255,255,255,0.1)';
+                tabYtDirectBtn.style.color = 'var(--text-muted)';
+
+                tabN8nContent.style.display = 'block';
+                tabYtDirectContent.style.display = 'none';
+            }
+        }
+
+        if (tabYtDirectBtn) tabYtDirectBtn.addEventListener('click', () => setModalTab('youtube'));
+        if (tabN8nBtn) tabN8nBtn.addEventListener('click', () => setModalTab('n8n'));
+
+        async function openYtPushModal(videosList) {
+            modalVideosToPush = videosList.filter(v => v.video_download_link || v.output_file);
+            if (modalVideosToPush.length === 0) {
+                return alert('Selected video(s) have not completed rendering yet.');
+            }
+
+            const count = modalVideosToPush.length;
+            if (count === 1) {
+                modalTitleGroup.style.display = 'block';
+                modalBulkTitleNote.style.display = 'none';
+                modalVideoTitle.value = modalVideosToPush[0].title || '';
+                modalVideoCountSubtitle.innerText = `Publish "${modalVideosToPush[0].title || 'Video'}" to YouTube or n8n`;
+                modalN8nTargetCount.innerText = `1 video ("${modalVideosToPush[0].title || 'Video'}")`;
+            } else {
+                modalTitleGroup.style.display = 'none';
+                modalBulkTitleNote.style.display = 'block';
+                modalVideoCountSubtitle.innerText = `Publish ${count} selected videos to YouTube or n8n`;
+                modalN8nTargetCount.innerText = `${count} selected videos (batch payload)`;
+            }
+
+            const savedWebhook = await getUserWebhookUrl(db, utils, currentUser?.uid);
+            if (modalN8nWebhookUrl) modalN8nWebhookUrl.value = savedWebhook || '';
+
+            modalUploadProgressWrap.style.display = 'none';
+            modalProgressBarFill.style.width = '0%';
+            modalProgressPct.innerText = '0%';
+            modalUploadResultLinks.innerHTML = '';
+            startDirectYtUploadBtn.disabled = false;
+            startDirectYtUploadBtn.innerText = `📺 Push ${count === 1 ? 'Video' : count + ' Videos'} to YouTube Now`;
+
+            updateYtAuthUI(getYtAccessToken());
+            setModalTab('youtube');
+            ytPushModal.style.display = 'flex';
+        }
+
+        function closeYtPushModal() {
+            ytPushModal.style.display = 'none';
+        }
+
+        if (closeYtModalBtn) closeYtModalBtn.addEventListener('click', closeYtPushModal);
+        if (ytPushModal) {
+            ytPushModal.addEventListener('click', (e) => {
+                if (e.target === ytPushModal) closeYtPushModal();
+            });
+        }
+
+        startDirectYtUploadBtn.addEventListener('click', async () => {
+            let token = getYtAccessToken();
+            if (!token) {
+                token = await requestGoogleYtLogin(auth, async (freshToken) => {
+                    updateYtAuthUI(freshToken);
+                    if (freshToken) startUploadSequence(freshToken);
+                });
+                if (token) startUploadSequence(token);
+                return;
+            }
+            startUploadSequence(token);
+        });
+
+        async function startUploadSequence(token) {
+            const count = modalVideosToPush.length;
+            const privacy = modalPrivacySelect.value;
+            const hashtags = modalHashtagsInput.value.trim();
+
+            modalUploadProgressWrap.style.display = 'block';
+            startDirectYtUploadBtn.disabled = true;
+            modalUploadResultLinks.innerHTML = '';
+
+            for (let i = 0; i < count; i++) {
+                const item = modalVideosToPush[i];
+                const videoUrl = item.video_download_link || item.output_file;
+                const vTitle = (count === 1 && modalVideoTitle.value.trim()) ? modalVideoTitle.value.trim() : (item.title || `Video ${i+1}`);
+
+                modalProgressStatus.innerText = `[${i+1}/${count}] Uploading "${vTitle}"...`;
+
+                try {
+                    const uploadResult = await uploadVideoToYouTube(
+                        token,
+                        videoUrl,
+                        {
+                            title: vTitle,
+                            description: `Created with EpicSync Studio. ${hashtags}`,
+                            hashtags: hashtags,
+                            privacy: privacy
+                        },
+                        (pct, msg) => {
+                            const totalPct = Math.round(((i * 100) + pct) / count);
+                            modalProgressBarFill.style.width = `${totalPct}%`;
+                            modalProgressPct.innerText = `${totalPct}%`;
+                            modalProgressStatus.innerText = `[${i+1}/${count}] ${msg}`;
+                        }
+                    );
+
+                    const successRow = document.createElement('div');
+                    successRow.style.color = '#34d399';
+                    successRow.style.margin = '4px 0';
+                    successRow.innerHTML = `✅ <strong>${escapeHtml(vTitle)}</strong> uploaded! <a href="${uploadResult.url}" target="_blank" style="color: #60a5fa; text-decoration: underline; margin-left: 6px;">View on YouTube ↗</a>`;
+                    modalUploadResultLinks.appendChild(successRow);
+
+                } catch (err) {
+                    console.error("YouTube upload error:", err);
+                    const errRow = document.createElement('div');
+                    errRow.style.color = '#f87171';
+                    errRow.style.margin = '4px 0';
+                    errRow.innerHTML = `❌ <strong>${escapeHtml(vTitle)}</strong>: ${escapeHtml(err.message)}`;
+                    modalUploadResultLinks.appendChild(errRow);
+                }
+            }
+
+            modalProgressStatus.innerText = 'Upload sequence completed!';
+            startDirectYtUploadBtn.disabled = false;
+            startDirectYtUploadBtn.innerText = '✅ Finished! (Click to upload again)';
+        }
+
+        dispatchN8nBtn.addEventListener('click', async () => {
+            const url = modalN8nWebhookUrl.value.trim();
+            if (!url) return alert('Please enter your automation webhook URL.');
+
+            dispatchN8nBtn.disabled = true;
+            dispatchN8nBtn.innerText = '⚡ Dispatching...';
+            try {
+                const count = modalVideosToPush.length;
+                await dispatchToWebhook(url, modalVideosToPush);
+                alert(`✅ Successfully dispatched ${count} video(s) to your automation pipeline!`);
+                closeYtPushModal();
+            } catch (e) {
+                alert(`Dispatch notice: ${e.message}`);
+            } finally {
+                dispatchN8nBtn.disabled = false;
+                dispatchN8nBtn.innerText = '⚡ Send to Automation';
+            }
+        });
+
+        // Clear Current Feed Button
         const clearCurrentFeedBtn = document.getElementById('clearCurrentFeedBtn');
         clearCurrentFeedBtn.addEventListener('click', () => {
             const confirmed = confirm('Are you sure you want to clear the current live feed view?\n\n(Note: Your video history remains safely saved in the Execution Logs page).');
@@ -633,16 +964,8 @@
             document.getElementById('currentBatchSubtitle').innerText = 'Feed cleared.';
         });
 
-        // 6. Voice Engine & Dynamic Voice Library Switching
+        // 6. Voice Engine & Dynamic Voice Library Switching (Kokoro Default)
         const VOICE_LIBRARIES = {
-            edge: [
-                { id: "en-US-GuyNeural", label: "🎙️ Guy (Confident & Storyteller Male)" },
-                { id: "en-US-JennyNeural", label: "🌸 Jenny (Warm & Narrative Female)" },
-                { id: "en-US-ChristopherNeural", label: "🔥 Christopher (Energetic & Dynamic Male)" },
-                { id: "en-US-AriaNeural", label: "✨ Aria (Professional & Clean Female)" },
-                { id: "en-US-EricNeural", label: "🎬 Eric (Documentary & Deep Male)" },
-                { id: "en-US-AnaNeural", label: "💫 Ana (Friendly & Modern Female)" }
-            ],
             kokoro: [
                 { id: "am_adam", label: "🎙️ Adam (Deep Conversational Male)" },
                 { id: "af_bella", label: "🌸 Bella (Warm Storyteller Female)" },
@@ -650,10 +973,18 @@
                 { id: "af_sarah", label: "✨ Sarah (Clear Professional Female)" },
                 { id: "af_nicole", label: "💫 Nicole (Expressive Gossip Female)" },
                 { id: "am_fenrir", label: "🎬 Fenrir (Cinematic Drama Male)" }
+            ],
+            edge: [
+                { id: "en-US-GuyNeural", label: "🎙️ Guy (Confident & Storyteller Male)" },
+                { id: "en-US-JennyNeural", label: "🌸 Jenny (Warm & Narrative Female)" },
+                { id: "en-US-ChristopherNeural", label: "🔥 Christopher (Energetic & Dynamic Male)" },
+                { id: "en-US-AriaNeural", label: "✨ Aria (Professional & Clean Female)" },
+                { id: "en-US-EricNeural", label: "🎬 Eric (Documentary & Deep Male)" },
+                { id: "en-US-AnaNeural", label: "💫 Ana (Friendly & Modern Female)" }
             ]
         };
 
-        let currentTtsEngine = 'edge';
+        let currentTtsEngine = 'kokoro';
         const engineEdgeBtn = document.getElementById('engineEdgeBtn');
         const engineKokoroBtn = document.getElementById('engineKokoroBtn');
         const voiceSelect = document.getElementById('voiceSelect');
@@ -662,7 +993,7 @@
         function setVoiceEngine(engine) {
             currentTtsEngine = engine;
             voiceSelect.innerHTML = '';
-            const list = VOICE_LIBRARIES[engine] || VOICE_LIBRARIES.edge;
+            const list = VOICE_LIBRARIES[engine] || VOICE_LIBRARIES.kokoro;
             list.forEach(v => {
                 const opt = document.createElement('option');
                 opt.value = v.id;
@@ -691,7 +1022,7 @@
 
         if (engineEdgeBtn) engineEdgeBtn.addEventListener('click', () => setVoiceEngine('edge'));
         if (engineKokoroBtn) engineKokoroBtn.addEventListener('click', () => setVoiceEngine('kokoro'));
-        setVoiceEngine('edge');
+        setVoiceEngine('kokoro');
 
         // 7. Submit Batch Creation (With Dynamic GPU / CPU & Voice Engine Selection)
         const createBatchForm = document.getElementById('createBatchForm');
