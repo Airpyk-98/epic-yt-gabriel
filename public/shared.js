@@ -266,6 +266,9 @@ for idx, job in enumerate(batch_config["jobs"]):
     script_text = job.get("script", "")
     voice = job.get("voice", "relationship-male")
     aspect_ratio = job.get("aspect_ratio", "9:16")
+    w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
+    orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
+    scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
     target_dur = job.get("target_duration", "45 seconds")
     voice_boost = job.get("voice_boost", "120")
     enable_bgm = job.get("enable_bgm", False)
@@ -279,6 +282,7 @@ for idx, job in enumerate(batch_config["jobs"]):
 
     print(f"\\n========================================================")
     print(f" Processing Video {idx+1}/{len(batch_config['jobs'])}: {title} (ID: {job_id})")
+    print(f" Resolution: {w}x{h} ({aspect_ratio}), Captions: {enable_captions}, BGM: {enable_bgm}")
     print(f"========================================================")
 
     # Check for cancellation before processing
@@ -673,9 +677,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Step 3: Multi-Scene 3s Slicing with Remainder Cut-off & Candidate Discard
         update_job(uid, job_id, "RUNNING", 60, f"Downloading & slicing {len(bridged_scenes)} scenes (3s cuts)...")
 
-        w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
-        orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
-        scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
         all_trimmed_clips = []
 
         # Check if NVIDIA NVENC hardware encoder is supported
@@ -691,33 +692,49 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         for idx, sc in enumerate(bridged_scenes):
             sc_dur = sc["duration"]
-            search_q = "+".join(sc.get("pexels_query", "lifestyle").split())
+            raw_pq = sc.get("pexels_query", "cinematic nature")
+            clean_words = [w for w in re.sub(r'[^a-zA-Z0-9\s]', '', raw_pq).split() if w]
+            search_q = "+".join(clean_words) if clean_words else "cinematic"
             print(f"\\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
 
-            # Fetch up to 4 candidate Pexels clips using AI Director Query
+            # Multi-tier Pexels Search (Exact -> Broad -> Orientation Agnostic -> Fallback)
             candidate_urls = []
-            try:
-                pex_res = requests.get(
-                    f"https://api.pexels.com/videos/search?query={search_q}&per_page=4&orientation={orientation}",
-                    headers={"Authorization": pexels_key},
-                    timeout=12
-                )
-                if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "lifestyle":
-                    pex_res = requests.get(
-                        f"https://api.pexels.com/videos/search?query=lifestyle&per_page=4&orientation={orientation}",
-                        headers={"Authorization": pexels_key},
-                        timeout=12
-                    )
+            search_attempts = [
+                f"https://api.pexels.com/videos/search?query={search_q}&per_page=6&orientation={orientation}",
+                f"https://api.pexels.com/videos/search?query={search_q}&per_page=6",
+                f"https://api.pexels.com/videos/search?query={'+'.join(clean_words[:2])}&per_page=6" if len(clean_words) >= 2 else None,
+                f"https://api.pexels.com/videos/search?query=cinematic+aesthetic&per_page=6"
+            ]
 
-                if pex_res.ok and pex_res.json().get("videos"):
-                    for v_entry in pex_res.json()["videos"]:
-                        files = v_entry.get("video_files", [])
-                        for f in files:
-                            if f.get("link") and f.get("quality") == "hd":
-                                candidate_urls.append(f.get("link"))
-                                break
-            except Exception as e:
-                print(f"Pexels fetch notice for scene {idx}: {e}")
+            for attempt_url in search_attempts:
+                if not attempt_url:
+                    continue
+                try:
+                    pex_res = requests.get(attempt_url, headers={"Authorization": pexels_key}, timeout=10)
+                    if pex_res.ok:
+                        v_list = pex_res.json().get("videos", [])
+                        for v_entry in v_list:
+                            files = v_entry.get("video_files", [])
+                            # Find best quality MP4 link
+                            best_link = None
+                            for f in files:
+                                link = f.get("link")
+                                if link and f.get("quality") in ["hd", "uhd"]:
+                                    best_link = link
+                                    break
+                            if not best_link:
+                                for f in files:
+                                    if f.get("link"):
+                                        best_link = f.get("link")
+                                        break
+                            if best_link and best_link not in candidate_urls:
+                                candidate_urls.append(best_link)
+                    if len(candidate_urls) >= 4:
+                        break
+                except Exception as e:
+                    print(f"   Pexels query attempt notice: {e}")
+
+            print(f"   Found {len(candidate_urls)} candidate video stream(s)")
 
             # Fill sc_dur in 3.0s chunks
             rem_dur = sc_dur
@@ -731,19 +748,36 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 raw_clip = os.path.join(work_dir, f"raw_sc{idx}_c{c_idx}.mp4")
                 trimmed_clip = os.path.join(work_dir, f"trimmed_sc{idx}_c{c_idx}.mp4")
 
-                # Download candidate clip if available
+                # Try candidate clip download
+                downloaded = False
                 if c_idx < len(candidate_urls):
                     try:
                         r_v = requests.get(candidate_urls[c_idx], stream=True, timeout=20)
-                        with open(raw_clip, "wb") as f:
-                            for chunk in r_v.iter_content(chunk_size=512*1024):
-                                f.write(chunk)
+                        if r_v.ok:
+                            with open(raw_clip, "wb") as f:
+                                for chunk in r_v.iter_content(chunk_size=512*1024):
+                                    f.write(chunk)
+                            if os.path.exists(raw_clip) and os.path.getsize(raw_clip) > 5000:
+                                downloaded = True
+                    except Exception as err:
+                        print(f"   Download error on candidate {c_idx+1}: {err}")
+
+                # If download failed, fallback to cycling candidate 0 or previous scene clip if available
+                if not downloaded and len(candidate_urls) > 0 and c_idx > 0:
+                    try:
+                        first_clip = os.path.join(work_dir, f"raw_sc{idx}_c0.mp4")
+                        if os.path.exists(first_clip) and os.path.getsize(first_clip) > 5000:
+                            import shutil
+                            shutil.copyfile(first_clip, raw_clip)
+                            downloaded = True
                     except Exception:
                         pass
 
-                # Fallback to testsrc if download failed
+                # If still no clip, generate a sleek, elegant cinematic dark motion background (never test countdown bars)
                 if not os.path.exists(raw_clip) or os.path.getsize(raw_clip) < 1000:
-                    subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t {slot_dur:.3f} -c:v libx264 {raw_clip}", shell=True, capture_output=True)
+                    print(f"   Using cinematic dark background generator for slot {c_idx+1} ({slot_dur:.2f}s)")
+                    bg_cmd = f'ffmpeg -y -f lavfi -i "color=c=0x070a14:s={w}x{h}:r=30" -vf "drawbox=x=0:y=0:w={w}:h={h}:color=0x0f172a@0.8:t=fill" -t {slot_dur:.3f} -c:v {enc_v} "{raw_clip}"'
+                    subprocess.run(bg_cmd, shell=True, capture_output=True)
 
                 # Standardize and trim clip to exact slot_dur
                 trim_cmd = f'ffmpeg -y -ss 0 -t {slot_dur:.3f} -i "{raw_clip}" -vf "{scale_filter}" -c:v {enc_v} -r 30 -an "{trimmed_clip}"'
@@ -758,7 +792,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             # Discard any remaining candidate videos
             discarded = max(0, len(candidate_urls) - c_idx)
-            print(f"   Candidate clips discarded: {discarded}")
+            if discarded > 0:
+                print(f"   Candidate clips discarded: {discarded}")
 
         # BGM Background Music preparation
         bgm_path = os.path.join(work_dir, "bgm.mp3")

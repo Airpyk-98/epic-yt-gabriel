@@ -24,7 +24,7 @@
         <!-- Header -->
         <header class="app-header">
             <a href="index.html" class="brand">
-                <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                <span class="brand-badge">STUDIO</span>
                 <h1>Epic<span class="accent-text">Sync</span></h1>
             </a>
             
@@ -32,21 +32,21 @@
                 <button id="themeToggleBtn" class="btn-theme-toggle" type="button" title="Switch Theme">🌙 Dark</button>
                 <a href="login.html" id="userAuthPill" class="btn-auth-pill">
                     <span class="auth-icon">👤</span>
-                    <span id="userEmailDisplay">Sign In / Register</span>
+                    <span id="userEmailDisplay">Sign In</span>
                 </a>
                 <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">Sign Out</button>
             </div>
         </header>
 
-        <!-- Real Multi-Page Navigation Bar -->
+        <!-- Navigation Bar -->
         <nav class="nav-bar">
             <a href="index.html" class="nav-link">
                 <span class="nav-icon">🎬</span>
-                <span>Creator Studio</span>
+                <span>Studio</span>
             </a>
             <a href="logs.html" class="nav-link active">
                 <span class="nav-icon">📜</span>
-                <span>Execution Logs</span>
+                <span>Videos</span>
                 <span class="nav-badge" id="totalLogsBadge">0</span>
             </a>
             <a href="settings.html" class="nav-link">
@@ -61,19 +61,19 @@
             <section class="card feed-card">
                 <div class="card-header logs-main-header">
                     <div>
-                        <h2>📜 All Execution Logs</h2>
-                        <p class="subtitle">Complete generation history for your account. Push to YouTube directly or trigger n8n automation.</p>
+                        <h2>📜 Video History</h2>
+                        <p class="subtitle">Download completed videos or publish directly to YouTube.</p>
                     </div>
                 </div>
 
                 <!-- Action Bar -->
                 <div class="logs-actions-toolbar">
                     <div class="left-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select Multiple</button>
-                        <button id="cancelAllRunningBtn" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35); color: #f87171;">🛑 Cancel All Running</button>
+                        <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select</button>
+                        <button id="cancelAllRunningBtn" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35); color: #f87171;">🛑 Cancel All</button>
                     </div>
                     <div class="right-actions">
-                        <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All Logs</button>
+                        <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All</button>
                     </div>
                 </div>
 
@@ -81,15 +81,15 @@
                 <div id="batchSelectionBar" class="batch-selection-bar" style="display: none;">
                     <span id="selectedCountText">0 selected</span>
                     <div class="batch-btns" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button id="pushBatchYtBtn" class="btn-push-yt">📺 Push Selected</button>
-                        <button id="cancelSelectedBtn" class="btn-tool" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fff;">🛑 Cancel Selected</button>
+                        <button id="pushBatchYtBtn" class="btn-push-yt">📺 Push to YouTube</button>
+                        <button id="cancelSelectedBtn" class="btn-tool" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fff;">🛑 Cancel</button>
                         <button id="deleteSelectedBtn" class="btn-delete-sel">🗑️ Delete</button>
                     </div>
                 </div>
 
                 <!-- Logs Feed Container -->
                 <div id="allLogsContainer" class="logs-list">
-                    <div class="empty-state">Loading historical executions...</div>
+                    <div class="empty-state">Loading video history...</div>
                 </div>
             </section>
 
@@ -100,62 +100,61 @@
             <div class="modal-card">
                 <div class="modal-header">
                     <div>
-                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff;">📺 Push to YouTube</h3>
-                        <p id="modalVideoCountSubtitle" style="font-size: 0.8rem; color: var(--text-muted); margin: 3px 0 0 0;">Publish video(s) directly to your YouTube channel or trigger n8n automation</p>
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff;">📺 Publish to YouTube</h3>
+                        <p id="modalVideoCountSubtitle" style="font-size: 0.8rem; color: var(--text-muted); margin: 3px 0 0 0;">Upload to your channel or send to automation.</p>
                     </div>
                     <button id="closeYtModalBtn" class="btn-close-modal" type="button" style="background: transparent; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; padding: 0 4px;">&times;</button>
                 </div>
 
                 <div class="modal-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 16px;">
-                    <button id="tabYtDirectBtn" class="modal-tab-btn active" type="button" style="flex: 1; padding: 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-weight: 600; font-size: 0.86rem; cursor: pointer;">🔴 Direct YouTube Upload</button>
-                    <button id="tabN8nBtn" class="modal-tab-btn" type="button" style="flex: 1; padding: 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-weight: 600; font-size: 0.86rem; cursor: pointer;">⚡ n8n Webhook</button>
+                    <button id="tabYtDirectBtn" class="modal-tab-btn active" type="button" style="flex: 1; padding: 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-weight: 600; font-size: 0.84rem; cursor: pointer;">🔴 Direct YouTube Upload</button>
+                    <button id="tabN8nBtn" class="modal-tab-btn" type="button" style="flex: 1; padding: 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-weight: 600; font-size: 0.84rem; cursor: pointer;">⚡ n8n Webhook</button>
                 </div>
 
                 <!-- Tab 1 Content: Direct YouTube Upload -->
                 <div id="tabYtDirectContent" class="modal-tab-content">
                     <!-- Google Sign-In Status Card -->
-                    <div id="ytAuthStatusCard" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div id="ytAuthStatusCard" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span id="ytAuthDot" style="font-size: 1.1rem;">⚪</span>
                             <div>
-                                <div id="ytAuthStatusText" style="font-weight: 600; font-size: 0.88rem; color: #fff;">Checking YouTube Account...</div>
+                                <div id="ytAuthStatusText" style="font-weight: 600; font-size: 0.86rem; color: #fff;">Checking YouTube Account...</div>
                                 <div id="ytAuthSubText" style="font-size: 0.74rem; color: var(--text-muted);">Sign in with Google to grant upload permissions</div>
                             </div>
                         </div>
                         <button id="signInYtBtn" type="button" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-weight: 600; padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; cursor: pointer; white-space: nowrap;">
-                            🔑 Sign In to YouTube
+                            🔑 Sign In
                         </button>
                     </div>
 
                     <!-- Video Title Input (Single Mode) -->
-                    <div class="form-group" id="modalTitleGroup" style="margin-bottom: 14px;">
-                        <label for="modalVideoTitle" style="display: block; font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: #fff;">Video Title</label>
-                        <input type="text" id="modalVideoTitle" class="form-control" placeholder="Enter YouTube video title..." maxlength="100" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
+                    <div class="form-group" id="modalTitleGroup" style="margin-bottom: 12px;">
+                        <label for="modalVideoTitle" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Video Title</label>
+                        <input type="text" id="modalVideoTitle" class="form-control" placeholder="Enter video title..." maxlength="100" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
                     </div>
 
                     <!-- Bulk Titles Note (Bulk Mode) -->
-                    <div id="modalBulkTitleNote" class="form-group" style="display: none; margin-bottom: 14px;">
-                        <label style="display: block; font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: #fff;">Video Titles</label>
-                        <div style="font-size: 0.82rem; color: var(--text-muted); background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 6px;">
-                            ✅ <strong>Bulk Upload:</strong> Each selected video will be published using its own unique generation title.
+                    <div id="modalBulkTitleNote" class="form-group" style="display: none; margin-bottom: 12px;">
+                        <label style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Video Titles</label>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 8px 10px; border-radius: 6px;">
+                            ✅ Each video will use its own title.
                         </div>
                     </div>
 
                     <!-- Privacy Status Selection -->
-                    <div class="form-group" style="margin-bottom: 14px;">
-                        <label for="modalPrivacySelect" style="display: block; font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: #fff;">YouTube Privacy Status</label>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="modalPrivacySelect" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Privacy</label>
                         <select id="modalPrivacySelect" class="form-select" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
-                            <option value="public">🌐 Public (Visible to everyone instantly)</option>
-                            <option value="unlisted">🔗 Unlisted (Anyone with link can view)</option>
-                            <option value="private" selected>🔒 Private (Only you can view in YouTube Studio)</option>
+                            <option value="public">🌐 Public (Instant Live)</option>
+                            <option value="unlisted">🔗 Unlisted (Link only)</option>
+                            <option value="private" selected>🔒 Private (YouTube Studio)</option>
                         </select>
                     </div>
 
                     <!-- Global Hashtags -->
                     <div class="form-group" style="margin-bottom: 14px;">
-                        <label for="modalHashtagsInput" style="display: block; font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: #fff;">Hashtags (Appended to description & tags)</label>
-                        <input type="text" id="modalHashtagsInput" class="form-control" placeholder="#Shorts #Viral #Facts #LifeHacks" value="#Shorts #Viral" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
-                        <span class="input-hint" style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank or customize. Hashtags are automatically added to descriptions and video tags.</span>
+                        <label for="modalHashtagsInput" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Hashtags</label>
+                        <input type="text" id="modalHashtagsInput" class="form-control" placeholder="#Shorts #Viral" value="#Shorts #Viral" style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
                     </div>
 
                     <!-- Live Upload Progress -->
@@ -171,25 +170,24 @@
                     </div>
 
                     <!-- Upload Action Button -->
-                    <button id="startDirectYtUploadBtn" type="button" class="btn-launch" style="margin-top: 10px; width: 100%; padding: 12px; font-weight: 700; border-radius: 8px; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; cursor: pointer;">
-                        📺 Push to YouTube Now
+                    <button id="startDirectYtUploadBtn" type="button" class="btn-launch" style="margin-top: 6px; width: 100%; padding: 12px; font-weight: 700; border-radius: 8px; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; cursor: pointer;">
+                        📺 Publish to YouTube
                     </button>
                 </div>
 
                 <!-- Tab 2 Content: n8n Webhook -->
                 <div id="tabN8nContent" class="modal-tab-content" style="display: none;">
                     <div class="form-group" style="margin-bottom: 14px;">
-                        <label for="modalN8nWebhookUrl" style="display: block; font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: #fff;">n8n / Automation Webhook URL</label>
-                        <input type="url" id="modalN8nWebhookUrl" class="form-control" placeholder="https://your-n8n-domain.com/webhook/..." style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
-                        <span class="input-hint" style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-top: 4px;">Dispatches full video metadata, MP4 links, and title payloads as a JSON POST event.</span>
+                        <label for="modalN8nWebhookUrl" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; color: #fff;">Automation Webhook URL</label>
+                        <input type="url" id="modalN8nWebhookUrl" class="form-control" placeholder="https://your-n8n-instance.com/webhook/..." style="width: 100%; height: 38px; border-radius: 6px; padding: 0 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #fff;">
                     </div>
 
-                    <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px;">
-                        ⚡ <strong>Target Payload:</strong> <span id="modalN8nTargetCount">1 video</span> will be sent in this webhook dispatch event.
+                    <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+                        ⚡ <strong>Payload:</strong> <span id="modalN8nTargetCount">1 video</span> will be sent to this webhook.
                     </div>
 
                     <button id="dispatchN8nBtn" type="button" class="btn-launch" style="background: linear-gradient(135deg, #f97316, #ea580c); width: 100%; padding: 12px; font-weight: 700; border-radius: 8px; color: #fff; border: none; cursor: pointer;">
-                        ⚡ Dispatch to n8n Webhook
+                        ⚡ Send to Automation
                     </button>
                 </div>
             </div>
@@ -197,7 +195,7 @@
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p>EpicSync Studio &bull; Powered by Kaggle Cloud &amp; Hugging Face Datasets</p>
+            <p>EpicSync &bull; AI Video Studio</p>
         </footer>
 
     </div>

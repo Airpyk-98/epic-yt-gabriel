@@ -19,11 +19,10 @@
 
     <!-- Main Container -->
     <div class="app-wrapper">
-        
-        <!-- Header -->
+               <!-- Header -->
         <header class="app-header">
             <a href="index.html" class="brand">
-                <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                <span class="brand-badge">STUDIO</span>
                 <h1>Epic<span class="accent-text">Sync</span></h1>
             </a>
             
@@ -31,7 +30,7 @@
                 <button id="themeToggleBtn" class="btn-theme-toggle" type="button" title="Switch Theme">🌙 Dark</button>
                 <a href="login.html" id="userAuthPill" class="btn-auth-pill">
                     <span class="auth-icon">👤</span>
-                    <span id="userEmailDisplay">Sign In / Register</span>
+                    <span id="userEmailDisplay">Sign In</span>
                 </a>
                 <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">Sign Out</button>
             </div>
@@ -41,11 +40,11 @@
         <nav class="nav-bar">
             <a href="index.html" class="nav-link">
                 <span class="nav-icon">🎬</span>
-                <span>Creator Studio</span>
+                <span>Studio</span>
             </a>
             <a href="logs.html" class="nav-link">
                 <span class="nav-icon">📜</span>
-                <span>Execution Logs</span>
+                <span>Videos</span>
             </a>
             <a href="settings.html" class="nav-link active">
                 <span class="nav-icon">⚙️</span>
@@ -59,116 +58,112 @@
             <!-- Settings Card -->
             <section class="card settings-card">
                 <div class="card-header">
-                    <h2>⚙️ Cloud & Automation Settings</h2>
-                    <p class="subtitle">Configure your Kaggle CPU Execution credentials, Hugging Face Token, Pexels API Key, and optional YouTube Automation Webhook.</p>
+                    <h2>⚙️ Settings &amp; API Keys</h2>
+                    <p class="subtitle">Manage cloud credentials, media access, and publishing integrations.</p>
                 </div>
 
                 <form id="settingsForm">
                     
                     <!-- Kaggle Credentials Section -->
-                    <div style="background: rgba(245, 158, 11, 0.05); border: 1.5px solid rgba(245, 158, 11, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
-                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: var(--primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>☁️</span> Kaggle Cloud CPU Runner
+                    <div style="background: rgba(245, 158, 11, 0.05); border: 1.5px solid rgba(245, 158, 11, 0.22); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: var(--primary); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                            <span>☁️</span> Kaggle Cloud Runner
                         </h3>
 
                         <div class="form-group">
                             <label for="kaggleUsernameInput">Kaggle Username <span class="required">*</span></label>
-                            <input type="text" id="kaggleUsernameInput" placeholder="e.g. gabrielnjoku or ikechukwuebiringa1" required>
-                            <span class="input-hint">Your exact Kaggle username where CPU kernels are dispatched.</span>
+                            <input type="text" id="kaggleUsernameInput" placeholder="e.g. gabrielnjoku" required>
                         </div>
 
                         <div class="form-group">
                             <label for="kaggleKeyInput">Kaggle API Token (KGAT_...) <span class="required">*</span></label>
-                            <input type="password" id="kaggleKeyInput" placeholder="KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e" required>
-                            <span class="input-hint">Bearer token generated from your Kaggle Account Settings.</span>
+                            <input type="password" id="kaggleKeyInput" placeholder="KGAT_..." required>
                         </div>
 
-                        <button type="button" id="testKaggleBtn" class="btn-tool" style="margin-top: 6px;">
+                        <button type="button" id="testKaggleBtn" class="btn-tool" style="margin-top: 4px;">
                             🧪 Test Kaggle Connection
                         </button>
                     </div>
 
                     <!-- Pexels Stock API Section -->
-                    <div style="background: rgba(59, 130, 246, 0.05); border: 1.5px solid rgba(59, 130, 246, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
-                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #60a5fa; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>🎥</span> Pexels Stock Video API
+                    <div style="background: rgba(59, 130, 246, 0.05); border: 1.5px solid rgba(59, 130, 246, 0.22); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: #60a5fa; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                            <span>🎥</span> Stock Video API (Pexels)
                         </h3>
 
                         <div class="form-group">
                             <label for="pexelsKeyInput">Pexels API Key</label>
-                            <input type="password" id="pexelsKeyInput" placeholder="Y6IPbPqNHx9NYlubg8tCenK0jHVg0T8VbvJjuI0ibJU0pTGf9ED0QU3x">
-                            <span class="input-hint">API Key used to search and download high-resolution HD B-roll footage.</span>
+                            <input type="password" id="pexelsKeyInput" placeholder="Enter Pexels key...">
                         </div>
 
-                        <button type="button" id="testPexelsBtn" class="btn-tool" style="margin-top: 6px;">
-                            🧪 Test Pexels API Key
+                        <button type="button" id="testPexelsBtn" class="btn-tool" style="margin-top: 4px;">
+                            🧪 Test Pexels Key
                         </button>
                     </div>
 
                     <!-- Hugging Face Token Section -->
-                    <div style="background: rgba(16, 185, 129, 0.05); border: 1.5px solid rgba(16, 185, 129, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
-                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>🤗</span> Hugging Face Storage Token
+                    <div style="background: rgba(16, 185, 129, 0.05); border: 1.5px solid rgba(16, 185, 129, 0.22); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                            <span>🤗</span> Storage Token (Hugging Face)
                         </h3>
 
                         <div class="form-group">
-                            <label for="hfTokenInput">Hugging Face Access Token (hf_...)</label>
-                            <input type="password" id="hfTokenInput" placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxx">
-                            <span class="input-hint">Write token for uploading and streaming MP4 videos from <code>epic-gab/EpicSync-Dataset</code>.</span>
+                            <label for="hfTokenInput">Hugging Face Write Token (hf_...)</label>
+                            <input type="password" id="hfTokenInput" placeholder="hf_...">
                         </div>
 
-                        <button type="button" id="testHfBtn" class="btn-tool" style="margin-top: 6px;">
+                        <button type="button" id="testHfBtn" class="btn-tool" style="margin-top: 4px;">
                             🧪 Test Hugging Face Token
                         </button>
                     </div>
 
                     <!-- AI Script Engine Section -->
-                    <div style="background: rgba(168, 85, 247, 0.05); border: 1.5px solid rgba(168, 85, 247, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
-                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #c084fc; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>🧠</span> AI Script & Visual Director (NVIDIA GLM 5.2 / Llama 3.1 / Groq / OpenAI) <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
+                    <div style="background: rgba(168, 85, 247, 0.05); border: 1.5px solid rgba(168, 85, 247, 0.22); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: #c084fc; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                            <span>🧠</span> AI Script Engine <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
                         </h3>
 
                         <div class="form-group">
-                            <label for="aiKeyInput">AI API Key (MiniMax / NVIDIA NIM / Groq / OpenAI)</label>
-                            <input type="password" id="aiKeyInput" placeholder="mm-... or nvapi-... or gsk_... or sk-...">
-                            <span class="input-hint">Powers <strong>GLM 5.2 / Llama 3.1 70B</strong> with Addictive Script Writer psychology, precise word-count duration matching, and per-sentence Pexels B-roll queries.</span>
+                            <label for="aiKeyInput">AI API Key (NVIDIA NIM / Groq / OpenAI / MiniMax)</label>
+                            <input type="password" id="aiKeyInput" placeholder="nvapi-... or gsk_... or sk-...">
+                            <span class="input-hint">Powers script generation and automatic scene queries.</span>
                         </div>
                     </div>
 
-                    <!-- Google Identity & YouTube OAuth Client ID Section -->
-                    <div style="background: rgba(239, 68, 68, 0.05); border: 1.5px solid rgba(239, 68, 68, 0.25); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
-                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #f87171; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>🔑</span> Google OAuth Client ID (Direct YouTube Uploads) <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
+                    <!-- Google YouTube OAuth Client ID Section -->
+                    <div style="background: rgba(239, 68, 68, 0.05); border: 1.5px solid rgba(239, 68, 68, 0.22); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: #f87171; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                            <span>🔑</span> Google YouTube Client ID <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
                         </h3>
 
                         <div class="form-group">
                             <label for="googleClientIdInput">Google OAuth Web Client ID</label>
                             <input type="text" id="googleClientIdInput" placeholder="113535246997-web.apps.googleusercontent.com">
-                            <span class="input-hint">Default client is built-in. Provide your custom OAuth 2.0 Web Client ID from Google Cloud Console if needed.</span>
+                            <span class="input-hint">Built-in default is provided. Add your own client ID if preferred.</span>
                         </div>
                     </div>
 
-                    <!-- YouTube Webhook Section (Optional) -->
-                    <div style="background: rgba(255, 255, 255, 0.02); border: 1.5px solid var(--border-color); border-radius: var(--inner-radius); padding: 16px; margin-bottom: 18px;">
-                        <h3 style="font-family: var(--font-heading); font-size: 1.05rem; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>📺</span> YouTube Dispatch Webhook <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
+                    <!-- YouTube Webhook Section -->
+                    <div style="background: rgba(255, 255, 255, 0.02); border: 1.5px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
+                        <h3 style="font-family: var(--font-heading); font-size: 0.96rem; color: #fff; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                            <span>📺</span> Automation Webhook <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">(Optional)</span>
                         </h3>
 
                         <div class="form-group">
-                            <label for="webhookUrlSetting">Webhook Endpoint URL</label>
-                            <input type="url" id="webhookUrlSetting" placeholder="https://your-n8n-instance.com/webhook/youtube-publish">
-                            <span class="input-hint">Leave blank if not publishing via n8n/Make automation.</span>
+                            <label for="webhookUrlSetting">Webhook URL</label>
+                            <input type="url" id="webhookUrlSetting" placeholder="https://your-n8n-instance.com/webhook/...">
+                            <span class="input-hint">For n8n or Make publishing pipelines.</span>
                         </div>
 
-                        <button type="button" id="testWebhookBtn" class="btn-tool" style="margin-top: 6px;">
-                            🧪 Test Webhook Connection
+                        <button type="button" id="testWebhookBtn" class="btn-tool" style="margin-top: 4px;">
+                            🧪 Test Webhook
                         </button>
                     </div>
 
                     <!-- Save Action -->
                     <div class="form-actions-row">
                         <button type="submit" id="saveSettingsBtn" class="btn-launch">
-                            💾 Save All Settings
+                            💾 Save Settings
                         </button>
                     </div>
                     
@@ -180,7 +175,7 @@
         
         <!-- Footer -->
         <footer class="app-footer">
-            <p>EpicSync Studio &bull; Powered by Kaggle CPU &amp; Hugging Face Datasets</p>
+            <p>EpicSync &bull; AI Video Studio</p>
         </footer>
 
     </div>

@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="style.css?v=20260816_v200">
+    <link rel="stylesheet" href="style.css?v=20260817_v420">
 </head>
 <body>
 
@@ -23,7 +23,7 @@
         <!-- Header -->
         <header class="app-header">
             <a href="index.html" class="brand">
-                <span class="brand-badge">⚡ PEXELS CLOUD</span>
+                <span class="brand-badge">STUDIO</span>
                 <h1>Epic<span class="accent-text">Sync</span></h1>
             </a>
             
@@ -31,21 +31,21 @@
                 <button id="themeToggleBtn" class="btn-theme-toggle" type="button" title="Switch Theme">🌙 Dark</button>
                 <a href="login.html" id="userAuthPill" class="btn-auth-pill">
                     <span class="auth-icon">👤</span>
-                    <span id="userEmailDisplay">Sign In / Register</span>
+                    <span id="userEmailDisplay">Sign In</span>
                 </a>
                 <button id="signOutBtn" class="btn-signout" style="display: none;" title="Sign Out">Sign Out</button>
             </div>
         </header>
 
-        <!-- Real Multi-Page Navigation Bar -->
+        <!-- Navigation Bar -->
         <nav class="nav-bar">
             <a href="index.html" class="nav-link active">
                 <span class="nav-icon">🎬</span>
-                <span>Creator Studio</span>
+                <span>Studio</span>
             </a>
             <a href="logs.html" class="nav-link">
                 <span class="nav-icon">📜</span>
-                <span>Execution Logs</span>
+                <span>Videos</span>
                 <span class="nav-badge" id="totalLogsBadge">0</span>
             </a>
             <a href="settings.html" class="nav-link">
@@ -57,62 +57,62 @@
         <!-- Main Studio Content -->
         <main class="main-content">
             
-            <!-- Video Batch Creator Card -->
+            <!-- Video Creator Card -->
             <section class="card creator-card">
                 <div class="card-header">
-                    <h2>🎬 Create Video Batch</h2>
-                    <p class="subtitle">Enter one title per line. Runs on 1 dedicated Kaggle Worker sequentially.</p>
+                    <h2>🎬 Create Videos</h2>
+                    <p class="subtitle">Turn your ideas into high-retention Shorts automatically.</p>
                 </div>
 
                 <form id="createBatchForm">
                     
                     <!-- Titles Input -->
                     <div class="form-group">
-                        <label for="videoTitles">Video Titles <span class="required">*</span></label>
-                        <textarea id="videoTitles" rows="4" placeholder="Top 5 Productivity Secrets in 2026&#10;How to Master Deep Focus Fast&#10;The Science of Viral Habits" required></textarea>
-                        <span class="input-hint">Each line is processed as a separate video row in Firestore and generated sequentially.</span>
+                        <label for="videoTitles">Video Topic or Titles <span class="required">*</span></label>
+                        <textarea id="videoTitles" rows="3" placeholder="e.g. 5 Morning Habits of High Achievers&#10;How Sleep Changes Your Brain&#10;The Science of Deep Focus" required></textarea>
+                        <span class="input-hint">Enter one title per line to generate multiple videos.</span>
                     </div>
 
                     <!-- Manual Script Override -->
                     <div class="form-group">
                         <div class="toggle-row">
-                            <label for="manualScriptToggle">Manual Script Override</label>
+                            <label for="manualScriptToggle">Write Custom Script</label>
                             <label class="switch">
                                 <input type="checkbox" id="manualScriptToggle">
                                 <span class="slider round"></span>
                             </label>
                         </div>
-                        <div id="manualScriptArea" style="display: none; margin-top: 12px;">
-                            <textarea id="manualScriptText" rows="4" placeholder="Type or paste your exact voiceover script here..."></textarea>
+                        <div id="manualScriptArea" style="display: none; margin-top: 10px;">
+                            <textarea id="manualScriptText" rows="3" placeholder="Type or paste your voiceover script here..."></textarea>
                         </div>
                     </div>
 
                     <!-- Aspect Ratio Cards -->
                     <div class="form-group">
-                        <label>Aspect Ratio</label>
+                        <label>Format</label>
                         <div class="aspect-ratio-grid">
                             <label class="aspect-card active" id="aspectPortraitLabel">
                                 <input type="radio" name="aspectRatio" value="9:16" checked>
                                 <div class="aspect-visual aspect-9-16"></div>
                                 <div class="aspect-details">
                                     <strong>📱 9:16 Shorts</strong>
-                                    <span>Reels, TikTok, YouTube Shorts (1080×1920)</span>
+                                    <span>Vertical (TikTok, Reels, Shorts)</span>
                                 </div>
                             </label>
                             <label class="aspect-card" id="aspectLandscapeLabel">
                                 <input type="radio" name="aspectRatio" value="16:9">
                                 <div class="aspect-visual aspect-16-9"></div>
                                 <div class="aspect-details">
-                                    <strong>🖥️ 16:9 Landscape</strong>
-                                    <span>Full YouTube Video (1920×1080)</span>
+                                    <strong>🖥️ 16:9 Video</strong>
+                                    <span>Horizontal (Full YouTube)</span>
                                 </div>
                             </label>
                         </div>
                     </div>
 
-                    <!-- Target Duration (Chunky Unit Controls) -->
+                    <!-- Target Duration -->
                     <div class="form-group">
-                        <label>Target Video Duration</label>
+                        <label>Target Duration</label>
                         <div class="duration-panel">
                             <div class="unit-selector-pills">
                                 <button type="button" class="unit-pill active" id="unitSecondsBtn">
@@ -132,7 +132,7 @@
                                     <button type="button" class="stepper-btn" id="stepUpBtn">+</button>
                                 </div>
                                 <div class="duration-calc-badge" id="durationCalcBadge">
-                                    🎯 ~80 words (Viral 45s Shorts)
+                                    🎯 ~80 words (45s)
                                 </div>
                             </div>
                         </div>
@@ -141,36 +141,35 @@
                     <!-- Voice Engine & Narrator Voice Selector -->
                     <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
                         <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="font-weight: 600; font-size: 0.92rem; color: #fff;">🎙️ Voice Synthesis Engine</span>
-                            <span id="activeEngineBadge" style="font-size: 0.74rem; color: var(--accent-light); font-weight: 600; background: rgba(99,102,241,0.12); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.3);">⚡ Edge-TTS (Microsoft Neural)</span>
+                            <span style="font-weight: 600; font-size: 0.92rem; color: #fff;">🎙️ Narrator Voice</span>
+                            <span id="activeEngineBadge" style="font-size: 0.74rem; color: var(--accent-light); font-weight: 600; background: rgba(99,102,241,0.12); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.3);">⚡ Cloud Neural</span>
                         </label>
                         
-                        <div class="engine-toggle-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
-                            <button type="button" id="engineEdgeBtn" style="padding: 9px 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-size: 0.84rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease;">
-                                ⚡ Edge-TTS (Cloud Neural)
+                        <div class="engine-toggle-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                            <button type="button" id="engineEdgeBtn" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--accent); background: rgba(99,102,241,0.18); color: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                ⚡ Cloud Neural
                             </button>
-                            <button type="button" id="engineKokoroBtn" style="padding: 9px 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 0.84rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease;">
-                                💎 Kokoro-82M (Local Neural)
+                            <button type="button" id="engineKokoroBtn" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text-muted); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                💎 Local Studio (Kokoro)
                             </button>
                         </div>
 
-                        <label for="voiceSelect" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 5px;">Speaker Voice</label>
                         <select id="voiceSelect" class="form-select">
                             <!-- Populated dynamically via JS -->
                         </select>
                     </div>
 
-                    <!-- Hardware Accelerator Selection (GPU vs CPU Toggle) -->
-                    <div class="form-group" style="background: rgba(245, 158, 11, 0.06); border: 1.5px solid rgba(245, 158, 11, 0.25); border-radius: var(--inner-radius); padding: 14px; margin-top: 6px; margin-bottom: 14px;">
-                        <div class="toggle-row" style="margin-bottom: 4px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span id="gpuIconDisplay" style="font-size: 1.35rem;">⚡</span>
+                    <!-- Turbo GPU Acceleration Toggle -->
+                    <div class="form-group" style="background: rgba(245, 158, 11, 0.05); border: 1.5px solid rgba(245, 158, 11, 0.22); border-radius: var(--inner-radius); padding: 12px 14px; margin-bottom: 14px;">
+                        <div class="toggle-row">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span id="gpuIconDisplay" style="font-size: 1.2rem;">⚡</span>
                                 <div>
-                                    <label for="enableGpuToggle" style="font-weight: 700; font-size: 0.98rem; color: #fff; cursor: pointer; margin: 0;">
+                                    <label for="enableGpuToggle" style="font-weight: 600; font-size: 0.92rem; color: #fff; cursor: pointer; margin: 0;">
                                         Turbo GPU Acceleration
                                     </label>
-                                    <div id="gpuModeBadge" style="font-size: 0.76rem; color: #34d399; font-weight: 600; margin-top: 2px;">
-                                        ⚡ Turbo GPU Mode (Blazing Fast Rendering)
+                                    <div id="gpuModeBadge" style="font-size: 0.74rem; color: #34d399; font-weight: 600;">
+                                        ⚡ Fast Rendering Enabled
                                     </div>
                                 </div>
                             </div>
@@ -179,22 +178,19 @@
                                 <span class="slider round"></span>
                             </label>
                         </div>
-                        <span id="gpuHintText" class="input-hint" style="margin: 0; font-size: 0.74rem; color: var(--text-muted);">
-                            Uses Kaggle NVIDIA GPU hardware for fast FFmpeg & video compilation. Turn OFF to run in CPU Saver mode (0 GPU quota).
-                        </span>
                     </div>
 
-                    <!-- Dynamic Burned-In Captions Card -->
-                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
-                        <div class="toggle-row" style="margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span style="font-size: 1.25rem;">💬</span>
+                    <!-- Subtitles Card -->
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 12px 14px; margin-bottom: 14px;">
+                        <div class="toggle-row" style="margin-bottom: 4px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 1.2rem;">💬</span>
                                 <div>
-                                    <label for="enableCaptionsToggle" style="font-weight: 700; font-size: 0.95rem; color: #fff; cursor: pointer; margin: 0;">
-                                        Burn-in Viral Captions (Whisper Word-Level)
+                                    <label for="enableCaptionsToggle" style="font-weight: 600; font-size: 0.92rem; color: #fff; cursor: pointer; margin: 0;">
+                                        Burn-in Subtitles
                                     </label>
-                                    <div style="font-size: 0.76rem; color: #fbbf24; font-weight: 600; margin-top: 2px;">
-                                        ⚡ High-retention synchronized 3-4 word cards
+                                    <div style="font-size: 0.74rem; color: #fbbf24; font-weight: 500;">
+                                        ⚡ Synced karaoke cards
                                     </div>
                                 </div>
                             </div>
@@ -206,35 +202,35 @@
                         <div id="captionsOptionsArea" style="display: block; margin-top: 10px;">
                             <div class="form-row">
                                 <div class="form-group flex-1">
-                                    <label for="captionColorInput" style="font-size: 0.82rem;">Caption Color</label>
-                                    <input type="color" id="captionColorInput" value="#FFDD00" style="width: 100%; height: 38px; border-radius: 6px; cursor: pointer; background: transparent; border: 1px solid var(--border-color);">
+                                    <label for="captionColorInput" style="font-size: 0.8rem;">Text Color</label>
+                                    <input type="color" id="captionColorInput" value="#FFDD00" style="width: 100%; height: 36px; border-radius: 6px; cursor: pointer; background: transparent; border: 1px solid var(--border-color);">
                                 </div>
                                 <div class="form-group flex-1">
-                                    <label for="fontSizeInput" style="font-size: 0.82rem;">Font Size (px)</label>
-                                    <input type="number" id="fontSizeInput" value="55" min="25" max="100" class="form-control" style="height: 38px;">
+                                    <label for="fontSizeInput" style="font-size: 0.8rem;">Size</label>
+                                    <input type="number" id="fontSizeInput" value="55" min="25" max="100" class="form-control" style="height: 36px;">
                                 </div>
                                 <div class="form-group flex-1">
-                                    <label for="fontYPosInput" style="font-size: 0.82rem;">Y-Position (%)</label>
-                                    <div class="slider-val-row" style="height: 38px;">
+                                    <label for="fontYPosInput" style="font-size: 0.8rem;">Position</label>
+                                    <div class="slider-val-row" style="height: 36px;">
                                         <input type="range" id="fontYPosInput" min="20" max="95" value="82">
-                                        <span id="fontYPosVal" style="font-size: 0.82rem; min-width: 36px;">82%</span>
+                                        <span id="fontYPosVal" style="font-size: 0.8rem; min-width: 32px;">82%</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Royalty-Free Background Music (BGM) Suite -->
-                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 14px; margin-bottom: 14px;">
-                        <div class="toggle-row" style="margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span style="font-size: 1.25rem;">🎵</span>
+                    <!-- Background Music Card -->
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--inner-radius); padding: 12px 14px; margin-bottom: 14px;">
+                        <div class="toggle-row" style="margin-bottom: 4px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 1.2rem;">🎵</span>
                                 <div>
-                                    <label for="enableBgmToggle" style="font-weight: 700; font-size: 0.95rem; color: #fff; cursor: pointer; margin: 0;">
-                                        Background Music (BGM Suite)
+                                    <label for="enableBgmToggle" style="font-weight: 600; font-size: 0.92rem; color: #fff; cursor: pointer; margin: 0;">
+                                        Background Music
                                     </label>
-                                    <div style="font-size: 0.76rem; color: #60a5fa; font-weight: 600; margin-top: 2px;">
-                                        🎧 Royalty-free atmospheric tracks auto-ducked under voice
+                                    <div style="font-size: 0.74rem; color: #60a5fa; font-weight: 500;">
+                                        🎧 Royalty-free background audio
                                     </div>
                                 </div>
                             </div>
@@ -246,77 +242,74 @@
                         <div id="bgmOptionsArea" style="display: block; margin-top: 10px;">
                             <div class="form-row">
                                 <div class="form-group flex-2">
-                                    <label for="bgmTrackSelect" style="font-size: 0.82rem;">Select Music Track</label>
-                                    <select id="bgmTrackSelect" class="form-select" style="height: 38px;">
-                                        <option value="lofi_chill">🎵 Lo-Fi Chill & Focus (Subtle beat)</option>
-                                        <option value="dramatic_piano">🎹 Dramatic Piano & Cinematic (Epic storytelling)</option>
-                                        <option value="dark_suspense">🕵️ Dark Suspense & Mystery (True crime / Secrets)</option>
-                                        <option value="upbeat_tech">⚡ Upbeat Tech & Modern (High energy)</option>
-                                        <option value="ambient_synth">🌌 Ambient Synth Atmospheric (Deep focus)</option>
+                                    <label for="bgmTrackSelect" style="font-size: 0.8rem;">Track</label>
+                                    <select id="bgmTrackSelect" class="form-select" style="height: 36px;">
+                                        <option value="lofi_chill">☕ Lo-Fi Chill &amp; Relax</option>
+                                        <option value="dramatic_piano">🎹 Dramatic Piano Story</option>
+                                        <option value="dark_suspense">🕵️ Mystery &amp; Suspense</option>
+                                        <option value="upbeat_tech">⚡ Upbeat Modern Beat</option>
+                                        <option value="ambient_synth">🌌 Ambient Cinematic Synth</option>
                                     </select>
                                 </div>
                                 <div class="form-group flex-1">
-                                    <label for="bgmVolumeInput" style="font-size: 0.82rem;">BGM Volume (%)</label>
-                                    <div class="slider-val-row" style="height: 38px;">
+                                    <label for="bgmVolumeInput" style="font-size: 0.8rem;">Volume</label>
+                                    <div class="slider-val-row" style="height: 36px;">
                                         <input type="range" id="bgmVolumeInput" min="0" max="60" value="15">
-                                        <span id="bgmVolumeVal" style="font-size: 0.82rem; min-width: 36px;">15%</span>
+                                        <span id="bgmVolumeVal" style="font-size: 0.8rem; min-width: 32px;">15%</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Presets & Advanced Styling Accordion -->
-                    <details class="advanced-accordion">
-                        <summary>🎨 Advanced Audio & Video Presets</summary>
-                        <div class="accordion-content">
-                            
+                    <!-- Presets & Advanced Audio Accordion -->
+                    <details class="advanced-accordion" style="margin-bottom: 14px;">
+                        <summary style="font-size: 0.84rem; color: var(--text-muted); cursor: pointer;">🎨 Advanced Presets</summary>
+                        <div class="accordion-content" style="margin-top: 10px;">
                             <div class="form-row">
                                 <div class="form-group flex-1">
-                                    <label for="gridColorInput">Focus Grid Color</label>
-                                    <input type="color" id="gridColorInput" value="#ffffff">
+                                    <label for="gridColorInput" style="font-size: 0.8rem;">Focus Grid Color</label>
+                                    <input type="color" id="gridColorInput" value="#ffffff" style="height: 36px;">
                                 </div>
                                 <div class="form-group flex-1">
-                                    <label for="voiceBoostInput">Voice Boost (%)</label>
-                                    <div class="slider-val-row">
+                                    <label for="voiceBoostInput" style="font-size: 0.8rem;">Voice Volume (%)</label>
+                                    <div class="slider-val-row" style="height: 36px;">
                                         <input type="range" id="voiceBoostInput" min="50" max="250" value="120">
-                                        <span id="voiceBoostVal">120%</span>
+                                        <span id="voiceBoostVal" style="font-size: 0.8rem;">120%</span>
                                     </div>
                                 </div>
                             </div>
-
-                            <div class="form-group">
+                            <div class="form-group" style="margin-bottom: 0;">
                                 <div class="toggle-row">
-                                    <label for="addGridToggle">Enable 9:16 Focus Grid Rectangle</label>
+                                    <label for="addGridToggle" style="font-size: 0.84rem;">Show 9:16 Focus Frame</label>
                                     <label class="switch">
                                         <input type="checkbox" id="addGridToggle">
                                         <span class="slider round"></span>
                                     </label>
                                 </div>
                             </div>
-
                         </div>
                     </details>
 
-                    <!-- Large Glowing Launch Button -->
-                    <button type="submit" id="submitBatchBtn" class="btn-launch" style="margin-top: 14px;">
-                        🚀 Launch EpicSync Pexels Run
+                    <!-- Launch Button -->
+                    <button type="submit" id="submitBatchBtn" class="btn-launch">
+                        🚀 Create Videos Now
                     </button>
                 </form>
             </section>
 
-            <!-- Current Batch Live Feed (Isolated to Active Batch) -->
-            <section class="card feed-card" style="margin-top: 20px;">
+            <!-- Current Batch Live Feed -->
+            <section class="card feed-card" style="margin-top: 16px;">
                 <div class="card-header feed-header">
                     <div>
-                        <h2>📊 Current Batch Live Feed</h2>
-                        <p class="subtitle" id="currentBatchSubtitle">Showing latest triggered batch (persisted across page refresh).</p>
+                        <h2>📊 Generation Progress</h2>
+                        <p class="subtitle" id="currentBatchSubtitle">Live status of your active batch.</p>
                     </div>
-                    <button id="clearCurrentFeedBtn" class="btn-tool">🧹 Clear Current Feed</button>
+                    <button id="clearCurrentFeedBtn" class="btn-tool">🧹 Clear</button>
                 </div>
 
                 <div id="currentBatchLogsContainer" class="logs-list">
-                    <div class="empty-state">No batch currently active. Submit titles above to start!</div>
+                    <div class="empty-state">No active batch. Enter topics above to begin!</div>
                 </div>
             </section>
 
@@ -324,7 +317,7 @@
         
         <!-- Footer -->
         <footer class="app-footer">
-            <p>EpicSync Studio &bull; Powered by Kaggle Cloud &amp; Hugging Face Datasets</p>
+            <p>EpicSync &bull; AI Video Studio</p>
         </footer>
 
     </div>
