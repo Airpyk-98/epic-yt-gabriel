@@ -341,6 +341,7 @@ You MUST respond with valid JSON ONLY matching this exact JSON structure:
   ]
 }}"""
 
+            # Tier 1: User-configured API Key (MiniMax / NVIDIA / Groq / OpenAI)
             api_key = batch_config.get("ai_api_key") or os.environ.get("MINIMAX_API_KEY", "") or os.environ.get("NVIDIA_API_KEY", "")
 
             if api_key:
@@ -382,26 +383,59 @@ You MUST respond with valid JSON ONLY matching this exact JSON structure:
                                 if l_val:
                                     ai_scenes.append({"line": l_val, "pexels_query": q_val})
                 except Exception as e:
-                    print(f"AI Generation notice: {e}")
+                    print(f"Tier 1 AI API notice: {e}")
 
-            # Smart procedural fallback if no API key or invalid output
+            # Tier 2: Hugging Face Serverless Qwen 72B / Llama 3.3 (High Intelligence, 0 Cost)
+            if not ai_scenes and HF_TOKEN:
+                try:
+                    from huggingface_hub import InferenceClient
+                    hf_client = InferenceClient(token=HF_TOKEN)
+                    for hf_m in ["Qwen/Qwen2.5-72B-Instruct", "Qwen/Qwen2.5-Coder-32B-Instruct"]:
+                        try:
+                            resp = hf_client.chat.completions.create(
+                                model=hf_m,
+                                messages=[
+                                    {"role": "system", "content": sys_prompt},
+                                    {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
+                                ],
+                                max_tokens=1500,
+                                temperature=0.7
+                            )
+                            resp_c = resp.choices[0].message.content
+                            json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
+                            if json_match:
+                                parsed_j = json.loads(json_match.group(0))
+                                for sc_item in parsed_j.get("scenes", []):
+                                    l_val = str(sc_item.get("line", "")).strip()
+                                    q_val = str(sc_item.get("pexels_query", "")).strip()
+                                    if l_val:
+                                        ai_scenes.append({"line": l_val, "pexels_query": q_val})
+                                if ai_scenes:
+                                    print(f"Generated {len(ai_scenes)} scenes via Hugging Face {hf_m}")
+                                    break
+                        except Exception as m_err:
+                            print(f"HF model {hf_m} notice: {m_err}")
+                except Exception as e:
+                    print(f"Tier 2 HF Inference notice: {e}")
+
+            # Tier 3: Dynamic Topic-Specific Procedural Decomposition (100% Unique to Title)
             if not ai_scenes:
-                hooks = [
-                    f"Most people think {title} is completely obvious, but the real psychology is shockingly counterintuitive.",
-                    f"If you're still approaching {title} the traditional way, you're falling into a massive trap.",
-                    f"Nobody wants to admit this out loud, but {title} reveals everything about human nature.",
-                    f"The biggest misconception about {title} is that it takes effort, but the reality is totally different."
+                print("Using Dynamic Keyword Deconstruction for unique script & Pexels queries...")
+                raw_words = [w.strip(".,!?:;\"'()[]{}").lower() for w in title.split() if len(w.strip(".,!?:;\"'()[]{}")) > 2]
+                stop_words = {"the", "and", "that", "this", "with", "from", "for", "are", "was", "were", "you", "your", "they", "their", "about", "what", "which", "how", "why", "who", "when", "where", "have", "has", "had", "not", "but", "all", "any", "some", "someone", "probably", "exist", "don't", "know", "signs", "features", "things", "ways"}
+                kw_list = [w for w in raw_words if w not in stop_words] or raw_words[:3] or ["lifestyle"]
+                k1 = kw_list[0] if kw_list else "focus"
+                k2 = kw_list[1] if len(kw_list) > 1 else k1
+                k3 = kw_list[2] if len(kw_list) > 2 else k2
+
+                ai_scenes = [
+                    {"line": f"If you think you truly understand {title}, this breakdown is about to completely change your perspective.", "pexels_query": f"{k1} thoughtful person"},
+                    {"line": f"First, notice how most people completely overlook the subtle mechanisms behind {k1}.", "pexels_query": f"{k1} detailed close up"},
+                    {"line": f"Meanwhile, when you look beneath the surface, the real impact of {k2} becomes impossible to ignore.", "pexels_query": f"{k2} technology lifestyle"},
+                    {"line": f"Therefore, the moment you recognize these critical patterns, everything starts making total sense.", "pexels_query": f"{k3} discovery reaction"},
+                    {"line": f"Which is why mastering {k2} gives you an unfair advantage that ninety-nine percent of people will never see.", "pexels_query": f"{k1} success confident"},
+                    {"line": f"Start paying attention to these details today, and watch how quickly your results begin to compound.", "pexels_query": f"{k2} modern city focus"}
                 ]
-                import random
-                h_line = random.choice(hooks)
-                default_flow = [
-                    {"line": h_line, "pexels_query": "dramatic shadow thoughtful person"},
-                    {"line": "Notice how subtle comments start slipping out whenever you begin making genuine progress.", "pexels_query": "whispering envious conversation"},
-                    {"line": "Therefore, pay close attention to who goes completely silent when your wins start compounding.", "pexels_query": "person looking at phone alone"},
-                    {"line": "Because genuine support is enthusiastic, but hidden resistance always hides behind awkward hesitation.", "pexels_query": "dramatic mirror reflection stare"},
-                    {"line": "Stay locked into your daily execution, ignore the passive noise, and let your consistency speak for itself.", "pexels_query": "confident person walking city skyline"}
-                ]
-                ai_scenes = default_flow
 
         script_text = " ".join([s["line"] for s in ai_scenes])
         print(f"\\nGenerated Script ({len(ai_scenes)} scenes, {len(script_text.split())} words):")
