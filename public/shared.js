@@ -1143,84 +1143,47 @@ export function initThemeToggle() {
 }
 
 // 9. Direct YouTube Upload Client & Google OAuth Helper
-let googleTokenClient = null;
 let currentYtAccessToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('epicsync_yt_access_token') : null) || null;
 
-export function initGoogleYtAuth(clientId, callback) {
-    if (typeof window.google === 'undefined' || !window.google.accounts || !window.google.accounts.oauth2) {
-        return;
+export async function requestGoogleYtLogin(auth) {
+    if (!auth) {
+        alert("Authentication system is initializing. Please try again in a moment.");
+        return null;
     }
+
     try {
-        const cId = clientId || '113535246997-web.apps.googleusercontent.com';
-        googleTokenClient = window.google.accounts.oauth2.initTokenClient({
-            client_id: cId,
-            scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
-            callback: (tokenResponse) => {
-                if (tokenResponse && tokenResponse.access_token) {
-                    currentYtAccessToken = tokenResponse.access_token;
-                    localStorage.setItem('epicsync_yt_access_token', currentYtAccessToken);
-                    if (callback) callback(currentYtAccessToken);
-                }
-            },
-        });
-    } catch (e) {
-        console.warn("Google GSI Auth notice:", e);
-    }
-}
+        const provider = new GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/youtube.upload');
+        provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
+        provider.setCustomParameters({ prompt: 'select_account consent' });
 
-export async function requestGoogleYtLogin(authOrCb, maybeCb) {
-    let auth = null;
-    let callback = null;
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        const token = credential?.accessToken;
 
-    if (typeof authOrCb === 'function') {
-        callback = authOrCb;
-    } else {
-        auth = authOrCb;
-        callback = maybeCb;
-    }
-
-    // 1. First Attempt: Firebase Auth Google Provider with YouTube Scopes
-    if (auth) {
-        try {
-            const provider = new GoogleAuthProvider();
-            provider.addScope('https://www.googleapis.com/auth/youtube.upload');
-            provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
-            provider.setCustomParameters({ prompt: 'consent', access_type: 'offline' });
-
-            const result = await signInWithPopup(auth, provider);
-            const credential = GoogleAuthProvider.credentialFromResult(result);
-            const token = credential?.accessToken;
-
-            if (token) {
-                currentYtAccessToken = token;
-                localStorage.setItem('epicsync_yt_access_token', token);
-                if (callback) callback(token);
-                return token;
-            }
-        } catch (err) {
-            console.warn("Firebase Google popup notice:", err);
-            if (err.code === 'auth/popup-closed-by-user') {
-                return null;
-            }
+        if (token) {
+            currentYtAccessToken = token;
+            localStorage.setItem('epicsync_yt_access_token', token);
+            return token;
+        } else {
+            throw new Error("Could not retrieve Google OAuth access token for YouTube.");
         }
+    } catch (err) {
+        console.error("Google YouTube Auth Error:", err);
+        if (err.code === 'auth/popup-closed-by-user') {
+            return null;
+        }
+        if (err.code === 'auth/popup-blocked') {
+            alert("The Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.");
+            return null;
+        }
+        if (err.code === 'auth/unauthorized-domain') {
+            alert("This domain is not yet authorized in Firebase Console -> Authentication -> Settings -> Authorized domains.");
+            return null;
+        }
+        alert(`YouTube Sign-In notice: ${err.message || err}`);
+        return null;
     }
-
-    // 2. Second Attempt: Google Identity Services (GSI) Token Client
-    if (window.google?.accounts?.oauth2) {
-        return new Promise((resolve) => {
-            initGoogleYtAuth('113535246997-web.apps.googleusercontent.com', (token) => {
-                resolve(token);
-            });
-            if (googleTokenClient) {
-                googleTokenClient.requestAccessToken({ prompt: 'consent' });
-            } else {
-                resolve(null);
-            }
-        });
-    }
-
-    alert('Unable to initialize Google Sign-In. Please check your internet connection.');
-    return null;
 }
 
 export function getYtAccessToken() {
@@ -1235,10 +1198,19 @@ export function clearYtAccessToken() {
 export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onProgress) {
     if (!accessToken) throw new Error("No YouTube OAuth access token available. Please sign in to YouTube first.");
 
-    if (onProgress) onProgress(5, "Downloading generated video from cloud storage...");
-    const videoRes = await fetch(videoUrl);
-    if (!videoRes.ok) throw new Error(`Could not fetch video file (${videoRes.status})`);
-    const videoBlob = await videoRes.blob();
+    if (onProgress) onProgress(5, "Downloading video file from cloud storage...");
+    let videoBlob = null;
+    try {
+        const videoRes = await fetch(videoUrl, { redirect: 'follow' });
+        if (!videoRes.ok) throw new Error(`Could not fetch video file (${videoRes.status})`);
+        videoBlob = await videoRes.blob();
+    } catch (fErr) {
+        throw new Error(`Failed to load video file for upload (${fErr.message}). You can use 'Download MP4' to save it.`);
+    }
+
+    if (!videoBlob || videoBlob.size < 1000) {
+        throw new Error("Video file is empty or corrupted.");
+    }
 
     if (onProgress) onProgress(15, "Initiating YouTube upload session...");
     const title = (metadata.title || "Untitled Video").slice(0, 100);
@@ -1273,7 +1245,12 @@ export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onPr
 
     if (!initRes.ok) {
         const errJson = await initRes.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `YouTube upload session creation failed (${initRes.status})`);
+        const msg = errJson.error?.message || `YouTube upload session creation failed (${initRes.status})`;
+        if (initRes.status === 401) {
+            clearYtAccessToken();
+            throw new Error("YouTube authentication session expired. Please sign in again.");
+        }
+        throw new Error(msg);
     }
 
     const uploadUrl = initRes.headers.get("Location");
@@ -1297,11 +1274,12 @@ export async function uploadVideoToYouTube(accessToken, videoUrl, metadata, onPr
             if (xhr.status >= 200 && xhr.status < 300) {
                 try {
                     const resp = JSON.parse(xhr.responseText);
+                    const vId = resp.id;
                     if (onProgress) onProgress(100, "Published successfully to YouTube!");
                     resolve({
                         success: true,
-                        videoId: resp.id,
-                        url: `https://youtube.com/shorts/${resp.id}`
+                        videoId: vId,
+                        url: vId ? `https://youtube.com/shorts/${vId}` : "https://studio.youtube.com"
                     });
                 } catch (e) {
                     resolve({ success: true, url: "https://studio.youtube.com" });

@@ -425,7 +425,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml, initGoogleYtAuth, requestGoogleYtLogin, getYtAccessToken, uploadVideoToYouTube } from "./shared.js?v=20260817_v410";
+        import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml, requestGoogleYtLogin, getYtAccessToken, uploadVideoToYouTube } from "./shared.js?v=20260817_yt_v430";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -779,10 +779,8 @@
 
         if (signInYtBtn) {
             signInYtBtn.addEventListener('click', async () => {
-                const token = await requestGoogleYtLogin(auth, (newToken) => {
-                    updateYtAuthUI(newToken);
-                });
-                if (token) updateYtAuthUI(token);
+                const token = await requestGoogleYtLogin(auth);
+                updateYtAuthUI(token);
             });
         }
 
@@ -868,14 +866,12 @@
         startDirectYtUploadBtn.addEventListener('click', async () => {
             let token = getYtAccessToken();
             if (!token) {
-                token = await requestGoogleYtLogin(auth, async (freshToken) => {
-                    updateYtAuthUI(freshToken);
-                    if (freshToken) startUploadSequence(freshToken);
-                });
-                if (token) startUploadSequence(token);
-                return;
+                token = await requestGoogleYtLogin(auth);
+                updateYtAuthUI(token);
             }
-            startUploadSequence(token);
+            if (token) {
+                startUploadSequence(token);
+            }
         });
 
         async function startUploadSequence(token) {
