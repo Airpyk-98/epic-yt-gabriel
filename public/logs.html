@@ -105,7 +105,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, cancelExecutionJob, cancelAllActiveJobs, escapeHtml } from "./shared.js?v=20260817_v320";
+        import { initSharedAuth, getUserWebhookUrl, getUserSettings, dispatchToWebhook, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml } from "./shared.js?v=20260817_v330";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -125,6 +125,7 @@
 
         let currentUser = null;
         let multiSelectMode = false;
+        let activeWatchdogId = null;
         const selectedJobs = new Map();
         let allLogsList = [];
 
@@ -155,6 +156,21 @@
 
                 allLogsList = docs;
                 if (totalLogsBadge) totalLogsBadge.innerText = docs.length;
+
+                // Check for running jobs and start watchdog
+                const hasRunning = docs.some(d => d.status === 'RUNNING' || d.status === 'QUEUED');
+                if (hasRunning && !activeWatchdogId) {
+                    const activeBatchDoc = docs.find(d => d.status === 'RUNNING' || d.status === 'QUEUED');
+                    const bId = activeBatchDoc?.batch_id || '';
+                    getUserSettings(db, utils, uid).then(s => {
+                        const kUser = s.kaggle_username || DEFAULT_KAGGLE_USERNAME;
+                        const kKey = s.kaggle_key || DEFAULT_KAGGLE_KEY;
+                        activeWatchdogId = startKaggleBatchWatchdog(db, utils, uid, bId, kUser, kKey);
+                    });
+                } else if (!hasRunning && activeWatchdogId) {
+                    clearInterval(activeWatchdogId);
+                    activeWatchdogId = null;
+                }
 
                 renderAllLogs(docs, allContainer);
             });

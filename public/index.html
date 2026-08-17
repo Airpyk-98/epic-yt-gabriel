@@ -268,7 +268,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { initSharedAuth, getUserWebhookUrl, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, escapeHtml } from "./shared.js?v=20260817_v320";
+        import { initSharedAuth, getUserWebhookUrl, getUserSettings, dispatchToWebhook, launchKaggleBatchDirectly, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml } from "./shared.js?v=20260817_v330";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC2HIzjx4s11SSu_Ge3nB72T5Bfvl0yn-w",
@@ -286,6 +286,7 @@
         initSharedAuth(auth, db, utils, { onAuthStateChanged, signOut });
 
         let currentUser = null;
+        let activeWatchdogId = null;
         let currentDurationUnit = 'seconds';
 
         // 1. Aspect Ratio Cards Toggle
@@ -448,6 +449,19 @@
                     }
                 }
 
+                // Automatic Kaggle status sync watchdog when jobs are active
+                const hasRunning = currentDocs.some(d => d.status === 'RUNNING' || d.status === 'QUEUED');
+                if (hasRunning && !activeWatchdogId && activeBatchId) {
+                    getUserSettings(db, utils, uid).then(s => {
+                        const kUser = s.kaggle_username || DEFAULT_KAGGLE_USERNAME;
+                        const kKey = s.kaggle_key || DEFAULT_KAGGLE_KEY;
+                        activeWatchdogId = startKaggleBatchWatchdog(db, utils, uid, activeBatchId, kUser, kKey);
+                    });
+                } else if (!hasRunning && activeWatchdogId) {
+                    clearInterval(activeWatchdogId);
+                    activeWatchdogId = null;
+                }
+
                 renderCurrentBatch(currentDocs, currentContainer, activeBatchId);
             });
         }
@@ -467,6 +481,7 @@
                 const progress = data.progress !== undefined ? data.progress : (status === 'SUCCESS' ? 100 : 0);
                 const stepText = data.step_text || 'Waiting for runner...';
                 const outputUrl = data.output_file || '';
+                const accelerator = data.accelerator || '';
                 const isRunningOrQueued = status === 'RUNNING' || status === 'QUEUED';
                 const jobId = data.job_id || data.id;
 

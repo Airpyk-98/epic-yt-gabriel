@@ -123,7 +123,7 @@ export async function dispatchToWebhook(webhookUrl, videosList) {
     }
 }
 
-// 4. Cancel Individual or All Running Execution Jobs in Firestore
+// 4. Cancel Individual or All Running Execution Jobs in Firestore & Kaggle
 export async function cancelExecutionJob(db, utils, uid, jobId) {
     const cancelData = {
         status: 'CANCELLED',
@@ -143,7 +143,7 @@ export async function cancelExecutionJob(db, utils, uid, jobId) {
     }
 }
 
-export async function cancelAllActiveJobs(db, utils, uid, jobsList) {
+export async function cancelAllActiveJobs(db, utils, uid, jobsList, kaggleUsername, kaggleKey) {
     const activeJobs = jobsList.filter(j => j.status === 'RUNNING' || j.status === 'QUEUED');
     if (activeJobs.length === 0) return 0;
 
@@ -151,7 +151,41 @@ export async function cancelAllActiveJobs(db, utils, uid, jobsList) {
         const jobId = j.job_id || j.id;
         await cancelExecutionJob(db, utils, uid, jobId);
     }
+
+    if (kaggleUsername && kaggleKey) {
+        await stopKaggleKernelDirectly(kaggleUsername, kaggleKey);
+    }
+
     return activeJobs.length;
+}
+
+export async function stopKaggleKernelDirectly(kaggleUsername, kaggleKey) {
+    if (!kaggleUsername || !kaggleKey) return false;
+    try {
+        const stopScript = `# EpicSync Immediate Cancellation\nimport sys\nprint("Batch cancelled by user. Terminating worker.")\nsys.exit(0)\n`;
+        await fetch('https://www.kaggle.com/api/v1/kernels/push', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${kaggleKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                slug: `${kaggleUsername}/${KAGGLE_WORKER_SLUG}`,
+                newTitle: "EpicSync Production Worker",
+                text: stopScript,
+                language: "python",
+                kernelType: "script",
+                isPrivate: true,
+                enableGpu: false,
+                enableTpu: false,
+                enableInternet: false
+            })
+        });
+        return true;
+    } catch (e) {
+        console.warn("Could not push stop script to Kaggle:", e);
+        return false;
+    }
 }
 
 // 5. Generate Self-Contained Kaggle Worker Python Code
@@ -245,34 +279,35 @@ for idx, job in enumerate(batch_config["jobs"]):
         print(f"Job {job_id} was CANCELLED by user. Skipping to next video.")
         continue
 
-    # Step 1: AI Script & Visual Direction Generation (MiniMax M3 / NVIDIA / Groq / OpenAI)
-    update_job(uid, job_id, "RUNNING", 10, f"Generating MiniMax M3 script & Pexels director queries for '{title}'...")
+    try:
+        # Step 1: AI Script & Visual Direction Generation (MiniMax M3 / NVIDIA / Groq / OpenAI)
+        update_job(uid, job_id, "RUNNING", 10, f"Generating MiniMax M3 script & Pexels director queries for '{title}'...")
 
-    ai_scenes = []
+        ai_scenes = []
 
-    # Calculate exact duration constraints
-    dur_str = str(target_dur).lower()
-    if "min" in dur_str:
-        m_val = re.findall(r'[\d.]+', dur_str)
-        t_secs = float(m_val[0]) * 60.0 if m_val else 60.0
-    else:
-        s_val = re.findall(r'[\d.]+', dur_str)
-        t_secs = float(s_val[0]) if s_val else 45.0
-    t_secs = max(15.0, t_secs)
-    t_words = int(t_secs * 2.35)
-    min_words = int(t_words * 0.90)
-    max_words = int(t_words * 1.10)
-    target_scenes_count = max(3, int(t_secs / 3.5))
+        # Calculate exact duration constraints (using [0-9.]+ without backslash swallow)
+        dur_str = str(target_dur).lower()
+        if "min" in dur_str:
+            m_val = re.findall(r'[0-9.]+', dur_str)
+            t_secs = float(m_val[0]) * 60.0 if m_val else 60.0
+        else:
+            s_val = re.findall(r'[0-9.]+', dur_str)
+            t_secs = float(s_val[0]) if s_val else 45.0
+        t_secs = max(15.0, t_secs)
+        t_words = int(t_secs * 2.35)
+        min_words = int(t_words * 0.90)
+        max_words = int(t_words * 1.10)
+        target_scenes_count = max(3, int(t_secs / 3.5))
 
-    if script_text and script_text.strip():
-        # User provided manual script: split into sentences and generate Pexels queries
-        manual_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', script_text) if len(l.strip()) > 5]
-        for ml in manual_lines:
-            w_list = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in ml.split()]
-            q = "+".join([w for w in w_list if len(w) > 3][:3]) or "lifestyle"
-            ai_scenes.append({"line": ml, "pexels_query": q})
-    else:
-        sys_prompt = f"""You are an elite viral YouTube scriptwriter and visual director using MiniMax M3 reasoning.
+        if script_text and script_text.strip():
+            # User provided manual script: split into sentences and generate Pexels queries
+            manual_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', script_text) if len(l.strip()) > 5]
+            for ml in manual_lines:
+                w_list = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in ml.split()]
+                q = "+".join([w for w in w_list if len(w) > 3][:3]) or "lifestyle"
+                ai_scenes.append({"line": ml, "pexels_query": q})
+        else:
+            sys_prompt = f"""You are an elite viral YouTube scriptwriter and visual director using MiniMax M3 reasoning.
 Write a high-retention, psychology-backed video script for the title: "{title}".
 
 TARGET TIMING & LENGTH CONSTRAINTS:
@@ -306,280 +341,282 @@ You MUST respond with valid JSON ONLY matching this exact JSON structure:
   ]
 }}"""
 
-        api_key = batch_config.get("ai_api_key") or os.environ.get("MINIMAX_API_KEY", "") or os.environ.get("NVIDIA_API_KEY", "")
+            api_key = batch_config.get("ai_api_key") or os.environ.get("MINIMAX_API_KEY", "") or os.environ.get("NVIDIA_API_KEY", "")
 
-        if api_key:
-            try:
-                base_url = "https://api.minimax.chat/v1"
-                model_name = "MiniMax-Text-01"
-                if api_key.startswith("nvapi-"):
-                    base_url = "https://integrate.api.nvidia.com/v1"
-                    model_name = "meta/llama-3.3-70b-instruct"
-                elif api_key.startswith("gsk_"):
-                    base_url = "https://api.groq.com/openai/v1"
-                    model_name = "llama-3.3-70b-versatile"
-                elif api_key.startswith("sk-") and not api_key.startswith("sk-minimax"):
-                    base_url = "https://api.openai.com/v1"
-                    model_name = "gpt-4o-mini"
+            if api_key:
+                try:
+                    base_url = "https://api.minimax.chat/v1"
+                    model_name = "MiniMax-Text-01"
+                    if api_key.startswith("nvapi-"):
+                        base_url = "https://integrate.api.nvidia.com/v1"
+                        model_name = "meta/llama-3.3-70b-instruct"
+                    elif api_key.startswith("gsk_"):
+                        base_url = "https://api.groq.com/openai/v1"
+                        model_name = "llama-3.3-70b-versatile"
+                    elif api_key.startswith("sk-") and not api_key.startswith("sk-minimax"):
+                        base_url = "https://api.openai.com/v1"
+                        model_name = "gpt-4o-mini"
 
-                r_ai = requests.post(
-                    f"{base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                    json={
-                        "model": model_name,
-                        "messages": [
-                            {"role": "system", "content": sys_prompt},
-                            {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
-                        ],
-                        "max_tokens": 1500,
-                        "temperature": 0.7
-                    },
-                    timeout=35
-                )
-                if r_ai.ok:
-                    resp_c = r_ai.json()["choices"][0]["message"]["content"]
-                    json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
-                    if json_match:
-                        parsed_j = json.loads(json_match.group(0))
-                        for sc_item in parsed_j.get("scenes", []):
-                            l_val = str(sc_item.get("line", "")).strip()
-                            q_val = str(sc_item.get("pexels_query", "")).strip()
-                            if l_val:
-                                ai_scenes.append({"line": l_val, "pexels_query": q_val})
-            except Exception as e:
-                print(f"AI Generation notice: {e}")
+                    r_ai = requests.post(
+                        f"{base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model_name,
+                            "messages": [
+                                {"role": "system", "content": sys_prompt},
+                                {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
+                            ],
+                            "max_tokens": 1500,
+                            "temperature": 0.7
+                        },
+                        timeout=35
+                    )
+                    if r_ai.ok:
+                        resp_c = r_ai.json()["choices"][0]["message"]["content"]
+                        json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
+                        if json_match:
+                            parsed_j = json.loads(json_match.group(0))
+                            for sc_item in parsed_j.get("scenes", []):
+                                l_val = str(sc_item.get("line", "")).strip()
+                                q_val = str(sc_item.get("pexels_query", "")).strip()
+                                if l_val:
+                                    ai_scenes.append({"line": l_val, "pexels_query": q_val})
+                except Exception as e:
+                    print(f"AI Generation notice: {e}")
 
-        # Smart procedural fallback if no API key or invalid output
-        if not ai_scenes:
-            hooks = [
-                f"Most people think {title} is completely obvious, but the real psychology is shockingly counterintuitive.",
-                f"If you're still approaching {title} the traditional way, you're falling into a massive trap.",
-                f"Nobody wants to admit this out loud, but {title} reveals everything about human nature.",
-                f"The biggest misconception about {title} is that it takes effort, but the reality is totally different."
-            ]
-            import random
-            h_line = random.choice(hooks)
-            default_flow = [
-                {"line": h_line, "pexels_query": "dramatic shadow thoughtful person"},
-                {"line": "Notice how subtle comments start slipping out whenever you begin making genuine progress.", "pexels_query": "whispering envious conversation"},
-                {"line": "Therefore, pay close attention to who goes completely silent when your wins start compounding.", "pexels_query": "person looking at phone alone"},
-                {"line": "Because genuine support is enthusiastic, but hidden resistance always hides behind awkward hesitation.", "pexels_query": "dramatic mirror reflection stare"},
-                {"line": "Stay locked into your daily execution, ignore the passive noise, and let your consistency speak for itself.", "pexels_query": "confident person walking city skyline"}
-            ]
-            ai_scenes = default_flow
+            # Smart procedural fallback if no API key or invalid output
+            if not ai_scenes:
+                hooks = [
+                    f"Most people think {title} is completely obvious, but the real psychology is shockingly counterintuitive.",
+                    f"If you're still approaching {title} the traditional way, you're falling into a massive trap.",
+                    f"Nobody wants to admit this out loud, but {title} reveals everything about human nature.",
+                    f"The biggest misconception about {title} is that it takes effort, but the reality is totally different."
+                ]
+                import random
+                h_line = random.choice(hooks)
+                default_flow = [
+                    {"line": h_line, "pexels_query": "dramatic shadow thoughtful person"},
+                    {"line": "Notice how subtle comments start slipping out whenever you begin making genuine progress.", "pexels_query": "whispering envious conversation"},
+                    {"line": "Therefore, pay close attention to who goes completely silent when your wins start compounding.", "pexels_query": "person looking at phone alone"},
+                    {"line": "Because genuine support is enthusiastic, but hidden resistance always hides behind awkward hesitation.", "pexels_query": "dramatic mirror reflection stare"},
+                    {"line": "Stay locked into your daily execution, ignore the passive noise, and let your consistency speak for itself.", "pexels_query": "confident person walking city skyline"}
+                ]
+                ai_scenes = default_flow
 
-    script_text = " ".join([s["line"] for s in ai_scenes])
-    print(f"\\nGenerated Script ({len(ai_scenes)} scenes, {len(script_text.split())} words):")
-    for s_idx, sc_obj in enumerate(ai_scenes):
-        print(f"  [{s_idx+1}] Pexels Query: '{sc_obj.get('pexels_query', '')}' | Line: '{sc_obj.get('line', '')}'")
+        script_text = " ".join([s["line"] for s in ai_scenes])
+        print(f"\\nGenerated Script ({len(ai_scenes)} scenes, {len(script_text.split())} words):")
+        for s_idx, sc_obj in enumerate(ai_scenes):
+            print(f"  [{s_idx+1}] Pexels Query: '{sc_obj.get('pexels_query', '')}' | Line: '{sc_obj.get('line', '')}'")
 
-    # Check for cancellation again
-    if is_job_cancelled(uid, job_id):
-        print(f"Job {job_id} was CANCELLED by user. Skipping.")
-        continue
+        # Check for cancellation again
+        if is_job_cancelled(uid, job_id):
+            print(f"Job {job_id} was CANCELLED by user. Skipping.")
+            continue
 
-    # Step 2: Audio Synthesis & Word-Level Whisper Transcription
-    update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS & Whisper timestamps...")
+        # Step 2: Audio Synthesis & Word-Level Whisper Transcription
+        update_job(uid, job_id, "RUNNING", 30, "Synthesizing voiceover with Edge-TTS & Whisper timestamps...")
 
-    work_dir = f"/kaggle/working/job_{job_id}"
-    os.makedirs(work_dir, exist_ok=True)
-    audio_path = os.path.join(work_dir, "audio.mp3")
-    wav_path = os.path.join(work_dir, "audio.wav")
+        work_dir = f"/kaggle/working/job_{job_id}"
+        os.makedirs(work_dir, exist_ok=True)
+        audio_path = os.path.join(work_dir, "audio.mp3")
+        wav_path = os.path.join(work_dir, "audio.wav")
 
-    import asyncio, edge_tts
-    edge_voice = "en-US-GuyNeural"
-    if "female" in voice:
-        edge_voice = "en-US-JennyNeural"
-    elif "energetic" in voice:
-        edge_voice = "en-US-ChristopherNeural"
-    elif "professional" in voice:
-        edge_voice = "en-US-AriaNeural"
+        import asyncio, edge_tts
+        edge_voice = "en-US-GuyNeural"
+        if "female" in voice:
+            edge_voice = "en-US-JennyNeural"
+        elif "energetic" in voice:
+            edge_voice = "en-US-ChristopherNeural"
+        elif "professional" in voice:
+            edge_voice = "en-US-AriaNeural"
 
-    async def make_audio():
-        comm = edge_tts.Communicate(script_text, edge_voice)
-        await comm.save(audio_path)
-    asyncio.run(make_audio())
+        async def make_audio():
+            comm = edge_tts.Communicate(script_text, edge_voice)
+            await comm.save(audio_path)
+        asyncio.run(make_audio())
 
-    # Convert to uncompressed WAV for zero-jitter Whisper & FFmpeg decoding
-    subprocess.run(f'ffmpeg -y -i "{audio_path}" -c:a pcm_s16le -ar 44100 "{wav_path}"', shell=True, check=True)
+        # Convert to uncompressed WAV for zero-jitter Whisper & FFmpeg decoding
+        subprocess.run(f'ffmpeg -y -i "{audio_path}" -c:a pcm_s16le -ar 44100 "{wav_path}"', shell=True, check=True)
 
-    # Get exact audio duration
-    r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{wav_path}"', shell=True, capture_output=True, text=True)
-    audio_dur = float(r_dur.stdout.strip()) if r_dur.stdout.strip() else 20.0
-    print(f"Exact Audio Duration: {audio_dur:.3f}s")
+        # Get exact audio duration
+        r_dur = subprocess.run(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{wav_path}"', shell=True, capture_output=True, text=True)
+        audio_dur = float(r_dur.stdout.strip()) if r_dur.stdout.strip() else 20.0
+        print(f"Exact Audio Duration: {audio_dur:.3f}s")
 
-    # Step 2b: Whisper Word-Level Transcription & Midpoint Boundary Bridging
-    update_job(uid, job_id, "RUNNING", 45, "Running Whisper word-level alignment & midpoint bridging...")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    whisper_model = whisper.load_model("tiny.en", device=device)
-    whisper_res = whisper_model.transcribe(wav_path, word_timestamps=True)
-    
-    all_segments = whisper_res.get("segments", [])
-    raw_scenes = []
-    for seg in all_segments:
-        text = seg.get("text", "").strip()
-        words = seg.get("words", [])
-        if words:
-            start_t = float(words[0]["start"])
-            end_t = float(words[-1]["end"])
-        else:
-            start_t = float(seg.get("start", 0))
-            end_t = float(seg.get("end", 0))
-        if text:
-            raw_scenes.append({"text": text, "start": start_t, "end": end_t})
-
-    if not raw_scenes:
-        raw_scenes = [{"text": title, "start": 0.0, "end": audio_dur}]
-
-    # Midpoint Boundary Bridging (ensuring sum of scene durations == exact audio duration)
-    bridged_scenes = []
-    num_sc = len(raw_scenes)
-    for i in range(num_sc):
-        if i == 0:
-            start_b = 0.0
-        else:
-            start_b = (raw_scenes[i-1]["end"] + raw_scenes[i]["start"]) / 2.0
-
-        if i == num_sc - 1:
-            end_b = audio_dur
-        else:
-            end_b = (raw_scenes[i]["end"] + raw_scenes[i+1]["start"]) / 2.0
-
-        dur_b = max(0.5, end_b - start_b)
+        # Step 2b: Whisper Word-Level Transcription & Midpoint Boundary Bridging
+        update_job(uid, job_id, "RUNNING", 45, "Running Whisper word-level alignment & midpoint bridging...")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        whisper_model = whisper.load_model("tiny.en", device=device)
+        whisper_res = whisper_model.transcribe(wav_path, word_timestamps=True)
         
-        # Attach the corresponding AI pexels_query
-        pq = ai_scenes[i]["pexels_query"] if i < len(ai_scenes) else "lifestyle"
+        all_segments = whisper_res.get("segments", [])
+        raw_scenes = []
+        for seg in all_segments:
+            text = seg.get("text", "").strip()
+            words = seg.get("words", [])
+            if words:
+                start_t = float(words[0]["start"])
+                end_t = float(words[-1]["end"])
+            else:
+                start_t = float(seg.get("start", 0))
+                end_t = float(seg.get("end", 0))
+            if text:
+                raw_scenes.append({"text": text, "start": start_t, "end": end_t})
 
-        bridged_scenes.append({
-            "text": raw_scenes[i]["text"],
-            "pexels_query": pq,
-            "start": start_b,
-            "end": end_b,
-            "duration": dur_b
-        })
-        print(f"  Bridged Scene {i+1}: [{start_b:.3f}s -> {end_b:.3f}s] (Duration: {dur_b:.3f}s) Query: '{pq}'")
+        if not raw_scenes:
+            raw_scenes = [{"text": title, "start": 0.0, "end": audio_dur}]
 
-    # Step 3: Multi-Scene 3s Slicing with Remainder Cut-off & Candidate Discard
-    update_job(uid, job_id, "RUNNING", 60, f"Downloading & slicing {len(bridged_scenes)} scenes (3s cuts)...")
+        # Midpoint Boundary Bridging (ensuring sum of scene durations == exact audio duration)
+        bridged_scenes = []
+        num_sc = len(raw_scenes)
+        for i in range(num_sc):
+            if i == 0:
+                start_b = 0.0
+            else:
+                start_b = (raw_scenes[i-1]["end"] + raw_scenes[i]["start"]) / 2.0
 
-    w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
-    orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
-    scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
-    all_trimmed_clips = []
+            if i == num_sc - 1:
+                end_b = audio_dur
+            else:
+                end_b = (raw_scenes[i]["end"] + raw_scenes[i+1]["start"]) / 2.0
 
-    # Check if NVIDIA NVENC hardware encoder is supported
-    has_nvenc = False
-    try:
-        chk = subprocess.run("ffmpeg -encoders 2>&1 | grep -i h264_nvenc", shell=True, capture_output=True, text=True)
-        if "h264_nvenc" in chk.stdout:
-            has_nvenc = True
-    except Exception:
+            dur_b = max(0.5, end_b - start_b)
+            
+            # Attach the corresponding AI pexels_query
+            pq = ai_scenes[i]["pexels_query"] if i < len(ai_scenes) else "lifestyle"
+
+            bridged_scenes.append({
+                "text": raw_scenes[i]["text"],
+                "pexels_query": pq,
+                "start": start_b,
+                "end": end_b,
+                "duration": dur_b
+            })
+            print(f"  Bridged Scene {i+1}: [{start_b:.3f}s -> {end_b:.3f}s] (Duration: {dur_b:.3f}s) Query: '{pq}'")
+
+        # Step 3: Multi-Scene 3s Slicing with Remainder Cut-off & Candidate Discard
+        update_job(uid, job_id, "RUNNING", 60, f"Downloading & slicing {len(bridged_scenes)} scenes (3s cuts)...")
+
+        w, h = (1080, 1920) if aspect_ratio == "9:16" else (1920, 1080)
+        orientation = "portrait" if aspect_ratio == "9:16" else "landscape"
+        scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
+        all_trimmed_clips = []
+
+        # Check if NVIDIA NVENC hardware encoder is supported
         has_nvenc = False
-
-    enc_v = "h264_nvenc -preset p1" if has_nvenc else "libx264 -preset ultrafast"
-
-    for idx, sc in enumerate(bridged_scenes):
-        sc_dur = sc["duration"]
-        search_q = "+".join(sc.get("pexels_query", "lifestyle").split())
-        print(f"\\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
-
-        # Fetch up to 4 candidate Pexels clips using AI Director Query
-        candidate_urls = []
         try:
-            pex_res = requests.get(
-                f"https://api.pexels.com/videos/search?query={search_q}&per_page=4&orientation={orientation}",
-                headers={"Authorization": pexels_key},
-                timeout=12
-            )
-            if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "lifestyle":
+            chk = subprocess.run("ffmpeg -encoders 2>&1 | grep -i h264_nvenc", shell=True, capture_output=True, text=True)
+            if "h264_nvenc" in chk.stdout:
+                has_nvenc = True
+        except Exception:
+            has_nvenc = False
+
+        enc_v = "h264_nvenc -preset p1" if has_nvenc else "libx264 -preset ultrafast"
+
+        for idx, sc in enumerate(bridged_scenes):
+            sc_dur = sc["duration"]
+            search_q = "+".join(sc.get("pexels_query", "lifestyle").split())
+            print(f"\\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
+
+            # Fetch up to 4 candidate Pexels clips using AI Director Query
+            candidate_urls = []
+            try:
                 pex_res = requests.get(
-                    f"https://api.pexels.com/videos/search?query=lifestyle&per_page=4&orientation={orientation}",
+                    f"https://api.pexels.com/videos/search?query={search_q}&per_page=4&orientation={orientation}",
                     headers={"Authorization": pexels_key},
                     timeout=12
                 )
+                if (not pex_res.ok or not pex_res.json().get("videos")) and search_q != "lifestyle":
+                    pex_res = requests.get(
+                        f"https://api.pexels.com/videos/search?query=lifestyle&per_page=4&orientation={orientation}",
+                        headers={"Authorization": pexels_key},
+                        timeout=12
+                    )
 
-            if pex_res.ok and pex_res.json().get("videos"):
-                for v_entry in pex_res.json()["videos"]:
-                    files = v_entry.get("video_files", [])
-                    for f in files:
-                        if f.get("link") and f.get("quality") == "hd":
-                            candidate_urls.append(f.get("link"))
-                            break
-        except Exception as e:
-            print(f"Pexels fetch notice for scene {idx}: {e}")
+                if pex_res.ok and pex_res.json().get("videos"):
+                    for v_entry in pex_res.json()["videos"]:
+                        files = v_entry.get("video_files", [])
+                        for f in files:
+                            if f.get("link") and f.get("quality") == "hd":
+                                candidate_urls.append(f.get("link"))
+                                break
+            except Exception as e:
+                print(f"Pexels fetch notice for scene {idx}: {e}")
 
-        # Fill sc_dur in 3.0s chunks
-        rem_dur = sc_dur
-        c_idx = 0
-        while rem_dur > 0.05:
-            if rem_dur <= 3.5:
-                slot_dur = rem_dur
-            else:
-                slot_dur = 3.0
+            # Fill sc_dur in 3.0s chunks
+            rem_dur = sc_dur
+            c_idx = 0
+            while rem_dur > 0.05:
+                if rem_dur <= 3.5:
+                    slot_dur = rem_dur
+                else:
+                    slot_dur = 3.0
 
-            raw_clip = os.path.join(work_dir, f"raw_sc{idx}_c{c_idx}.mp4")
-            trimmed_clip = os.path.join(work_dir, f"trimmed_sc{idx}_c{c_idx}.mp4")
+                raw_clip = os.path.join(work_dir, f"raw_sc{idx}_c{c_idx}.mp4")
+                trimmed_clip = os.path.join(work_dir, f"trimmed_sc{idx}_c{c_idx}.mp4")
 
-            # Download candidate clip if available
-            if c_idx < len(candidate_urls):
-                try:
-                    r_v = requests.get(candidate_urls[c_idx], stream=True, timeout=20)
-                    with open(raw_clip, "wb") as f:
-                        for chunk in r_v.iter_content(chunk_size=512*1024):
-                            f.write(chunk)
-                except Exception:
-                    pass
+                # Download candidate clip if available
+                if c_idx < len(candidate_urls):
+                    try:
+                        r_v = requests.get(candidate_urls[c_idx], stream=True, timeout=20)
+                        with open(raw_clip, "wb") as f:
+                            for chunk in r_v.iter_content(chunk_size=512*1024):
+                                f.write(chunk)
+                    except Exception:
+                        pass
 
-            # Fallback to testsrc if download failed
-            if not os.path.exists(raw_clip) or os.path.getsize(raw_clip) < 1000:
-                subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t {slot_dur:.3f} -c:v libx264 {raw_clip}", shell=True, capture_output=True)
+                # Fallback to testsrc if download failed
+                if not os.path.exists(raw_clip) or os.path.getsize(raw_clip) < 1000:
+                    subprocess.run(f"ffmpeg -y -f lavfi -i testsrc=size={w}x{h}:rate=30 -t {slot_dur:.3f} -c:v libx264 {raw_clip}", shell=True, capture_output=True)
 
-            # Standardize and trim clip to exact slot_dur
-            trim_cmd = f'ffmpeg -y -ss 0 -t {slot_dur:.3f} -i "{raw_clip}" -vf "{scale_filter}" -c:v {enc_v} -r 30 -an "{trimmed_clip}"'
-            subprocess.run(trim_cmd, shell=True, capture_output=True)
-            if os.path.exists(trimmed_clip) and os.path.getsize(trimmed_clip) > 1000:
-                clean_p = os.path.abspath(trimmed_clip).replace('\\\\', '/')
-                all_trimmed_clips.append(clean_p)
-                print(f"   [Slot {c_idx+1}] Added {slot_dur:.3f}s clip -> {trimmed_clip}")
+                # Standardize and trim clip to exact slot_dur
+                trim_cmd = f'ffmpeg -y -ss 0 -t {slot_dur:.3f} -i "{raw_clip}" -vf "{scale_filter}" -c:v {enc_v} -r 30 -an "{trimmed_clip}"'
+                subprocess.run(trim_cmd, shell=True, capture_output=True)
+                if os.path.exists(trimmed_clip) and os.path.getsize(trimmed_clip) > 1000:
+                    clean_p = os.path.abspath(trimmed_clip).replace('\\\\', '/')
+                    all_trimmed_clips.append(clean_p)
+                    print(f"   [Slot {c_idx+1}] Added {slot_dur:.3f}s clip -> {trimmed_clip}")
 
-            rem_dur -= slot_dur
-            c_idx += 1
+                rem_dur -= slot_dur
+                c_idx += 1
 
-        # Discard any remaining candidate videos
-        discarded = max(0, len(candidate_urls) - c_idx)
-        print(f"   Candidate clips discarded: {discarded}")
+            # Discard any remaining candidate videos
+            discarded = max(0, len(candidate_urls) - c_idx)
+            print(f"   Candidate clips discarded: {discarded}")
 
-    # Step 4: High-Speed Multi-Threaded & GPU-Accelerated Final Video Assembly
-    update_job(uid, job_id, "RUNNING", 80, "Compiling seamless multi-scene video via high-speed FFmpeg...")
+        # Step 4: High-Speed Multi-Threaded & GPU-Accelerated Final Video Assembly
+        update_job(uid, job_id, "RUNNING", 80, "Compiling seamless multi-scene video via high-speed FFmpeg...")
 
-    output_mp4 = os.path.join(work_dir, f"{job_id}.mp4")
-    vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
+        output_mp4 = os.path.join(work_dir, f"{job_id}.mp4")
+        vb_float = float(voice_boost) / 100.0 if voice_boost else 1.2
 
-    # Create Concat Manifest with forward-slashed absolute paths
-    concat_manifest = os.path.abspath(os.path.join(work_dir, "concat_list.txt"))
-    with open(concat_manifest, "w") as f:
-        for tc in all_trimmed_clips:
-            f.write(f"file '{tc}'\\n")
+        # Create Concat Manifest with forward-slashed absolute paths
+        concat_manifest = os.path.abspath(os.path.join(work_dir, "concat_list.txt"))
+        with open(concat_manifest, "w") as f:
+            for tc in all_trimmed_clips:
+                f.write(f"file '{tc}'\\n")
 
-    manifest_p = concat_manifest.replace("\\\\", "/")
-    wav_p = os.path.abspath(wav_path).replace("\\\\", "/")
-    out_p = os.path.abspath(output_mp4).replace("\\\\", "/")
+        manifest_p = concat_manifest.replace("\\\\", "/")
+        wav_p = os.path.abspath(wav_path).replace("\\\\", "/")
+        out_p = os.path.abspath(output_mp4).replace("\\\\", "/")
 
-    if has_nvenc:
-        print("⚡ Using NVIDIA GPU NVENC hardware acceleration with midpoint bridged cuts...")
-        ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
-    else:
-        print("🐢 Using multi-threaded CPU acceleration with midpoint bridged cuts...")
-        ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+        if has_nvenc:
+            print("⚡ Using NVIDIA GPU NVENC hardware acceleration with midpoint bridged cuts...")
+            ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
+        else:
+            print("🐢 Using multi-threaded CPU acceleration with midpoint bridged cuts...")
+            ff_cmd = f'ffmpeg -y -f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -t {audio_dur:.3f} -filter_complex "[0:v]setsar=1[vout];[1:a]volume={vb_float}[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{out_p}"'
 
-    subprocess.run(ff_cmd, shell=True)
+        subprocess.run(ff_cmd, shell=True)
 
-    # Step 5: Direct Hugging Face Upload
-    update_job(uid, job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
-    remote_path = f"outputs/{job_id}.mp4"
-    direct_url = f"https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/{remote_path}"
+        if not os.path.exists(output_mp4) or os.path.getsize(output_mp4) < 1000:
+            raise Exception("Render failed: final video output file is missing or empty")
 
-    try:
+        # Step 5: Direct Hugging Face Upload
+        update_job(uid, job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
+        remote_path = f"outputs/{job_id}.mp4"
+        direct_url = f"https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/{remote_path}"
+
         hf_api.upload_file(
             path_or_fileobj=output_mp4,
             path_in_repo=remote_path,
@@ -594,9 +631,21 @@ You MUST respond with valid JSON ONLY matching this exact JSON structure:
             "output_file": direct_url,
             "status": "SUCCESS"
         })
+
     except Exception as e:
-        print(f"HF Upload error: {e}")
-        update_job(uid, job_id, "FAILED", 100, f"Upload error: {e}")
+        import traceback
+        err_msg = f"Failed: {str(e)}"
+        print(f"CRITICAL ERROR on {job_id}: {err_msg}")
+        traceback.print_exc()
+        update_job(uid, job_id, "FAILED", 100, err_msg)
+        
+        # Cancel all subsequent remaining jobs in this batch so they never get stranded in QUEUED
+        for rem_j in batch_config["jobs"][idx+1:]:
+            rem_id = rem_j["job_id"]
+            rem_uid = rem_j.get("uid", "")
+            print(f"Cancelling subsequent job {rem_id} due to batch failure")
+            update_job(rem_uid, rem_id, "CANCELLED", 100, f"Batch stopped due to error in '{title}'")
+        break
 
 print("\\n[BATCH COMPLETED] All videos processed. Worker exiting.")
 `;
@@ -696,6 +745,9 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
 
     const resData = await res.json();
 
+    // Start background status watchdog to sync Kaggle errors/cancellations to Firestore
+    startKaggleBatchWatchdog(db, utils, payload.uid, batch_id, kaggleUsername, kaggleKey);
+
     return {
         success: true,
         batch_id: batch_id,
@@ -704,6 +756,94 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
         jobs: jobs,
         kaggle_ref: resData.ref || KAGGLE_WORKER_SLUG
     };
+}
+
+// 7. Kaggle Status Watchdog (Two-way failure & cancellation synchronization)
+export function startKaggleBatchWatchdog(db, utils, uid, batchId, kaggleUsername, kaggleKey) {
+    if (!kaggleUsername || !kaggleKey) return null;
+
+    const intervalId = setInterval(async () => {
+        try {
+            const res = await fetch(`https://www.kaggle.com/api/v1/kernels/status?userName=${kaggleUsername}&kernelSlug=${KAGGLE_WORKER_SLUG}`, {
+                headers: { 'Authorization': `Bearer ${kaggleKey}` }
+            });
+            if (!res.ok) return;
+
+            const data = await res.json();
+            const kStatus = (data.status || '').toLowerCase();
+            const failureMsg = data.failureMessage || '';
+
+            const colRef = uid 
+                ? utils.collection(db, 'users', uid, 'executions')
+                : utils.collection(db, 'executions');
+
+            if (kStatus === 'error' || kStatus === 'failed') {
+                const snap = await utils.getDocs(colRef);
+                snap.forEach(async (docSnap) => {
+                    const d = docSnap.data();
+                    if ((!batchId || d.batch_id === batchId) && (d.status === 'RUNNING' || d.status === 'QUEUED')) {
+                        const updateData = {
+                            status: 'FAILED',
+                            progress: 100,
+                            step_text: `Kaggle Worker Failed: ${failureMsg || 'Kernel runtime error or OOM'}`,
+                            updatedAt: new Date()
+                        };
+                        if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
+                        await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
+                    }
+                });
+                clearInterval(intervalId);
+            } else if (kStatus === 'canceled' || kStatus === 'cancelacknowledged') {
+                const snap = await utils.getDocs(colRef);
+                snap.forEach(async (docSnap) => {
+                    const d = docSnap.data();
+                    if ((!batchId || d.batch_id === batchId) && (d.status === 'RUNNING' || d.status === 'QUEUED')) {
+                        const updateData = {
+                            status: 'CANCELLED',
+                            progress: 100,
+                            step_text: 'Cancelled on Kaggle',
+                            updatedAt: new Date()
+                        };
+                        if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
+                        await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
+                    }
+                });
+                clearInterval(intervalId);
+            } else if (kStatus === 'complete') {
+                // Check if any job in this batch was stranded or marked SUCCESS without video
+                const snap = await utils.getDocs(colRef);
+                snap.forEach(async (docSnap) => {
+                    const d = docSnap.data();
+                    if (!batchId || d.batch_id === batchId) {
+                        if (d.status === 'RUNNING' || d.status === 'QUEUED') {
+                            const updateData = {
+                                status: 'FAILED',
+                                progress: 100,
+                                step_text: 'Kaggle worker finished without producing this video',
+                                updatedAt: new Date()
+                            };
+                            if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
+                            await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
+                        } else if (d.status === 'SUCCESS' && (!d.output_file || d.output_file.length < 5)) {
+                            const updateData = {
+                                status: 'FAILED',
+                                progress: 100,
+                                step_text: 'Kaggle finished but video output is missing',
+                                updatedAt: new Date()
+                            };
+                            if (uid) await utils.setDoc(utils.doc(db, 'users', uid, 'executions', docSnap.id), updateData, { merge: true });
+                            await utils.setDoc(utils.doc(db, 'executions', docSnap.id), updateData, { merge: true });
+                        }
+                    }
+                });
+                clearInterval(intervalId);
+            }
+        } catch (err) {
+            console.warn("Kaggle watchdog notice:", err);
+        }
+    }, 5000);
+
+    return intervalId;
 }
 
 export function escapeHtml(text) {
