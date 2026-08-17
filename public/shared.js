@@ -348,7 +348,7 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                 nvidia_models = ["MiniMax-Text-01"]
                 if api_key.startswith("nvapi-"):
                     base_url = "https://integrate.api.nvidia.com/v1"
-                    nvidia_models = ["z-ai/glm-5.2", "nvidia/llama-3.1-nemotron-70b-instruct", "meta/llama-3.3-70b-instruct"]
+                    nvidia_models = ["z-ai/glm-5.2", "meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "mistralai/mistral-large-2-instruct"]
                 elif api_key.startswith("gsk_"):
                     base_url = "https://api.groq.com/openai/v1"
                     nvidia_models = ["llama-3.3-70b-versatile"]
@@ -383,13 +383,14 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                             resp_c = resp_data["choices"][0]["message"]["content"] or ""
                             finish_reason = resp_data["choices"][0].get("finish_reason", "unknown")
                             print(f"AI response: {len(resp_c)} chars, finish_reason={finish_reason}")
-                            resp_c = re.sub(r'\x60\x60\x60(?:json)?\s*', '', resp_c).strip()
+                            clean_c = resp_c.replace(chr(96)*3 + "json", "").replace(chr(96)*3, "").strip()
 
-                            # 1. Full JSON parse
-                            json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
-                            if json_match:
+                            # 1. Full JSON block extraction (no regex escape hazards)
+                            start_brace = clean_c.find('{')
+                            end_brace = clean_c.rfind('}')
+                            if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
                                 try:
-                                    parsed_j = json.loads(json_match.group(0))
+                                    parsed_j = json.loads(clean_c[start_brace:end_brace+1])
                                     for sc_item in parsed_j.get("scenes", []):
                                         l_val = str(sc_item.get("line", "")).strip()
                                         q_val = str(sc_item.get("pexels_query", "")).strip()
@@ -400,16 +401,20 @@ Respond with valid JSON ONLY. No markdown, no explanation, no extra text.
                                 except Exception as p_err:
                                     print(f"JSON parse notice: {p_err}")
 
-                            # 2. Regex repair if JSON was partially truncated
+                            # 2. Line-by-line fallback if stream was cut off mid-response
                             if not ai_scenes:
-                                items = re.findall(r'\{\s*"line"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"pexels_query"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}', resp_c)
-                                for line_val, query_val in items:
-                                    line_val = line_val.replace('\\"', '"').replace('\\n', ' ').strip()
-                                    query_val = query_val.replace('\\"', '"').strip()
-                                    if line_val:
-                                        ai_scenes.append({"line": line_val, "pexels_query": query_val})
+                                for line_item in clean_c.splitlines():
+                                    line_item = line_item.strip()
+                                    if '"line":' in line_item and '"pexels_query":' in line_item:
+                                        m_l = re.search(r'"line"\s*:\s*"([^"]+)"', line_item)
+                                        m_q = re.search(r'"pexels_query"\s*:\s*"([^"]+)"', line_item)
+                                        if m_l:
+                                            l_val = m_l.group(1).strip()
+                                            q_val = m_q.group(1).strip() if m_q else "lifestyle"
+                                            if l_val:
+                                                ai_scenes.append({"line": l_val, "pexels_query": q_val})
                                 if ai_scenes:
-                                    print(f"AI salvaged {len(ai_scenes)} scenes via regex repair from {model_name}")
+                                    print(f"AI salvaged {len(ai_scenes)} scenes via line extraction from {model_name}")
                         else:
                             print(f"{model_name} returned {r_ai.status_code}, trying next model... ({r_ai.text[:150]})")
                     except Exception as e:
