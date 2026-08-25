@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>EpicSync — Execution Logs</title>
+    <title>YouTube Post History - EpicSync AI Studio</title>
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,19 +65,19 @@
             <section class="card feed-card">
                 <div class="card-header logs-main-header">
                     <div>
-                        <h2>📜 Video History</h2>
-                        <p class="subtitle">Download completed videos or publish directly to YouTube.</p>
+                        <h1 style="font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0; letter-spacing: -0.5px;">YouTube Auto-Post History</h1>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0 0 0;">Manage and retry your automatic YouTube uploads.</p>
                     </div>
                 </div>
 
                 <!-- Action Bar -->
                 <div class="logs-actions-toolbar">
                     <div class="left-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button id="toggleMultiSelectBtn" class="btn-tool">☑️ Select</button>
-                        <button id="cancelAllRunningBtn" class="btn-tool" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35); color: #f87171;">🛑 Cancel All</button>
                     </div>
                     <div class="right-actions">
-                        <button id="clearAllLogsBtn" class="btn-clear-all">🗑️ Clear All</button>
+                        <button id="clearAllLogsBtn" class="btn-tool" style="padding: 8px 12px; color: #ef4444; border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.05);">
+                            🧹 Clear YouTube Logs
+                        </button>
                     </div>
                 </div>
 
@@ -239,7 +239,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, query, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, onSnapshot, query, limit, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         import { initSharedAuth, initThemeToggle, getUserWebhookUrl, getUserSettings, dispatchToWebhook, cancelExecutionJob, cancelAllActiveJobs, startKaggleBatchWatchdog, stopKaggleKernelDirectly, DEFAULT_KAGGLE_USERNAME, DEFAULT_KAGGLE_KEY, escapeHtml, requestGoogleYtLogin, getYtAccessToken, uploadVideoToYouTube, loadUserYtAuth, clearYtAccessToken, saveManualYtToken, initAutoYouTubeUploader } from "./shared.js?v=20260817_v523";
 
         const firebaseConfig = {
@@ -597,9 +597,12 @@
             });
 
             function processAndRenderLogs(docs) {
+                // Filter only YouTube jobs
+                docs = docs.filter(d => d.auto_post_yt === true || d.yt_upload_status);
+
                 docs.sort((a, b) => {
-                    const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : (a.createdAt || 0));
-                    const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : (b.createdAt || 0));
+                    const timeA = a.yt_updated_at?.toDate ? a.yt_updated_at.toDate().getTime() : (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0);
+                    const timeB = b.yt_updated_at?.toDate ? b.yt_updated_at.toDate().getTime() : (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0);
                     return timeB - timeA;
                 });
 
@@ -707,41 +710,40 @@
                     checkboxHtml = `<input type="checkbox" class="card-checkbox" ${isSelected ? 'checked' : ''}>`;
                 }
 
+                const ytStatus = data.yt_upload_status || 'PENDING';
+                const ytError = data.yt_error || '';
+                const ytVideoId = data.yt_video_id || '';
+                let ytBadgeColor = 'background: rgba(245,158,11,0.1); color: #f59e0b;';
+                if (ytStatus === 'SUCCESS') ytBadgeColor = 'background: rgba(52,211,153,0.1); color: #34d399;';
+                if (ytStatus === 'FAILED') ytBadgeColor = 'background: rgba(239,68,68,0.1); color: #ef4444;';
+                if (ytStatus === 'UPLOADING') ytBadgeColor = 'background: rgba(59,130,246,0.1); color: #3b82f6;';
+
                 card.innerHTML = `
                     <div class="video-card-top">
                         ${checkboxHtml}
                         <div class="video-info" style="flex: 1;">
                             <span class="video-title">${escapeHtml(data.title || 'Untitled Video')}</span>
                             <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
-                                <span class="status-badge badge-${status}">${status}</span>
-                                ${accelerator ? `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.06); color: #cbd5e1; font-weight: 600;">${escapeHtml(accelerator)}</span>` : ''}
-                                ${data.aspect_ratio ? `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.06); color: #94a3b8;">${escapeHtml(data.aspect_ratio)}</span>` : ''}
+                                <span style="font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; ${ytBadgeColor}">
+                                    YouTube: ${ytStatus}
+                                </span>
+                                ${data.yt_privacy ? `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.06); color: #94a3b8;">${escapeHtml(data.yt_privacy)}</span>` : ''}
                             </div>
                         </div>
-                        ${isRunningOrQueued ? `
-                            <button class="btn-cancel-single" data-job-id="${jobId}" title="Cancel this video execution" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #f87171; border-radius: 6px; padding: 4px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">
-                                🛑 Cancel
+                        ${(ytStatus === 'FAILED') ? `
+                            <button class="btn-yt-retry" data-job-id="${jobId}" title="Retry Upload" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #f87171; border-radius: 6px; padding: 4px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">
+                                🔄 Retry
                             </button>
                         ` : ''}
                     </div>
                     
-                    <div class="progress-bar-wrap">
-                        <div class="progress-bar-fill" style="width: ${progress}%;"></div>
-                    </div>
+                    ${ytError ? `<div style="margin-top: 8px; font-size: 0.8rem; color: #ef4444; background: rgba(239,68,68,0.05); padding: 8px; border-radius: 6px;">${escapeHtml(ytError)}</div>` : ''}
                     
-                    <div class="step-text">${escapeHtml(stepText)} (${progress}%)</div>
-                    
-                    ${outputUrl ? `
-                        <div class="player-actions">
-                            <button class="btn-view-preview" type="button">
-                                👁️ Preview
-                            </button>
-                            <a href="${outputUrl}" target="_blank" download class="btn-download">
-                                ⬇️ Download
+                    ${ytVideoId ? `
+                        <div class="player-actions" style="margin-top: 12px;">
+                            <a href="https://youtu.be/${ytVideoId}" target="_blank" class="btn-launch" style="text-decoration: none; display: flex; justify-content: center; width: 100%; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff;">
+                                📺 View on YouTube
                             </a>
-                            <button class="btn-yt-single" data-job-id="${jobId}" type="button">
-                                📺 YouTube
-                            </button>
                         </div>
                     ` : ''}
                 `;
@@ -773,21 +775,24 @@
                     });
                 }
 
-                // Individual Preview Button -> Opens Video Preview Modal!
-                const previewBtn = card.querySelector('.btn-view-preview');
-                if (previewBtn) {
-                    previewBtn.addEventListener('click', (e) => {
+                // Individual Retry Upload Button
+                const retryBtn = card.querySelector('.btn-yt-retry');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
-                        openVideoPreviewModal(data);
-                    });
-                }
-
-                // Individual Push to YouTube Button -> Opens YouTube Push Modal!
-                const singleYtBtn = card.querySelector('.btn-yt-single');
-                if (singleYtBtn) {
-                    singleYtBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        openYtPushModal([data]);
+                        if (confirm(`Retry YouTube upload for '${data.title || jobId}'?`)) {
+                            retryBtn.innerText = 'Retrying...';
+                            retryBtn.disabled = true;
+                            // Set yt_upload_status back to PENDING to trigger the background watcher again
+                            try {
+                                await updateDoc(doc(db, 'users', currentUser.uid, 'executions', jobId), { yt_upload_status: 'PENDING', yt_error: '' });
+                                await updateDoc(doc(db, 'executions', jobId), { yt_upload_status: 'PENDING', yt_error: '' });
+                            } catch(err) {
+                                alert("Failed to queue for retry: " + err.message);
+                                retryBtn.innerText = '🔄 Retry';
+                                retryBtn.disabled = false;
+                            }
+                        }
                     });
                 }
 
@@ -880,40 +885,42 @@
             openYtPushModal(list);
         });
 
-        // Delete Selected
+        // Clear Selected from YouTube Logs
         deleteSelectedBtn.addEventListener('click', async () => {
-            if (!confirm(`Are you sure you want to delete ${selectedJobs.size} selected execution(s)?`)) return;
+            if (!confirm(`Are you sure you want to remove ${selectedJobs.size} selected execution(s) from YouTube History?`)) return;
             try {
                 const batch = writeBatch(db);
                 selectedJobs.forEach((_, jobId) => {
+                    const payload = { auto_post_yt: false, yt_upload_status: '' };
                     if (currentUser) {
-                        batch.delete(doc(db, 'users', currentUser.uid, 'executions', jobId));
+                        batch.update(doc(db, 'users', currentUser.uid, 'executions', jobId), payload);
                     }
-                    batch.delete(doc(db, 'executions', jobId));
+                    batch.update(doc(db, 'executions', jobId), payload);
                 });
                 await batch.commit();
                 selectedJobs.clear();
-                alert('Selected logs deleted.');
+                alert('Selected logs removed from YouTube History.');
             } catch (e) {
-                alert('Error deleting: ' + e.message);
+                alert('Error removing: ' + e.message);
             }
         });
 
-        // Clear All Logs
+        // Clear All YouTube Logs
         const clearAllLogsBtn = document.getElementById('clearAllLogsBtn');
         clearAllLogsBtn.addEventListener('click', async () => {
-            if (!confirm('Are you sure you want to permanently clear ALL execution history for this account?')) return;
+            if (!confirm('Are you sure you want to clear ALL YouTube History? (This does not delete the main execution logs).')) return;
             try {
                 const batch = writeBatch(db);
                 allLogsList.forEach(d => {
+                    const payload = { auto_post_yt: false, yt_upload_status: '' };
                     if (currentUser) {
-                        batch.delete(doc(db, 'users', currentUser.uid, 'executions', d.id));
+                        batch.update(doc(db, 'users', currentUser.uid, 'executions', d.id), payload);
                     }
-                    batch.delete(doc(db, 'executions', d.id));
+                    batch.update(doc(db, 'executions', d.id), payload);
                 });
                 await batch.commit();
                 selectedJobs.clear();
-                alert('All execution logs cleared.');
+                alert('YouTube History cleared.');
             } catch (e) {
                 alert('Failed to clear logs: ' + e.message);
             }

@@ -117,12 +117,36 @@ for idx, job in enumerate(batch_config["jobs"]):
         ai_cfg = batch_config.get("ai_settings", {{}})
         base_url = ai_cfg.get("aiBaseUrl", "https://integrate.api.nvidia.com/v1").rstrip('/')
         api_key = ai_cfg.get("aiApiKey", "")
-        model = ai_cfg.get("aiModel", "nvidia/nemotron-4-340b-instruct")
+        model = ai_cfg.get("aiModel", "minimaxai/minimax-m3")
         sys_prompt = ai_cfg.get("aiSystemPrompt", "You are a creative YouTube script writer.")
         target_dur = job.get("target_duration", "30-45s")
-        
-        dur_prompt = "\\n\\nCRITICAL DURATION: Target is SHORTS (30-45s). Output between 60 to 90 words total."
-        tts_prompt = "\\n\\nOutput ONLY the raw words spoken by the narrator. No stage directions or brackets."
+        dur_str = str(target_dur).lower().strip()
+        t_secs = 45.0
+        if "min" in dur_str or "m" in dur_str:
+            m_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:min|minute|m)', dur_str)
+            s_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:sec|second|s)', dur_str)
+            mins = float(m_match[0]) if m_match else 0.0
+            secs = float(s_match[0]) if s_match else 0.0
+            t_secs = mins * 60.0 + secs if (mins > 0 or secs > 0) else float(re.findall(r'\d+', dur_str)[0]) * 60.0
+        else:
+            nums = re.findall(r'\d+(?:\.\d+)?', dur_str)
+            t_secs = float(nums[-1]) if nums else 45.0
+        t_secs = max(10.0, t_secs)
+        words_est = max(25, int(t_secs * 2.33))
+        min_w = int(words_est * 0.90)
+        max_w = int(words_est * 1.15)
+        is_long = t_secs > 95.0
+
+        if is_long:
+            num_ch = max(3, min(25, int(t_secs / 120.0)))
+            words_per_ch = int(words_est / num_ch)
+            dur_prompt = f"\\n\\nCRITICAL DURATION DIRECTIVE: Target duration is {{target_dur}} (~{int(t_secs/60)} minutes, {int(t_secs)}s). Output a complete documentary script of EXACTLY {words_est} spoken words total ({min_w} to {max_w} words) across {num_ch} deep chapters (at least {words_per_ch} words per chapter)."
+            user_msg = f"Write the complete {int(t_secs/60)}-minute documentary script ({words_est} words across {num_ch} chapters) for: \\\"{{title}}\\\""
+        else:
+            dur_prompt = f"\\n\\nCRITICAL DURATION DIRECTIVE: Target duration is {{target_dur}}. Output between {min_w} to {max_w} spoken words total."
+            user_msg = f"Write an engaging short script ({min_w}-{max_w} words) for: \\\"{{title}}\\\""
+            
+        tts_prompt = "\\n\\nOutput ONLY the raw words spoken by the narrator. No stage directions, markdown headers, or brackets."
         
         if api_key:
             try:
@@ -133,10 +157,12 @@ for idx, job in enumerate(batch_config["jobs"]):
                         "model": model,
                         "messages": [
                             {{"role": "system", "content": sys_prompt + tts_prompt + dur_prompt}},
-                            {{"role": "user", "content": f"Write an engaging short script for: \\"{{title}}\\""}}
-                        ]
+                            {{"role": "user", "content": user_msg}}
+                        ],
+                        "max_tokens": 8192 if is_long else 2500,
+                        "temperature": 0.75
                     }},
-                    timeout=60
+                    timeout=120
                 )
                 if r_ai.ok:
                     raw_s = r_ai.json()["choices"][0]["message"]["content"]

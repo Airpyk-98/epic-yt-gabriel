@@ -59,7 +59,7 @@ Respond with valid JSON ONLY:
             "temperature": 0.85,
             "chat_template_kwargs": {"enable_thinking": False}
         },
-        timeout=90
+        timeout=900
     )
     if r.ok:
         data = r.json()

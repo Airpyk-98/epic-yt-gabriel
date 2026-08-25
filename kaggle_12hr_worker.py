@@ -169,19 +169,30 @@ def process_job(doc_ref, job_data):
             model = user_data.get("aiModel", "gpt-4")
             sys_prompt = user_data.get("aiSystemPrompt", "You are a creative YouTube script writer.")
             target_dur = job_data.get("target_duration", "60 seconds")
-            
-            if "15" in target_dur or "30" in target_dur or "Shorts" in target_dur:
-                dur_inst = "\n\nCRITICAL DURATION: Target duration is SHORTS (30-45s). Output between 60 to 90 words total."
-            elif "3 min" in target_dur or "180" in target_dur:
-                dur_inst = "\n\nCRITICAL DURATION: Target duration is 3 MINUTES. Output between 380 to 450 words total."
-            elif "5 min" in target_dur or "300" in target_dur:
-                dur_inst = "\n\nCRITICAL DURATION: Target duration is 5 MINUTES. Output between 650 to 750 words total."
-            elif "10 min" in target_dur or "600" in target_dur:
-                dur_inst = "\n\nCRITICAL DURATION: Target duration is 10 MINUTES. Output between 1300 to 1500 words total."
+            dur_str = str(target_dur).lower().strip()
+            if "min" in dur_str or "m" in dur_str:
+                m_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:min|minute|m)', dur_str)
+                s_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:sec|second|s)', dur_str)
+                mins = float(m_match[0]) if m_match else 0.0
+                secs = float(s_match[0]) if s_match else 0.0
+                t_secs = mins * 60.0 + secs if (mins > 0 or secs > 0) else float(re.findall(r'\d+', dur_str)[0]) * 60.0
             else:
-                dur_inst = "\n\nCRITICAL DURATION: Target duration is 60 SECONDS. Output between 120 to 150 words total."
+                nums = re.findall(r'\d+(?:\.\d+)?', dur_str)
+                t_secs = float(nums[-1]) if nums else 60.0
+            t_secs = max(10.0, t_secs)
+            t_words = max(25, int(t_secs * 2.33))
+            min_w = int(t_words * 0.90)
+            max_w = int(t_words * 1.15)
+            is_long = t_secs > 95.0
+
+            if is_long:
+                num_ch = max(3, min(25, int(t_secs / 120.0)))
+                words_per_ch = int(t_words / num_ch)
+                dur_inst = f"\n\nCRITICAL DURATION DIRECTIVE: Target duration is {target_dur} (~{int(t_secs/60)} minutes, {int(t_secs)}s). You MUST output a comprehensive, in-depth documentary script of EXACTLY {t_words} spoken words total ({min_w} to {max_w} words) divided across {num_ch} deep chapters (at least {words_per_ch} words per chapter)."
+            else:
+                dur_inst = f"\n\nCRITICAL DURATION DIRECTIVE: Target duration is viral short-form ({int(t_secs)}s). Output STRICTLY between {min_w} to {max_w} spoken words total."
                 
-            tts_inst = "\n\nCRITICAL FORMAT INSTRUCTION: Output ONLY raw plaintext words that the voice actor speaks. No markdown, no prefixes, no stage directions."
+            tts_inst = "\n\nCRITICAL FORMAT INSTRUCTION: Output ONLY raw plaintext words that the voice actor speaks. No markdown formatting, no headers, no prefixes, no stage directions."
             full_prompt = sys_prompt + tts_inst + dur_inst
             
             ai_res = requests.post(
@@ -191,11 +202,12 @@ def process_job(doc_ref, job_data):
                     "model": model,
                     "messages": [
                         {"role": "system", "content": full_prompt},
-                        {"role": "user", "content": f"Write an engaging script for the video title: \"{title}\""}
+                        {"role": "user", "content": f"Write the complete {'documentary' if is_long else 'short'} script ({min_w}-{max_w} words) for the title: \"{title}\""}
                     ],
-                    "temperature": 0.7
+                    "max_tokens": 8192 if is_long else 2500,
+                    "temperature": 0.75
                 },
-                timeout=60
+                timeout=120
             )
             if ai_res.ok:
                 raw_script = ai_res.json()["choices"][0]["message"]["content"]

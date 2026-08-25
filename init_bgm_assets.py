@@ -10,10 +10,10 @@ if os.path.exists(src_piano):
 
 # 2. Generate atmospheric background synth audio for lofi, dark suspense, upbeat tech, ambient synth
 tracks = {
-    "lofi_chill.mp3": "anoisesrc=d=90:c=pink:r=44100:a=0.03,lowpass=f=800,volume=0.8",
-    "dark_suspense.mp3": "sine=f=55:d=90,lowpass=f=200,volume=0.9",
-    "upbeat_tech.mp3": "sine=f=220:d=90,volume=0.6",
-    "ambient_synth.mp3": "sine=f=110:d=90,volume=0.7"
+    "lofi_chill.mp3": "anoisesrc=d=90:c=pink:r=44100:a=0.5,lowpass=f=800,volume=2.0",
+    "dark_suspense.mp3": "sine=f=55:d=90,lowpass=f=200,volume=10.0",
+    "upbeat_tech.mp3": "sine=f=220:d=90,volume=5.0",
+    "ambient_synth.mp3": "sine=f=110:d=90,volume=5.0"
 }
 
 for name, filter_expr in tracks.items():

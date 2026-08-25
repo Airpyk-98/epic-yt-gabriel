@@ -13,7 +13,7 @@ Respond with valid JSON ONLY:
   ]
 }"""
 
-nvidia_models = ["z-ai/glm-5.2", "meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "mistralai/mistral-large-2-instruct"]
+nvidia_models = ["z-ai/glm-5.2", "deepseek-ai/deepseek-v4-flash-0731", "meta/llama-3.3-70b-instruct", "mistralai/mistral-large-2-instruct"]
 ai_scenes = []
 
 for model_name in nvidia_models:
@@ -36,7 +36,7 @@ for model_name in nvidia_models:
             f"{base_url}/chat/completions",
             headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
             json=req_body,
-            timeout=90
+            timeout=900
         )
         if r_ai.ok:
             resp_data = r_ai.json()

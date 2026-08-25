@@ -115,23 +115,39 @@ for idx, job in enumerate(batch_config["jobs"]):
     
     # 1. AI Script Generation (Nemotron Super / Default)
     if not script_text or script_text.strip() == "":
-        words_est = 80
-        if "min" in target_dur.lower():
-            m_match = re.findall(r'[\\d.]+', target_dur)
-            m_val = float(m_match[0]) if m_match else 1.0
-            words_est = max(50, int(m_val * 135))
+        dur_str = str(target_dur).lower().strip()
+        t_secs = 45.0
+        if "min" in dur_str or "m" in dur_str:
+            m_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:min|minute|m)', dur_str)
+            s_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:sec|second|s)', dur_str)
+            mins = float(m_match[0]) if m_match else 0.0
+            secs = float(s_match[0]) if s_match else 0.0
+            t_secs = mins * 60.0 + secs if (mins > 0 or secs > 0) else float(re.findall(r'\d+', dur_str)[0]) * 60.0
         else:
-            s_match = re.findall(r'[\\d.]+', target_dur)
-            s_val = float(s_match[0]) if s_match else 45.0
-            words_est = max(30, int(s_val * 2.2))
+            nums = re.findall(r'\d+(?:\.\d+)?', dur_str)
+            t_secs = float(nums[-1]) if nums else 45.0
+        t_secs = max(10.0, t_secs)
+        words_est = max(25, int(t_secs * 2.33))
+        min_w = int(words_est * 0.90)
+        max_w = int(words_est * 1.15)
+        is_long = t_secs > 95.0
+
+        if is_long:
+            num_ch = max(3, min(25, int(t_secs / 120.0)))
+            words_per_ch = int(words_est / num_ch)
+            dur_prompt = f"\\n\\nCRITICAL DURATION DIRECTIVE: Target duration is {{target_dur}} (~{int(t_secs/60)} minutes, {int(t_secs)} seconds). You MUST output a complete, in-depth documentary script of EXACTLY {words_est} spoken words total ({min_w} to {max_w} words) structured across {num_ch} deep chapters (at least {words_per_ch} words per chapter)."
+            sys_prompt = "You are a world-class YouTube documentary script writer and video essayist."
+            user_prompt = f"Write the complete {int(t_secs/60)}-minute documentary script ({words_est} spoken words across {num_ch} deep chapters) for: \\\"{{title}}\\\""
+        else:
+            dur_prompt = f"\\n\\nCRITICAL DURATION DIRECTIVE: Target duration is {{target_dur}}. Output a script of EXACTLY {words_est} spoken words total ({min_w} to {max_w} words)."
+            sys_prompt = "You are a world-class viral YouTube Shorts content creator."
+            user_prompt = f"Write an engaging viral short-form script ({words_est} words) for the title: \\\"{{title}}\\\""
             
-        dur_prompt = f"\\n\\nCRITICAL DURATION DIRECTIVE: Target duration is {{target_dur}}. Output a script of EXACTLY {{words_est}} spoken words total."
-        tts_prompt = "\\n\\nCRITICAL FORMAT: Output ONLY the raw words spoken by the narrator. No stage directions, brackets, or markdown."
-        sys_prompt = "You are a world-class viral YouTube content creator."
+        tts_prompt = "\\n\\nCRITICAL FORMAT: Output ONLY the raw words spoken by the narrator. No stage directions, brackets, or markdown headers."
         
         api_key = batch_config.get("ai_api_key") or os.environ.get("NVIDIA_API_KEY", "")
         base_url = "https://integrate.api.nvidia.com/v1"
-        model_name = "nvidia/nemotron-4-340b-instruct"
+        model_name = "minimaxai/minimax-m3"
         
         if api_key:
             try:
@@ -142,10 +158,12 @@ for idx, job in enumerate(batch_config["jobs"]):
                         "model": model_name,
                         "messages": [
                             {{"role": "system", "content": sys_prompt + tts_prompt + dur_prompt}},
-                            {{"role": "user", "content": f"Write an engaging video script for the title: \\"{{title}}\\""}}
-                        ]
+                            {{"role": "user", "content": user_prompt}}
+                        ],
+                        "max_tokens": 8192 if is_long else 2500,
+                        "temperature": 0.75
                     }},
-                    timeout=60
+                    timeout=120
                 )
                 if r_ai.ok:
                     raw_s = r_ai.json()["choices"][0]["message"]["content"]

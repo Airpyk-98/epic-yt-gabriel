@@ -1,5 +1,6 @@
 // EpicSync Shared Application Logic & Cloud Dispatcher
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, linkWithPopup, linkWithRedirect, reauthenticateWithPopup, reauthenticateWithRedirect } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { updateDoc, runTransaction, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const DEFAULT_KAGGLE_USERNAME = "gabrielnjoku";
 export const DEFAULT_KAGGLE_KEY = "KGAT_011c8a0cd3f10cfd9fb0e092d1ff678e";
@@ -297,60 +298,89 @@ for idx, job in enumerate(batch_config["jobs"]):
 
         ai_scenes = []
 
-        # Calculate exact duration constraints (using [0-9.]+ without backslash swallow)
-        dur_str = str(target_dur).lower()
-        if "min" in dur_str:
-            m_val = re.findall(r'[0-9.]+', dur_str)
-            t_secs = float(m_val[0]) * 60.0 if m_val else 60.0
+        # Calculate exact duration constraints (handling seconds, minutes, and ranges)
+        dur_str = str(target_dur).lower().strip()
+        t_secs = 45.0
+        if "min" in dur_str or "m" in dur_str:
+            m_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:min|minute|m)', dur_str)
+            s_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:sec|second|s)', dur_str)
+            mins = float(m_match[0]) if m_match else 0.0
+            secs = float(s_match[0]) if s_match else 0.0
+            if mins > 0 or secs > 0:
+                t_secs = mins * 60.0 + secs
+            else:
+                nums = re.findall(r'\d+(?:\.\d+)?', dur_str)
+                t_secs = float(nums[0]) * 60.0 if nums else 60.0
         else:
-            s_val = re.findall(r'[0-9.]+', dur_str)
-            t_secs = float(s_val[0]) if s_val else 45.0
-        t_secs = max(15.0, t_secs)
-        t_words = int(t_secs * 2.35)
-        min_words = int(t_words * 0.90)
-        max_words = int(t_words * 1.10)
-        target_scenes_count = max(3, int(t_secs / 3.5))
+            nums = re.findall(r'\d+(?:\.\d+)?', dur_str)
+            t_secs = float(nums[-1]) if nums else 45.0
+
+        t_secs = max(10.0, t_secs)
+        # Natural conversational pace: 140 words per minute (~2.33 words/sec)
+        t_words = max(25, int(t_secs * 2.33))
+        min_words = max(20, int(t_words * 0.90))
+        max_words = max(30, int(t_words * 1.15))
+        is_long_form = t_secs > 95.0
+        target_scenes_count = max(3, int(t_secs / 3.8))
+
+        def get_pexels_query_for_line(line_text, topic_title):
+            clean_l = re.sub(r'[^a-zA-Z0-9\s]', '', line_text).lower()
+            stop_set = {'the', 'and', 'that', 'this', 'with', 'from', 'for', 'are', 'was', 'were', 'you', 'your', 'they', 'their', 'about', 'what', 'which', 'how', 'why', 'who', 'when', 'where', 'have', 'has', 'had', 'not', 'but', 'all', 'any', 'some', 'someone', 'probably', 'exist', 'dont', 'know', 'signs', 'features', 'things', 'ways', 'would', 'could', 'should', 'there', 'here', 'into', 'just', 'more', 'than', 'will', 'very', 'been', 'each', 'other', 'them', 'these', 'those', 'because', 'even', 'first', 'second', 'most', 'also', 'such', 'like', 'than', 'make', 'made', 'take', 'took', 'come', 'came', 'look', 'looks', 'looking', 'tell', 'said', 'says', 'ever', 'every', 'going', 'real', 'much', 'many', 'well', 'back', 'down', 'only'}
+            w_list = [w for w in clean_l.split() if len(w) > 2 and w not in stop_set]
+            if len(w_list) >= 2:
+                return "+".join(w_list[:3])
+            elif w_list:
+                t_words_list = [w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', topic_title) if w.lower() not in stop_set]
+                fallback_t = t_words_list[0] if t_words_list else "lifestyle"
+                return f"{w_list[0]}+{fallback_t}"
+            else:
+                t_words_list = [w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', topic_title) if w.lower() not in stop_set]
+                return "+".join(t_words_list[:2]) if t_words_list else "cinematic+modern"
 
         if script_text and script_text.strip():
             # User provided manual script: split into sentences and generate Pexels queries
             manual_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', script_text) if len(l.strip()) > 5]
             for ml in manual_lines:
-                w_list = [re.sub(r'[^a-zA-Z]', '', w.lower()) for w in ml.split()]
-                q = "+".join([w for w in w_list if len(w) > 3][:3]) or "lifestyle"
+                q = get_pexels_query_for_line(ml, title)
                 ai_scenes.append({"line": ml, "pexels_query": q})
         else:
-            sys_prompt = f"""You are a master viral YouTube Shorts storyteller and visual director.
+            if not is_long_form:
+                sys_prompt = f"""You are a master viral YouTube Shorts storyteller and visual director.
 Write a gripping, 100% natural, psychology-driven short-form video narration script for the title: "{title}".
 
 TARGET TIMING & LENGTH:
-- Target Video Duration: {target_dur} (~{int(t_secs)} seconds)
-- Required Spoken Word Count: STRICTLY between {min_words} and {max_words} total spoken words across all lines combined.
-- Scene Cuts: Exactly {target_scenes_count} distinct visual scenes.
+- Target Duration: {target_dur} (~{int(t_secs)} seconds)
+- Spoken Word Count: STRICTLY between {min_words} and {max_words} total spoken words.
 
-NARRATION & VOICE STYLE GUIDELINES (Conversational & Natural):
-1. IMMEDIATE HOOK: The first sentence must be an irresistible pattern interrupt or bold, relatable statement that grips the viewer within 2 seconds.
-2. NATURAL HUMAN CADENCE: Talk like a sharp, observant friend sharing an eye-opening realization. Vary your sentence structure and lengths naturally.
-3. BANNED ROBOTIC CLICHÉS:
-   - NEVER repeat robotic transition formulas like "Meanwhile", "Therefore", "Which is why", "And yet" at the beginning of lines.
-   - Do NOT sound like an essay, a bulleted list, or an AI template. Speak with genuine human flow.
-   - Never use "In this video", "Welcome back", "Here is what you need to know", or "Did you know".
-4. PUNCHY STORYTELLING: Describe real human behaviors, subtle micro-actions, and vivid everyday scenarios that the viewer instantly recognizes.
-5. FINAL PAYOFF: End on an insightful, memorable punchline or thought-provoking takeaway.
-
-PEXELS STOCK B-ROLL QUERY RULES:
-For EVERY scene line, provide a tailored 'pexels_query' (2 to 4 keywords) optimized for high-quality stock video footage.
-- Describe real, tangible visuals a camera can film (e.g., "woman checking phone secretly", "luxury sports car city night", "person smirking cafe", "man walking away in shadows").
-- NEVER use abstract words like "concept", "jealousy", "idea".
-- Keep every search query unique and visually distinct.
+NARRATION GUIDELINES:
+1. IMMEDIATE HOOK: The first sentence must be an irresistible pattern interrupt or bold statement that grips the viewer within 2 seconds.
+2. NATURAL HUMAN CADENCE: Talk like a sharp, observant friend sharing an eye-opening realization. Vary sentence structures naturally.
+3. NO ROBOTIC CLICHÉS: Never use "In this video", "Welcome back", "Did you know", or "Meanwhile".
+4. RAW SPOKEN TEXT ONLY: Output ONLY the spoken words. No markdown, no prefixes, no stage directions.
 
 OUTPUT FORMAT:
-Respond with valid JSON ONLY:
-{{
-  "scenes": [
-    {{"line": "First natural spoken sentence...", "pexels_query": "concrete visual search query"}},
-    {{"line": "Second natural spoken sentence...", "pexels_query": "different visual search query"}}
-  ]
-}}"""
+Provide the full spoken text cleanly."""
+                user_msg = f"Write the viral short-form script ({min_words}-{max_words} spoken words) for: {title}"
+            else:
+                num_chapters = max(3, min(25, int(t_secs / 120.0)))
+                words_per_chap = int(t_words / num_chapters)
+                sys_prompt = f"""You are a master YouTube documentary filmmaker and video essayist (in the style of Veritasium, MagnatesMedia, Polymatter, Vox).
+Write a comprehensive, captivating, in-depth long-form video essay narration script for: "{title}".
+
+CRITICAL DURATION & LENGTH DIRECTIVE:
+- Target Duration: {target_dur} (~{int(t_secs)} seconds / ~{int(t_secs/60)} minutes)
+- Required Total Word Count: EXACTLY {t_words} spoken words (STRICTLY between {min_words} and {max_words} words).
+- Structure: You MUST divide the narrative into {num_chapters} deep, escalating chapters.
+- Chapter Depth: Each chapter MUST contain at least {words_per_chap} detailed, conversational spoken words with rich depth, historical/psychological context, real-world case studies, and progressive revelations.
+
+NARRATION & RETENTION GUIDELINES:
+1. IRRESISTIBLE OPENING HOOK: Open with a high-stakes mystery, paradox, or dramatic paradigm shift that hooks the audience for the full {int(t_secs/60)} minutes.
+2. CONTINUOUS RE-HOOKING: At every chapter transition, open a new curiosity loop before closing the last one.
+3. RICH DETAIL & STORYTELLING: Dive deep into concrete examples, human behaviors, hidden mechanisms, and counter-intuitive facts. Do NOT summarize or rush.
+4. NATURAL CONVERSATIONAL TONE: Write in active voice, conversational rhythm, with varied sentence lengths.
+5. NO ESSAY FLUFF: Never say "In this video", "In conclusion", "As we have seen", or "Welcome back".
+6. RAW SPOKEN TEXT ONLY: Output ONLY the words spoken by the narrator. Do NOT output markdown formatting, asterisks (**), headers like 'Chapter 1:', or stage directions."""
+                user_msg = f"Write the complete {int(t_secs/60)}-minute documentary script (EXACTLY {t_words} spoken words across {num_chapters} deep chapters) for: {title}"
 
             # Tier 1: User-configured API Key (NVIDIA GLM 5.2 / MiniMax / Groq / OpenAI)
             api_key = batch_config.get("ai_api_key") or os.environ.get("MINIMAX_API_KEY", "") or os.environ.get("NVIDIA_API_KEY", "")
@@ -360,27 +390,27 @@ Respond with valid JSON ONLY:
                 nvidia_models = ["MiniMax-Text-01"]
                 if api_key.startswith("nvapi-"):
                     base_url = "https://integrate.api.nvidia.com/v1"
-                    nvidia_models = ["z-ai/glm-5.2", "meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "mistralai/mistral-large-2-instruct"]
+                    nvidia_models = ["minimaxai/minimax-m3", "deepseek-ai/deepseek-v4-flash-0731", "meta/llama-3.3-70b-instruct"]
                 elif api_key.startswith("gsk_"):
                     base_url = "https://api.groq.com/openai/v1"
                     nvidia_models = ["llama-3.3-70b-versatile"]
                 elif api_key.startswith("sk-") and not api_key.startswith("sk-minimax"):
                     base_url = "https://api.openai.com/v1"
-                    nvidia_models = ["gpt-4o-mini"]
+                    nvidia_models = ["gpt-4o-mini", "gpt-4o"]
 
                 for model_name in nvidia_models:
                     if ai_scenes:
                         break
                     try:
-                        print(f"Calling {model_name} at {base_url}...")
+                        print(f"Calling {model_name} at {base_url} (Target: {t_words} words)...")
                         req_body = {
                             "model": model_name,
                             "messages": [
                                 {"role": "system", "content": sys_prompt},
-                                {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
+                                {"role": "user", "content": user_msg}
                             ],
-                            "max_tokens": 4096,
-                            "temperature": 0.85
+                            "max_tokens": 8192 if is_long_form else 3000,
+                            "temperature": 0.82
                         }
                         if "glm" in model_name.lower():
                             req_body["chat_template_kwargs"] = {"enable_thinking": False}
@@ -388,16 +418,21 @@ Respond with valid JSON ONLY:
                             f"{base_url}/chat/completions",
                             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                             json=req_body,
-                            timeout=90
+                            timeout=180
                         )
                         if r_ai.ok:
                             resp_data = r_ai.json()
                             resp_c = resp_data["choices"][0]["message"]["content"] or ""
                             finish_reason = resp_data["choices"][0].get("finish_reason", "unknown")
                             print(f"AI response: {len(resp_c)} chars, finish_reason={finish_reason}")
-                            clean_c = resp_c.replace(chr(96)*3 + "json", "").replace(chr(96)*3, "").strip()
+                            
+                            # Clean raw script text
+                            clean_c = re.sub(r'\[.*?\]', '', resp_c)
+                            clean_c = re.sub(r'\(.*?\)', '', clean_c).replace('**', '').replace('---', '').replace('###', '')
+                            clean_c = re.sub(r'^(Narrator|Script|Audio|Voiceover|Chapter\s*\d+):?\s*', '', clean_c, flags=re.IGNORECASE | re.MULTILINE).strip()
+                            clean_c = clean_c.replace(chr(96)*3 + "json", "").replace(chr(96)*3, "").strip()
 
-                            # 1. Full JSON block extraction (no regex escape hazards)
+                            # 1. Check if structured JSON was returned
                             start_brace = clean_c.find('{')
                             end_brace = clean_c.rfind('}')
                             if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
@@ -405,28 +440,23 @@ Respond with valid JSON ONLY:
                                     parsed_j = json.loads(clean_c[start_brace:end_brace+1])
                                     for sc_item in parsed_j.get("scenes", []):
                                         l_val = str(sc_item.get("line", "")).strip()
-                                        q_val = str(sc_item.get("pexels_query", "")).strip()
+                                        q_val = str(sc_item.get("pexels_query", "")).strip() or get_pexels_query_for_line(l_val, title)
                                         if l_val:
                                             ai_scenes.append({"line": l_val, "pexels_query": q_val})
                                     if ai_scenes:
-                                        print(f"AI generated {len(ai_scenes)} unique scenes via {model_name}")
+                                        print(f"AI generated {len(ai_scenes)} scenes via JSON from {model_name}")
                                 except Exception as p_err:
                                     print(f"JSON parse notice: {p_err}")
 
-                            # 2. Line-by-line fallback if stream was cut off mid-response
-                            if not ai_scenes:
-                                for line_item in clean_c.splitlines():
-                                    line_item = line_item.strip()
-                                    if '"line":' in line_item and '"pexels_query":' in line_item:
-                                        m_l = re.search(r'"line"\s*:\s*"([^"]+)"', line_item)
-                                        m_q = re.search(r'"pexels_query"\s*:\s*"([^"]+)"', line_item)
-                                        if m_l:
-                                            l_val = m_l.group(1).strip()
-                                            q_val = m_q.group(1).strip() if m_q else "lifestyle"
-                                            if l_val:
-                                                ai_scenes.append({"line": l_val, "pexels_query": q_val})
+                            # 2. Prose Sentence Extraction (standard for long-form scripts)
+                            if not ai_scenes and len(clean_c) > 40:
+                                parsed_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', clean_c) if len(l.strip()) > 8]
+                                for pl in parsed_lines:
+                                    q_val = get_pexels_query_for_line(pl, title)
+                                    ai_scenes.append({"line": pl, "pexels_query": q_val})
                                 if ai_scenes:
-                                    print(f"AI salvaged {len(ai_scenes)} scenes via line extraction from {model_name}")
+                                    w_cnt = len(" ".join([s["line"] for s in ai_scenes]).split())
+                                    print(f"AI extracted {len(ai_scenes)} scenes ({w_cnt} words) from {model_name}")
                         else:
                             print(f"{model_name} returned {r_ai.status_code}, trying next model... ({r_ai.text[:150]})")
                     except Exception as e:
@@ -443,47 +473,72 @@ Respond with valid JSON ONLY:
                                 model=hf_m,
                                 messages=[
                                     {"role": "system", "content": sys_prompt},
-                                    {"role": "user", "content": f"Write the viral short-form script with Pexels queries for: {title}"}
+                                    {"role": "user", "content": user_msg}
                                 ],
-                                max_tokens=1500,
-                                temperature=0.7
+                                max_tokens=4096 if is_long_form else 2000,
+                                temperature=0.75
                             )
-                            resp_c = resp.choices[0].message.content
-                            json_match = re.search(r'\{[\s\S]*"scenes"[\s\S]*\}', resp_c)
-                            if json_match:
-                                parsed_j = json.loads(json_match.group(0))
-                                for sc_item in parsed_j.get("scenes", []):
-                                    l_val = str(sc_item.get("line", "")).strip()
-                                    q_val = str(sc_item.get("pexels_query", "")).strip()
-                                    if l_val:
-                                        ai_scenes.append({"line": l_val, "pexels_query": q_val})
-                                if ai_scenes:
-                                    print(f"Generated {len(ai_scenes)} scenes via Hugging Face {hf_m}")
-                                    break
+                            resp_c = resp.choices[0].message.content or ""
+                            clean_c = re.sub(r'\[.*?\]', '', resp_c)
+                            clean_c = re.sub(r'\(.*?\)', '', clean_c).replace('**', '').replace('---', '').replace('###', '')
+                            clean_c = re.sub(r'^(Narrator|Script|Audio|Voiceover|Chapter\s*\d+):?\s*', '', clean_c, flags=re.IGNORECASE | re.MULTILINE).strip()
+                            clean_c = clean_c.replace(chr(96)*3 + "json", "").replace(chr(96)*3, "").strip()
+
+                            parsed_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', clean_c) if len(l.strip()) > 8]
+                            for pl in parsed_lines:
+                                q_val = get_pexels_query_for_line(pl, title)
+                                ai_scenes.append({"line": pl, "pexels_query": q_val})
+                            if ai_scenes:
+                                w_cnt = len(" ".join([s["line"] for s in ai_scenes]).split())
+                                print(f"Generated {len(ai_scenes)} scenes ({w_cnt} words) via Hugging Face {hf_m}")
+                                break
                         except Exception as m_err:
                             print(f"HF model {hf_m} notice: {m_err}")
                 except Exception as e:
                     print(f"Tier 2 HF Inference notice: {e}")
 
-            # Tier 3: Dynamic Topic-Specific Procedural Decomposition (100% Unique to Title)
-            if not ai_scenes:
-                print("Using Dynamic Keyword Deconstruction for unique script & Pexels queries...")
+            # Tier 3: Dynamic Topic-Specific Procedural Decomposition (Scales to EXACT target word count)
+            if not ai_scenes or len(" ".join([s["line"] for s in ai_scenes]).split()) < min_words * 0.5:
+                print(f"Using Dynamic Procedural Expansion to match {t_words} words for '{title}'...")
                 import re as _re
                 raw_words = [_re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in title.split() if len(_re.sub(r'[^a-zA-Z0-9]', '', w)) > 2]
                 stop_words = {"the", "and", "that", "this", "with", "from", "for", "are", "was", "were", "you", "your", "they", "their", "about", "what", "which", "how", "why", "who", "when", "where", "have", "has", "had", "not", "but", "all", "any", "some", "someone", "probably", "exist", "don't", "know", "signs", "features", "things", "ways"}
-                kw_list = [w for w in raw_words if w not in stop_words] or raw_words[:3] or ["lifestyle"]
+                kw_list = [w for w in raw_words if w not in stop_words] or raw_words[:3] or ["strategy", "focus", "lifestyle"]
                 k1 = kw_list[0] if kw_list else "focus"
                 k2 = kw_list[1] if len(kw_list) > 1 else k1
                 k3 = kw_list[2] if len(kw_list) > 2 else k2
 
-                ai_scenes = [
-                    {"line": f"If you think you truly understand {title}, this breakdown is about to completely change your perspective.", "pexels_query": f"{k1} thoughtful person"},
-                    {"line": f"First, notice how most people completely overlook the subtle mechanisms behind {k1}.", "pexels_query": f"{k1} detailed close up"},
-                    {"line": f"Meanwhile, when you look beneath the surface, the real impact of {k2} becomes impossible to ignore.", "pexels_query": f"{k2} technology lifestyle"},
-                    {"line": f"Therefore, the moment you recognize these critical patterns, everything starts making total sense.", "pexels_query": f"{k3} discovery reaction"},
-                    {"line": f"Which is why mastering {k2} gives you an unfair advantage that ninety-nine percent of people will never see.", "pexels_query": f"{k1} success confident"},
-                    {"line": f"Start paying attention to these details today, and watch how quickly your results begin to compound.", "pexels_query": f"{k2} modern city focus"}
+                ai_scenes = []
+                modular_templates = [
+                    (f"If you think you truly understand {title}, this in-depth breakdown is about to completely revolutionize how you perceive the entire concept.", f"{k1} thoughtful person"),
+                    (f"First, notice how most people completely overlook the fundamental mechanisms driving {k1}.", f"{k1} detailed close up"),
+                    (f"When you examine the historical progression of {k2}, the underlying patterns become unmistakably clear.", f"{k2} technology lifestyle"),
+                    (f"In standard scenarios, individuals assume that {k1} operates on intuition alone, but the empirical reality is far more calculated.", f"{k1} analytical thinking"),
+                    (f"The critical differentiator lies in how {k3} actively reshapes the surrounding environment before most observers even register a change.", f"{k3} discovery reaction"),
+                    (f"Consider the psychological impact when {k2} is applied consistently across complex, high-pressure situations.", f"{k2} focused worker"),
+                    (f"Rather than reacting to surface symptoms, the most successful operators focus entirely on the root architecture of {k1}.", f"{k1} success confident"),
+                    (f"This structural advantage compounds over time, creating a gap that competitors find virtually impossible to close.", f"{k3} modern city architecture"),
+                    (f"Every subtle friction point within {k2} serves as an indicator of an untapped optimization waiting to be unlocked.", f"{k2} strategy whiteboard"),
+                    (f"Once you align these key components with precision, the entire mechanism begins to function with effortless momentum.", f"{k1} speed lights abstract"),
+                    (f"Auditing your daily approach to {k3} ensures that you are constantly capitalizing on these high-leverage principles.", f"{k3} sunrise horizon"),
+                    (f"Commit to mastering these foundational realities today, and watch how quickly your results compound into lasting mastery.", f"{k2} confident leadership")
                 ]
+
+                cur_word_count = 0
+                loop_idx = 0
+                while cur_word_count < t_words:
+                    t_line, t_query = modular_templates[loop_idx % len(modular_templates)]
+                    cycle = (loop_idx // len(modular_templates)) + 1
+                    if cycle > 1:
+                        prefix_transitions = ["Expanding further on this,", "From a deeper structural perspective,", "Analyzing the secondary effects,", "Taking this realization into practice,", "Examining the long-term implications,"]
+                        pref = prefix_transitions[loop_idx % len(prefix_transitions)]
+                        final_l = f"{pref} {t_line[0].lower() + t_line[1:]}"
+                    else:
+                        final_l = t_line
+                    
+                    ai_scenes.append({"line": final_l, "pexels_query": t_query})
+                    cur_word_count += len(final_l.split())
+                    loop_idx += 1
 
         script_text = " ".join([s["line"] for s in ai_scenes])
         print(f"\\nGenerated Script ({len(ai_scenes)} scenes, {len(script_text.split())} words):")
@@ -711,6 +766,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             has_nvenc = False
 
         enc_v = "h264_nvenc -preset p1" if has_nvenc else "libx264 -preset ultrafast"
+        pexels_query_cache = {}
 
         for idx, sc in enumerate(bridged_scenes):
             sc_dur = sc["duration"]
@@ -719,41 +775,46 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             search_q = "+".join(clean_words) if clean_words else "cinematic"
             print(f"\\nProcessing Scene {idx+1}/{len(bridged_scenes)} (Duration: {sc_dur:.3f}s, Query: '{search_q}'):")
 
-            # Multi-tier Pexels Search (Exact -> Broad -> Orientation Agnostic -> Fallback)
-            candidate_urls = []
-            search_attempts = [
-                f"https://api.pexels.com/videos/search?query={search_q}&per_page=6&orientation={orientation}",
-                f"https://api.pexels.com/videos/search?query={search_q}&per_page=6",
-                f"https://api.pexels.com/videos/search?query={'+'.join(clean_words[:2])}&per_page=6" if len(clean_words) >= 2 else None,
-                f"https://api.pexels.com/videos/search?query=cinematic+aesthetic&per_page=6"
-            ]
+            # Multi-tier Pexels Search (with Query Caching)
+            if search_q in pexels_query_cache and len(pexels_query_cache[search_q]) > 0:
+                candidate_urls = pexels_query_cache[search_q]
+            else:
+                candidate_urls = []
+                search_attempts = [
+                    f"https://api.pexels.com/videos/search?query={search_q}&per_page=6&orientation={orientation}",
+                    f"https://api.pexels.com/videos/search?query={search_q}&per_page=6",
+                    f"https://api.pexels.com/videos/search?query={'+'.join(clean_words[:2])}&per_page=6" if len(clean_words) >= 2 else None,
+                    f"https://api.pexels.com/videos/search?query=cinematic+aesthetic&per_page=6"
+                ]
 
-            for attempt_url in search_attempts:
-                if not attempt_url:
-                    continue
-                try:
-                    pex_res = requests.get(attempt_url, headers={"Authorization": pexels_key}, timeout=10)
-                    if pex_res.ok:
-                        v_list = pex_res.json().get("videos", [])
-                        for v_entry in v_list:
-                            files = v_entry.get("video_files", [])
-                            best_link = None
-                            for f in files:
-                                link = f.get("link")
-                                if link and f.get("quality") in ["hd", "uhd"]:
-                                    best_link = link
-                                    break
-                            if not best_link:
+                for attempt_url in search_attempts:
+                    if not attempt_url:
+                        continue
+                    try:
+                        pex_res = requests.get(attempt_url, headers={"Authorization": pexels_key}, timeout=10)
+                        if pex_res.ok:
+                            v_list = pex_res.json().get("videos", [])
+                            for v_entry in v_list:
+                                files = v_entry.get("video_files", [])
+                                best_link = None
                                 for f in files:
-                                    if f.get("link"):
-                                        best_link = f.get("link")
+                                    link = f.get("link")
+                                    if link and f.get("quality") in ["hd", "uhd"]:
+                                        best_link = link
                                         break
-                            if best_link and best_link not in candidate_urls:
-                                candidate_urls.append(best_link)
-                    if len(candidate_urls) >= 4:
-                        break
-                except Exception as e:
-                    print(f"   Pexels query attempt notice: {e}")
+                                if not best_link:
+                                    for f in files:
+                                        if f.get("link"):
+                                            best_link = f.get("link")
+                                            break
+                                if best_link and best_link not in candidate_urls:
+                                    candidate_urls.append(best_link)
+                        if len(candidate_urls) >= 4:
+                            break
+                    except Exception as e:
+                        print(f"   Pexels query attempt notice: {e}")
+
+                pexels_query_cache[search_q] = candidate_urls
 
             print(f"   Found {len(candidate_urls)} candidate video stream(s)")
 
@@ -857,7 +918,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         bgm_clean = os.path.abspath(bgm_path).replace("\\\\", "/")
 
         if has_bgm and os.path.exists(bgm_path):
-            filter_str = f"[0:v]setsar=1{sub_filter}[vout];[1:a]volume={vb_float}[voice];[2:a]volume={bgm_volume}[bgm];[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            filter_str = f"[0:v]setsar=1{sub_filter}[vout];[1:a]volume={vb_float}[voice];[2:a]volume={bgm_volume}[bgm];[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2,volume=2.0[aout]"
             input_args = f'-f concat -safe 0 -i "{manifest_p}" -i "{wav_p}" -stream_loop -1 -i "{bgm_clean}"'
         else:
             filter_str = f"[0:v]setsar=1{sub_filter}[vout];[1:a]volume={vb_float}[aout]"
@@ -956,6 +1017,9 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
             status: 'QUEUED',
             progress: 0,
             step_text: `Queued for Kaggle ${enableGpu ? 'Turbo GPU' : 'CPU'} Worker...`,
+            auto_post_yt: payload.autoPostYt === true || payload.autoPostYt === 'true',
+            yt_privacy: payload.ytPrivacy || 'private',
+            yt_upload_status: payload.autoPostYt ? 'PENDING' : null,
             createdAt: new Date(),
             updatedAt: new Date()
         };
@@ -1254,24 +1318,52 @@ export async function requestGoogleYtLogin(auth, db, utils, forceRedirect = fals
 
     try {
         let result = null;
+        const isLinked = auth.currentUser?.providerData?.some(p => p.providerId === 'google.com');
 
         if (forceRedirect) {
             sessionStorage.setItem('epicsync_yt_oauth_in_progress', 'true');
-            await signInWithRedirect(auth, provider);
+            if (auth.currentUser) {
+                if (isLinked) {
+                    await reauthenticateWithRedirect(auth.currentUser, provider);
+                } else {
+                    await linkWithRedirect(auth.currentUser, provider);
+                }
+            } else {
+                await signInWithRedirect(auth, provider);
+            }
             return null;
         }
 
         try {
-            result = await signInWithPopup(auth, provider);
+            if (auth.currentUser) {
+                if (isLinked) {
+                    result = await reauthenticateWithPopup(auth.currentUser, provider);
+                } else {
+                    result = await linkWithPopup(auth.currentUser, provider);
+                }
+            } else {
+                result = await signInWithPopup(auth, provider);
+            }
             console.log("Firebase Google Auth Result (Popup):", result);
         } catch (popupErr) {
-            console.warn("signInWithPopup failed or popup was blocked, falling back to signInWithRedirect:", popupErr);
+            console.warn("signInWithPopup/link failed, trying fallback:", popupErr);
             if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request' || popupErr.code === 'auth/internal-error') {
                 sessionStorage.setItem('epicsync_yt_oauth_in_progress', 'true');
-                await signInWithRedirect(auth, provider);
+                if (auth.currentUser) {
+                    if (isLinked) {
+                        await reauthenticateWithRedirect(auth.currentUser, provider);
+                    } else {
+                        await linkWithRedirect(auth.currentUser, provider);
+                    }
+                } else {
+                    await signInWithRedirect(auth, provider);
+                }
                 return null;
             } else if (popupErr.code === 'auth/popup-closed-by-user') {
                 return null;
+            } else if (popupErr.code === 'auth/credential-already-in-use' || popupErr.code === 'auth/account-exists-with-different-credential') {
+                // Google account is already linked to another user, or another account exists. Try direct sign in.
+                result = await signInWithPopup(auth, provider);
             } else {
                 throw popupErr;
             }
@@ -1490,4 +1582,85 @@ export function escapeHtml(text) {
     return div.innerHTML;
 }
 
+export async function updateJobYtStatus(db, utils, uid, jobId, status, errorMsg = '', videoId = '') {
+    const payload = { yt_upload_status: status };
+    if (errorMsg) payload.yt_error = errorMsg;
+    if (videoId) payload.yt_video_id = videoId;
+    payload.yt_updated_at = new Date();
+    
+    try {
+        await updateDoc(utils.doc(db, 'users', uid, 'executions', jobId), payload);
+        await updateDoc(utils.doc(db, 'executions', jobId), payload);
+    } catch (e) {
+        console.error("Failed to update YT status", e);
+    }
+}
 
+export function initAutoYouTubeUploader(db, auth, utils) {
+    if (!auth || !auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    
+    // Listen for jobs that are COMPLETED and still PENDING upload
+    const q = utils.query(
+        utils.collection(db, 'users', uid, 'executions'),
+        where('status', '==', 'COMPLETED'),
+        where('yt_upload_status', '==', 'PENDING')
+    );
+
+    let isProcessing = false;
+    
+    utils.onSnapshot(q, async (snapshot) => {
+        if (isProcessing) return;
+        isProcessing = true;
+        
+        for (const document of snapshot.docs) {
+            const job = document.data();
+            const jobId = job.job_id;
+            
+            // Transaction to claim the job to prevent multiple tabs from uploading simultaneously
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const docRef = utils.doc(db, 'users', uid, 'executions', jobId);
+                    const globalRef = utils.doc(db, 'executions', jobId);
+                    const sfDoc = await transaction.get(docRef);
+                    if (!sfDoc.exists() || sfDoc.data().yt_upload_status !== 'PENDING') {
+                        throw new Error("Job already claimed or not pending");
+                    }
+                    transaction.update(docRef, { yt_upload_status: 'UPLOADING' });
+                    transaction.update(globalRef, { yt_upload_status: 'UPLOADING' });
+                });
+                
+                // If transaction succeeds, this tab claimed it!
+                console.log(`[Auto-YT] Tab claimed job ${jobId}. Starting upload...`);
+                
+                const token = await loadUserYtAuth(auth, db, utils);
+                if (!token) {
+                    await updateJobYtStatus(db, utils, uid, jobId, 'FAILED', 'No YouTube access token found. Please reconnect your account in settings.');
+                    continue;
+                }
+                
+                const ytMeta = {
+                    title: job.title,
+                    description: job.script || '',
+                    privacy: job.yt_privacy || 'private',
+                    hashtags: '#Shorts #Viral'
+                };
+                
+                const result = await uploadVideoToYouTube(token, job.final_video_url, ytMeta, (pct, txt) => {
+                    console.log(`[Auto-YT] ${pct}%: ${txt}`);
+                });
+                
+                // Success
+                await updateJobYtStatus(db, utils, uid, jobId, 'SUCCESS', '', result.id);
+                
+            } catch (err) {
+                if (err.message !== "Job already claimed or not pending") {
+                    console.error("[Auto-YT] Upload failed:", err);
+                    await updateJobYtStatus(db, utils, uid, jobId, 'FAILED', err.message);
+                }
+            }
+        }
+        
+        isProcessing = false;
+    });
+}
