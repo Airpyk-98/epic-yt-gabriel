@@ -302,17 +302,17 @@ for idx, job in enumerate(batch_config["jobs"]):
         dur_str = str(target_dur).lower().strip()
         t_secs = 45.0
         if "min" in dur_str or "m" in dur_str:
-            m_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:min|minute|m)', dur_str)
-            s_match = re.findall(r'(\d+(?:\.\d+)?)\s*(?:sec|second|s)', dur_str)
+            m_match = re.findall(r'(\\d+(?:\\.\\d+)?)\\s*(?:min|minute|m)', dur_str)
+            s_match = re.findall(r'(\\d+(?:\\.\\d+)?)\\s*(?:sec|second|s)', dur_str)
             mins = float(m_match[0]) if m_match else 0.0
             secs = float(s_match[0]) if s_match else 0.0
             if mins > 0 or secs > 0:
                 t_secs = mins * 60.0 + secs
             else:
-                nums = re.findall(r'\d+(?:\.\d+)?', dur_str)
+                nums = re.findall(r'\\d+(?:\\.\\d+)?', dur_str)
                 t_secs = float(nums[0]) * 60.0 if nums else 60.0
         else:
-            nums = re.findall(r'\d+(?:\.\d+)?', dur_str)
+            nums = re.findall(r'\\d+(?:\\.\\d+)?', dur_str)
             t_secs = float(nums[-1]) if nums else 45.0
 
         t_secs = max(10.0, t_secs)
@@ -324,25 +324,25 @@ for idx, job in enumerate(batch_config["jobs"]):
         target_scenes_count = max(3, int(t_secs / 3.8))
 
         def get_pexels_query_for_line(line_text, topic_title):
-            clean_l = re.sub(r'[^a-zA-Z0-9\s]', '', line_text).lower()
+            clean_l = re.sub(r'[^a-zA-Z0-9\\s]', '', line_text).lower()
             stop_set = {'the', 'and', 'that', 'this', 'with', 'from', 'for', 'are', 'was', 'were', 'you', 'your', 'they', 'their', 'about', 'what', 'which', 'how', 'why', 'who', 'when', 'where', 'have', 'has', 'had', 'not', 'but', 'all', 'any', 'some', 'someone', 'probably', 'exist', 'dont', 'know', 'signs', 'features', 'things', 'ways', 'would', 'could', 'should', 'there', 'here', 'into', 'just', 'more', 'than', 'will', 'very', 'been', 'each', 'other', 'them', 'these', 'those', 'because', 'even', 'first', 'second', 'most', 'also', 'such', 'like', 'than', 'make', 'made', 'take', 'took', 'come', 'came', 'look', 'looks', 'looking', 'tell', 'said', 'says', 'ever', 'every', 'going', 'real', 'much', 'many', 'well', 'back', 'down', 'only'}
             w_list = [w for w in clean_l.split() if len(w) > 2 and w not in stop_set]
             if len(w_list) >= 2:
                 return "+".join(w_list[:3])
             elif w_list:
-                t_words_list = [w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', topic_title) if w.lower() not in stop_set]
+                t_words_list = [w.lower() for w in re.findall(r'\\b[A-Za-z]{3,}\\b', topic_title) if w.lower() not in stop_set]
                 fallback_t = t_words_list[0] if t_words_list else "lifestyle"
                 return f"{w_list[0]}+{fallback_t}"
             else:
-                t_words_list = [w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', topic_title) if w.lower() not in stop_set]
+                t_words_list = [w.lower() for w in re.findall(r'\\b[A-Za-z]{3,}\\b', topic_title) if w.lower() not in stop_set]
                 return "+".join(t_words_list[:2]) if t_words_list else "cinematic+modern"
 
         if script_text and script_text.strip():
             # User provided manual script: split into sentences and generate Pexels queries
-            manual_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', script_text) if len(l.strip()) > 5]
+            manual_lines = [l.strip() for l in re.split(r'[.!?\\n]+', script_text) if len(l.strip().split()) >= 3]
             for ml in manual_lines:
                 q = get_pexels_query_for_line(ml, title)
-                ai_scenes.append({"line": ml, "pexels_query": q})
+                ai_scenes.append({"line": ml + ".", "pexels_query": q})
         else:
             if not is_long_form:
                 sys_prompt = f"""You are a master viral YouTube Shorts storyteller and visual director.
@@ -418,7 +418,7 @@ NARRATION & RETENTION GUIDELINES:
                             f"{base_url}/chat/completions",
                             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                             json=req_body,
-                            timeout=180
+                            timeout=120
                         )
                         if r_ai.ok:
                             resp_data = r_ai.json()
@@ -427,9 +427,9 @@ NARRATION & RETENTION GUIDELINES:
                             print(f"AI response: {len(resp_c)} chars, finish_reason={finish_reason}")
                             
                             # Clean raw script text
-                            clean_c = re.sub(r'\[.*?\]', '', resp_c)
-                            clean_c = re.sub(r'\(.*?\)', '', clean_c).replace('**', '').replace('---', '').replace('###', '')
-                            clean_c = re.sub(r'^(Narrator|Script|Audio|Voiceover|Chapter\s*\d+):?\s*', '', clean_c, flags=re.IGNORECASE | re.MULTILINE).strip()
+                            clean_c = re.sub(r'\\[.*?\\]', '', resp_c)
+                            clean_c = re.sub(r'\\(.*?\\)', '', clean_c).replace('**', '').replace('---', '').replace('###', '')
+                            clean_c = re.sub(r'^(Narrator|Script|Audio|Voiceover|Chapter\\s*\\d+):?\\s*', '', clean_c, flags=re.IGNORECASE | re.MULTILINE).strip()
                             clean_c = clean_c.replace(chr(96)*3 + "json", "").replace(chr(96)*3, "").strip()
 
                             # 1. Check if structured JSON was returned
@@ -448,15 +448,19 @@ NARRATION & RETENTION GUIDELINES:
                                 except Exception as p_err:
                                     print(f"JSON parse notice: {p_err}")
 
-                            # 2. Prose Sentence Extraction (standard for long-form scripts)
-                            if not ai_scenes and len(clean_c) > 40:
-                                parsed_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', clean_c) if len(l.strip()) > 8]
-                                for pl in parsed_lines:
-                                    q_val = get_pexels_query_for_line(pl, title)
-                                    ai_scenes.append({"line": pl, "pexels_query": q_val})
+                            # 2. Universal Prose Sentence & Paragraph Extraction
+                            if not ai_scenes and len(clean_c) > 30:
+                                raw_chunks = re.split(r'[.!?\\n]+', clean_c)
+                                for ch in raw_chunks:
+                                    clean_chunk = re.sub(r'\\s+', ' ', ch).strip()
+                                    if len(clean_chunk.split()) >= 3:
+                                        final_sentence = clean_chunk if clean_chunk.endswith(('.', '!', '?')) else (clean_chunk + ".")
+                                        q_val = get_pexels_query_for_line(final_sentence, title)
+                                        ai_scenes.append({"line": final_sentence, "pexels_query": q_val})
                                 if ai_scenes:
                                     w_cnt = len(" ".join([s["line"] for s in ai_scenes]).split())
-                                    print(f"AI extracted {len(ai_scenes)} scenes ({w_cnt} words) from {model_name}")
+                                    print(f"AI successfully extracted {len(ai_scenes)} scenes ({w_cnt} words) from {model_name}")
+                                    break
                         else:
                             print(f"{model_name} returned {r_ai.status_code}, trying next model... ({r_ai.text[:150]})")
                     except Exception as e:
@@ -479,15 +483,18 @@ NARRATION & RETENTION GUIDELINES:
                                 temperature=0.75
                             )
                             resp_c = resp.choices[0].message.content or ""
-                            clean_c = re.sub(r'\[.*?\]', '', resp_c)
-                            clean_c = re.sub(r'\(.*?\)', '', clean_c).replace('**', '').replace('---', '').replace('###', '')
-                            clean_c = re.sub(r'^(Narrator|Script|Audio|Voiceover|Chapter\s*\d+):?\s*', '', clean_c, flags=re.IGNORECASE | re.MULTILINE).strip()
+                            clean_c = re.sub(r'\\[.*?\\]', '', resp_c)
+                            clean_c = re.sub(r'\\(.*?\\)', '', clean_c).replace('**', '').replace('---', '').replace('###', '')
+                            clean_c = re.sub(r'^(Narrator|Script|Audio|Voiceover|Chapter\\s*\\d+):?\\s*', '', clean_c, flags=re.IGNORECASE | re.MULTILINE).strip()
                             clean_c = clean_c.replace(chr(96)*3 + "json", "").replace(chr(96)*3, "").strip()
 
-                            parsed_lines = [l.strip() for l in re.split(r'(?<=[.!?])\s+', clean_c) if len(l.strip()) > 8]
-                            for pl in parsed_lines:
-                                q_val = get_pexels_query_for_line(pl, title)
-                                ai_scenes.append({"line": pl, "pexels_query": q_val})
+                            raw_chunks = re.split(r'[.!?\\n]+', clean_c)
+                            for ch in raw_chunks:
+                                clean_chunk = re.sub(r'\\s+', ' ', ch).strip()
+                                if len(clean_chunk.split()) >= 3:
+                                    final_sentence = clean_chunk if clean_chunk.endswith(('.', '!', '?')) else (clean_chunk + ".")
+                                    q_val = get_pexels_query_for_line(final_sentence, title)
+                                    ai_scenes.append({"line": final_sentence, "pexels_query": q_val})
                             if ai_scenes:
                                 w_cnt = len(" ".join([s["line"] for s in ai_scenes]).split())
                                 print(f"Generated {len(ai_scenes)} scenes ({w_cnt} words) via Hugging Face {hf_m}")
