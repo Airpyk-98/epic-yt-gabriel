@@ -281,10 +281,11 @@ for idx, job in enumerate(batch_config["jobs"]):
     caption_font_size = int(job.get("caption_font_size", 55))
     caption_y_pos = int(job.get("caption_y_pos", 82))
     pexels_key = job.get("pexels_api_key") or DEFAULT_PEXELS_KEY
+    video_speed = float(job.get("video_speed", 1.0))
 
     print(f"\\n========================================================")
     print(f" Processing Video {idx+1}/{len(batch_config['jobs'])}: {title} (ID: {job_id})")
-    print(f" Resolution: {w}x{h} ({aspect_ratio}), Captions: {enable_captions}, BGM: {enable_bgm}")
+    print(f" Resolution: {w}x{h} ({aspect_ratio}), Captions: {enable_captions}, BGM: {enable_bgm}, Speed: {video_speed:.2f}x")
     print(f"========================================================")
 
     # Check for cancellation before processing
@@ -943,6 +944,48 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if not os.path.exists(output_mp4) or os.path.getsize(output_mp4) < 1000:
             raise Exception("Render failed: final video output file is missing or empty")
 
+        # Step 4.5: Final Video Speed Adjustment (User-Configured Multiplier)
+        # Retimes both video frames and pitch-preserving audio in lockstep right before dataset save
+        if abs(video_speed - 1.0) >= 0.02:
+            try:
+                speed_mult = max(0.25, min(4.0, float(video_speed)))
+                update_job(uid, job_id, "RUNNING", 88, f"Applying final video speed multiplier ({speed_mult:.2f}x)...")
+                print(f"🎬 Retiming final video: {speed_mult:.2f}x multiplier...")
+
+                def _build_atempo(s_val):
+                    cur_s = s_val
+                    filters = []
+                    while cur_s > 2.0:
+                        filters.append("atempo=2.0")
+                        cur_s /= 2.0
+                    while cur_s < 0.5:
+                        filters.append("atempo=0.5")
+                        cur_s /= 0.5
+                    filters.append(f"atempo={cur_s:.4f}")
+                    return ",".join(filters)
+
+                speed_out_mp4 = os.path.join(work_dir, f"{job_id}_speed.mp4")
+                speed_out_p = os.path.abspath(speed_out_mp4).replace('\\\\', '/')
+                setpts_val = 1.0 / speed_mult
+                vf_speed = f"setpts={setpts_val:.6f}*PTS"
+                af_speed = _build_atempo(speed_mult)
+
+                if has_nvenc:
+                    speed_ff_cmd = f'ffmpeg -y -i "{out_p}" -filter_complex "[0:v]{vf_speed}[v];[0:a]{af_speed}[a]" -map "[v]" -map "[a]" -c:v h264_nvenc -preset p1 -tune ll -c:a aac -b:a 192k -pix_fmt yuv420p "{speed_out_p}"'
+                else:
+                    speed_ff_cmd = f'ffmpeg -y -i "{out_p}" -filter_complex "[0:v]{vf_speed}[v];[0:a]{af_speed}[a]" -map "[v]" -map "[a]" -c:v libx264 -preset ultrafast -tune fastdecode -c:a aac -b:a 192k -pix_fmt yuv420p "{speed_out_p}"'
+
+                speed_res = subprocess.run(speed_ff_cmd, shell=True, capture_output=True)
+                if os.path.exists(speed_out_mp4) and os.path.getsize(speed_out_mp4) > 1000:
+                    import shutil
+                    shutil.move(speed_out_mp4, output_mp4)
+                    print(f"✅ Final video successfully retimed to {speed_mult:.2f}x speed!")
+                else:
+                    err_hint = speed_res.stderr.decode(errors="ignore")[:150] if speed_res.stderr else "unknown"
+                    print(f"⚠️ Speed adjustment notice: Retimed file invalid, retaining standard speed. (FFmpeg: {err_hint})")
+            except Exception as s_err:
+                print(f"⚠️ Speed adjustment error: {s_err}")
+
         # Step 5: Direct Hugging Face Upload
         update_job(uid, job_id, "RUNNING", 90, "Uploading to Hugging Face Dataset...")
         remote_path = f"outputs/{job_id}.mp4"
@@ -1013,6 +1056,7 @@ export async function launchKaggleBatchDirectly(db, utils, payload) {
             tts_engine: payload.tts_engine || 'kokoro',
             voice: payload.voice || 'am_adam',
             voice_boost: payload.voice_boost || '120',
+            video_speed: parseFloat(payload.video_speed) || 1.0,
             enable_bgm: payload.enable_bgm === true || payload.enable_bgm === 'true',
             bgm_track: payload.bgm_track || 'lofi_chill',
             bgm_volume: payload.bgm_volume || '15',

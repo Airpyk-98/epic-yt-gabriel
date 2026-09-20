@@ -106,6 +106,7 @@ for idx, job in enumerate(batch_config["jobs"]):
     script_text = job.get("script", "")
     voice = job.get("voice", "relationship-male")
     aspect_ratio = job.get("aspect_ratio", "9:16")
+    video_speed = float(job.get("video_speed", 1.0))
     
     print(f"\\n========================================================")
     print(f" Processing Video {{idx+1}}/{{len(batch_config['jobs'])}}: {{title}} (ID: {{job_id}})")
@@ -221,6 +222,33 @@ for idx, job in enumerate(batch_config["jobs"]):
     ff_cmd = f'ffmpeg -y -stream_loop -1 -i "{{video_clip_path}}" -i "{{audio_path}}" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k -shortest -pix_fmt yuv420p "{{output_mp4}}"'
     subprocess.run(ff_cmd, shell=True)
     
+    # Final Video Speed Adjustment
+    if abs(video_speed - 1.0) >= 0.02:
+        try:
+            speed_mult = max(0.25, min(4.0, float(video_speed)))
+            def _build_atempo(s_val):
+                cur_s = s_val
+                flts = []
+                while cur_s > 2.0:
+                    flts.append("atempo=2.0")
+                    cur_s /= 2.0
+                while cur_s < 0.5:
+                    flts.append("atempo=0.5")
+                    cur_s /= 0.5
+                flts.append(f"atempo={{cur_s:.4f}}")
+                return ",".join(flts)
+
+            speed_out = os.path.join(work_dir, f"{{job_id}}_speed.mp4")
+            vf_s = f"setpts={{1.0/speed_mult:.6f}}*PTS"
+            af_s = _build_atempo(speed_mult)
+            sp_cmd = f'ffmpeg -y -i "{{output_mp4}}" -filter_complex "[0:v]{{vf_s}}[v];[0:a]{{af_s}}[a]" -map "[v]" -map "[a]" -c:v libx264 -preset ultrafast -c:a aac -b:a 192k "{{speed_out}}"'
+            if subprocess.run(sp_cmd, shell=True).returncode == 0 and os.path.exists(speed_out) and os.path.getsize(speed_out) > 1000:
+                import shutil
+                shutil.move(speed_out, output_mp4)
+                print(f"Successfully retimed video to {{speed_mult:.2f}}x speed!")
+        except Exception as e_sp:
+            print(f"Speed adjustment notice: {{e_sp}}")
+
     update_job(job_id, "RUNNING", 90, "Uploading to cloud storage...")
     remote_path = f"outputs/{{job_id}}.mp4"
     direct_url = f"https://huggingface.co/datasets/epic-gab/EpicSync-Dataset/resolve/main/{{remote_path}}"

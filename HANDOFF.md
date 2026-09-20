@@ -45,6 +45,7 @@ sequenceDiagram
         KG->>KG: 3. Word-Level Timestamp Alignment (OpenAI Whisper -> subs.ass)
         KG->>Pexels: 4. Fetch Stock Video Streams (with Query Cache)
         KG->>KG: 5. FFmpeg Assembly (Concat B-roll + Karaoke Subtitles + Mixed BGM)
+        KG->>KG: 5.5 Retime Speed (setpts + atempo if video_speed != 1.0)
         KG->>HF: 6. Upload final MP4 to dataset repo (epic-gab/EpicSync-Dataset)
     end
 
@@ -73,7 +74,7 @@ sequenceDiagram
 | **Compute Engine** | Kaggle GPU Workers (`kaggle/kernels/push`) | Serverless on-demand execution on NVIDIA T4 GPUs for video rendering. |
 | **Speech Engine** | Kokoro-82M Neural TTS & Edge-TTS | High-fidelity, emotional voiceover synthesis with speed/pitch control. |
 | **Audio Alignment** | OpenAI Whisper | High-accuracy word-level audio alignment for synchronized karaoke captions. |
-| **Video Processing** | FFmpeg 6.0+ | Clip scaling/cropping, ASS filter subtitle burning, audio normalization (`amix`). |
+| **Video Processing & Retiming** | FFmpeg 6.0+ | Clip scaling/cropping, ASS subtitle burning, audio normalization (`amix`), and dynamic speed multiplier retiming (`setpts` + `atempo`). |
 | **Stock Assets** | Pexels Video API | Dynamic retrieval of HD portrait (1080x1920) and landscape (1920x1080) footage. |
 | **Cloud Storage** | Hugging Face Datasets (`huggingface_hub`) | Permanent storage and low-latency global CDN streaming for rendered videos. |
 | **Primary LLMs** | `minimaxai/minimax-m3`, `deepseek-ai/deepseek-v4-flash-0731` | High-retention psychological scriptwriting and documentary essay generation. |

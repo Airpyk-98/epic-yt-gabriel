@@ -141,6 +141,7 @@ def process_job(doc_ref, job_data):
     font_size = job_data.get("font_size", "60")
     font_y_pos = job_data.get("font_y_pos", "83")
     pexels_key = job_data.get("pexels_api_key", "HqD4UjBfH3i9V2lq2jBq0YQp7n3s1k8L5r0a4b9c8d")
+    video_speed = float(job_data.get("video_speed", 1.0))
     
     print(f"\n========================================================")
     print(f" PROCESSING JOB: {job_id} | Title: {title}")
@@ -333,6 +334,34 @@ def process_job(doc_ref, job_data):
     if not os.path.exists(final_output) or os.path.getsize(final_output) == 0:
         # Fallback simple merge
         subprocess.run(f"ffmpeg -y -i {raw_video} -i {audio_path} -c:v copy -c:a aac -shortest {final_output}", shell=True)
+
+    # Final Video Speed Adjustment (User-Configured Multiplier)
+    if abs(video_speed - 1.0) >= 0.02:
+        try:
+            speed_mult = max(0.25, min(4.0, float(video_speed)))
+            log_job(doc_ref, f"Applying final video speed multiplier ({speed_mult:.2f}x)...")
+            def _build_atempo(s_val):
+                cur_s = s_val
+                flts = []
+                while cur_s > 2.0:
+                    flts.append("atempo=2.0")
+                    cur_s /= 2.0
+                while cur_s < 0.5:
+                    flts.append("atempo=0.5")
+                    cur_s /= 0.5
+                flts.append(f"atempo={cur_s:.4f}")
+                return ",".join(flts)
+
+            speed_out = os.path.join(work_dir, f"{job_id}_speed.mp4")
+            vf_s = f"setpts={1.0/speed_mult:.6f}*PTS"
+            af_s = _build_atempo(speed_mult)
+            sp_cmd = f'ffmpeg -y -i "{final_output}" -filter_complex "[0:v]{vf_s}[v];[0:a]{af_s}[a]" -map "[v]" -map "[a]" -c:v libx264 -preset fast -c:a aac -b:a 192k "{speed_out}"'
+            if subprocess.run(sp_cmd, shell=True).returncode == 0 and os.path.exists(speed_out) and os.path.getsize(speed_out) > 1000:
+                import shutil
+                shutil.move(speed_out, final_output)
+                log_job(doc_ref, f"Successfully retimed video to {speed_mult:.2f}x!")
+        except Exception as e_sp:
+            log_job(doc_ref, f"Notice: Video speed adjustment error: {e_sp}")
 
     doc_ref.update({"progress": 90, "step_text": "Uploading finished video to Hugging Face..."})
     log_job(doc_ref, "Uploading completed video to Hugging Face Dataset...")
